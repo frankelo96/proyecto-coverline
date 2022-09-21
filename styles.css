@@ -1,0 +1,540 @@
+body{
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+}
+
+/* implementando grid junto con flexbox */
+
+#gridArea{
+    background-color:rgb(192, 244, 246);
+    display:grid;
+    grid-template-areas:
+    "header"
+    "scrollMenu"
+    "tituloAreas"
+    "parrafoCoverline"
+    "pDestacados"
+    "contacto"
+    "tituloUbic"
+    "pieDePagina"
+    ;
+    grid-template-columns: 100%;
+    grid-template-rows: 2fr 2fr 2fr 2fr;
+   
+}
+ /* .header{
+    
+ iconos de link hacia redes sociales.
+ } */
+
+ .header{
+     grid-area: header;
+    
+}
+
+ .redesSociales{
+    background-color:rgba(173, 235, 250, 0.645) ;
+    display: flex;
+    flex-direction:row;
+    justify-content: right;
+    align-items: center;
+    
+    
+   
+     }
+
+
+.redesSociales img{
+    margin-right: 3rem;
+    margin: 0,5rem;
+    padding: 0,5rem;
+    width: 2rem;
+    height: 2rem;
+     
+}
+
+.titulo{
+    color:rgb(7, 7, 7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+}
+
+
+.logo{
+    background-color: rgb(0, 0, 255);
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+
+
+/* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
+
+ .scrollMenu{
+    background-color: rgb(0, 0, 255);
+        grid-area: scrollMenu;
+        display:flex;
+        justify-content: center;
+        align-items:center;
+        overflow: auto;
+        padding: 20px;
+        margin: 20px;
+ }
+
+ 
+.scrollMenu a {
+    color:rgb(246, 236, 236);
+    text-align: center;
+    padding: 20px;
+    text-decoration:none;
+    margin-top: 5px;
+    justify-content:center;
+    align-content: space-around;
+    align-items: center;
+    
+    
+  }
+  
+.scrollMenu a:hover {
+    background-color:rgb(3, 3, 74) ;
+
+   
+  }
+
+  /* fin de nuestro header */
+
+  /* seccion areas. */
+
+
+
+.tituloAreas{
+    grid-area: tituloAreas;
+    color:rgb(7, 7, 7);
+    justify-content:center;
+    text-align: center;
+    margin-bottom: 6rem;
+}
+
+
+
+.areas{
+    background-color:rgba(173, 235, 250, 0.645) ;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+    
+
+}
+
+/* clase de imagenes para areas */
+
+
+
+.imagenesAreas{
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    text-align: center;
+    align-items: center;
+    margin-top: 6rem;
+    margin-bottom: 6rem;   
+}
+
+
+.imagenesAreas img{
+    margin-left: 50px;
+
+}
+
+/* imagenes y titulos individuales para areas */
+
+
+.titulo1{
+    font-size: 25px;
+    color:rgb(7, 7, 7);
+    text-align: left;
+    text-decoration: none;
+    margin-left: 50px;
+
+}
+
+
+
+.empresariales{
+    width: 200px;
+    
+
+}
+
+
+
+
+
+.gastronomia{
+    width: 200px;
+   
+
+}
+
+
+
+.escolares{
+    width: 200px;
+    
+}
+
+
+
+
+
+/* seccion coverline */ /* inicia seccion parrafo descriptivo sobre la empresa coverline */
+
+.parrafoCoverline{
+    grid-area: parrafoCoverline;
+    display: flex;
+    text-align: center;
+    font-size: 25px;
+    padding: 95px 120px;
+    font-weight: lighter;
+    color:rgb(246, 236, 236);
+    background: linear-gradient(rgb(0, 0, 255),rgb(82, 82, 251));
+    margin-top: 50px;
+    margin-bottom: 50px;
+}
+
+
+/* seccion productos destacados y sus respectivas imagenes */
+
+/* titulo h2 */
+
+.pd{
+    background-color:rgba(173, 235, 250, 0.645);  
+}
+
+.productosDestacados{
+    grid-area: productosDestacados;
+    color: rgb(7, 7, 7);
+    justify-content:center;
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+/* subtitulo h3 */
+
+.textoPD{
+    color:rgb(7, 7, 7);
+    display: flex;
+    justify-content:center;
+    text-align:center;
+    margin-bottom: 3rem;
+    margin-left: 2rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+
+/* clase imagenes de productos destacados */
+
+.imgPDestacados{
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    text-align: center;
+    align-items: center;
+    margin-top: 6rem;
+    margin-bottom: 6rem;   
+}
+
+
+/* imagenes y titulos individuales */
+
+.titulo01{
+    font-size:20px;
+    color:rgb(7, 7, 7);
+    text-align: left;
+    text-decoration: none;
+    margin-left: 40px;
+
+}
+
+.foto01{
+    width:200px;
+    margin-left: 40px;
+    
+
+}
+
+
+
+.foto02{
+    width:200px;
+    margin-left: 40px;
+   
+
+}
+
+
+.foto03{
+    width:200px;
+    margin-left: 40px;
+   
+
+}
+
+
+
+
+
+/* seccion contacto y formulario  */
+.contact{
+    background-color:rgba(173, 235, 250, 0.645); 
+    margin: 3rem;
+    padding: 3rem;
+
+}
+.contacto{
+    grid-area:contacto;
+    color:rgb(7, 7, 7);
+    justify-content:center;
+    text-align:center;
+    font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif ;
+    margin-bottom: 50px;
+    
+}
+
+.contacForm{
+    color: white;
+    display: flex;
+    flex-direction: row;
+    justify-content:center;
+    text-align:center;
+    font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif ;
+    margin-bottom: 50px;
+    margin-left: 500px;
+
+}
+
+
+/* seccion ubicacion */
+
+/* imagen mapa de ubicacion */
+
+.ubicacion{
+    background-color:rgba(173, 235, 250, 0.645); 
+    margin: 3rem;
+    padding: 3rem;
+
+}
+
+.tituloUbic{
+    grid-area: tituloUbic;
+    color:rgb(7, 7, 7);
+    display: flexbox;
+    justify-content: center;
+    text-align: center;
+   
+    
+ }
+
+ .ubicacionPic{
+     display: flex;
+     flex-direction: row;
+     justify-content: center;
+     width: 30%;
+     height: 70%;
+     margin-left: 35%;
+ }
+
+
+.textoUbicacion{
+    text-align: center;
+
+}
+
+
+
+
+
+/* inicia nuestra parte del footer (pie de pagina) */
+
+.pieDePagina{
+    grid-area: pieDePagina;
+    background-color:rgba(173, 235, 250, 0.645); 
+    display: flex;
+    margin:5rem;
+    padding: 5rem;
+    justify-content: space-between;
+    align-items: center;
+    text-align: center;
+    
+}
+
+.textoEmail{
+    color:rgb(7, 7, 7);
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    font-size: large;
+    
+    
+}
+
+.emailPic{
+    width: 100px;
+    height: 100px;
+    
+}
+
+.textoNumeroTelefonico{
+    color:rgb(7, 7, 7);
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    font-size: large;
+    
+    
+
+}
+.numPic{
+    width: 100px;
+    height: 100px;
+  
+}
+
+.textoWhatsApp{
+    color:rgb(7, 7, 7);
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    font-size: large;
+    
+
+}
+    
+.whatsAppImg{
+    width: 100px;
+    height: 100px;
+    margin-right: 40px;
+  
+}
+
+/* *celular* */
+
+@media screen and (max-width: 480px) {
+    body {
+        background-color: blue;
+        
+    }
+    .scrollMenu{
+        flex-direction: column;
+    }
+  
+    .imagenesAreas{
+        flex-direction: column;
+    }
+
+
+    .parrafoCoverline{
+        flex-direction: column;
+    }
+   
+    .imgPDestacados{
+        flex-direction: column;
+    }
+
+    .contacForm{
+        flex-direction: wrap;
+    }
+
+    .ubicacionPic{
+        flex-direction:column;
+    }
+
+    .pieDePagina{
+        flex-direction: column;
+    }
+    
+    
+
+    }
+/* *tablet* */
+
+@media screen and (min-width: 481px) and (max-with: 1023px) {
+    body {
+        background-color: aqua;
+    }
+
+    .scrollMenu{
+        flex-direction: column;
+    }
+    
+    .parrafoCoverline{
+        flex-direction: column;
+    }
+    
+    .imagenesAreas{
+        flex-direction: column;
+    }
+
+  
+    .imgPDestacados{
+        flex-direction: column;
+    }
+    
+    .contacForm{
+        flex-direction: wrap;
+    }
+
+    .ubicacionPic{
+        flex-direction:column;
+    }
+
+    .pieDePagina{
+        flex-direction: column;
+    }
+    
+    
+
+}
+
+/* *computadora* */
+
+@media  screen and (min-width: 1024px) {
+    body {
+        background-color:blue;
+    }
+    
+    .scrollMenu{
+        flex-direction: row;
+    }
+
+    .imagenesAreas{
+        flex-direction: row;
+    }
+
+      
+    .parrafoCoverline{
+        flex-direction: column;
+    }
+    
+    .imgPDestacados{
+        flex-direction: row;
+    }
+
+    .contacForm{
+        flex-direction: row;
+    }
+
+    .ubicacionPic{
+        flex-direction: row;
+    }
+
+    .pieDePagina{
+        flex-direction: row;
+    }
+    
+    
+    
+
+}
