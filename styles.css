@@ -72,7 +72,6 @@ body{
 }
 
 
-
 /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
 
  .scrollMenu{
@@ -381,13 +380,22 @@ body{
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
     
-    
 }
+
 
 .emailPic{
     width: 100px;
     height: 100px;
     
+}
+
+.emailPic{
+    height:100px;
+    transition:height 2s;
+}
+
+.emailPic:hover{
+    height: 90px;
 }
 
 .textoNumeroTelefonico{
@@ -404,6 +412,15 @@ body{
   
 }
 
+.numPic{
+    height:100px;
+    transition:height 2s;
+}
+
+.numPic:hover{
+    height: 90px;
+}
+
 .textoWhatsApp{
     color:rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
@@ -417,6 +434,15 @@ body{
     height: 100px;
     margin-right: 40px;
   
+}
+
+.whatsAppImg{
+    height:100px;
+    transition:height 2s;
+}
+
+.whatsAppImg:hover{
+    height: 90px;
 }
 
 /* *celular* */
