@@ -1,5 +1,6 @@
 body{
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    background-color: rgba(173, 235, 250, 0.645);
 }
 
 /* implementando grid junto con flexbox */
@@ -113,6 +114,7 @@ body{
 
 
 
+
 .areas{
     background-color:rgba(173, 235, 250, 0.645) ;
     display: flex;
@@ -125,6 +127,9 @@ body{
 }
 
 /* clase de imagenes para areas */
+
+
+
 
 
 
@@ -157,8 +162,6 @@ body{
 
 }
 
-
-
 .empresariales{
     width: 200px;
     
@@ -166,16 +169,11 @@ body{
 }
 
 
-
-
-
 .gastronomia{
     width: 200px;
    
 
 }
-
-
 
 .escolares{
     width: 200px;
@@ -223,7 +221,7 @@ body{
 .textoPD{
     color:rgb(7, 7, 7);
     display: flex;
-    justify-content:center;
+    justify-content:space-around;
     text-align:center;
     margin-bottom: 3rem;
     margin-left: 2rem;
@@ -247,11 +245,12 @@ body{
 /* imagenes y titulos individuales */
 
 .titulo01{
-    font-size:20px;
+    font-size: 25px;
     color:rgb(7, 7, 7);
     text-align: left;
     text-decoration: none;
     margin-left: 40px;
+    margin-right: 40px;
 
 }
 
