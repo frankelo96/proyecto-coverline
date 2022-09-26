@@ -389,6 +389,8 @@ body{
     
 }
 
+/* animacion de email */
+
 .emailPic{
     height:100px;
     transition:height 2s;
@@ -411,6 +413,7 @@ body{
     height: 100px;
   
 }
+/* animacion de numero telefonico */
 
 .numPic{
     height:100px;
@@ -435,6 +438,7 @@ body{
     margin-right: 40px;
   
 }
+/* animacion de whats app */
 
 .whatsAppImg{
     height:100px;
@@ -449,11 +453,27 @@ body{
 
 @media screen and (max-width: 480px) {
     body {
-        background-color: blue;
-        
+        background-color: rgba(173, 235, 250, 0.645);
+            
+    }
+
+    .redesSociales{
+        flex-wrap:column;
+    }
+
+    .logo{
+        flex-wrap: wrap;
     }
     .scrollMenu{
         flex-direction: column;
+    }
+
+    .areas{
+        flex-direction: column;
+    }
+
+    .tituloAreas{
+        flex-wrap: wrap;
     }
   
     .imagenesAreas{
@@ -464,14 +484,31 @@ body{
     .parrafoCoverline{
         flex-direction: column;
     }
-   
+
+    .pd{
+    flex-direction: column;
+    }
+
+    .productosDestacados{
+        flex-direction: column;
+    }
+
+    .textoPD{
+        flex-wrap: wrap;
+    }
+
     .imgPDestacados{
         flex-direction: column;
     }
 
     .contacForm{
-        flex-direction: wrap;
+        flex-direction: column;
+        flex-wrap: wrap;
     }
+
+     .textoUbicacion{
+        flex-wrap: wrap;
+     }
 
     .ubicacionPic{
         flex-direction:column;
@@ -479,6 +516,34 @@ body{
 
     .pieDePagina{
         flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+    .email{
+        flex-direction: column;
+    }
+
+    .textoEmail{
+        flex-direction: column;
+        flex-wrap:wrap;
+    }
+
+    .textoNumeroTelefonico{
+        flex-direction: column;
+    }
+
+    .textoNumeroTelefonico{
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+    .whatsapp{
+        flex-direction: column;
+    }
+
+    .textoWhatsApp{
+        flex-direction: column;
+        flex-wrap: wrap;
     }
     
     
@@ -488,7 +553,15 @@ body{
 
 @media screen and (min-width: 481px) and (max-with: 1023px) {
     body {
-        background-color: aqua;
+        background-color:rgba(173, 235, 250, 0.645);
+    }
+
+    .redesSociales{
+        flex-wrap: wrap;
+    }
+
+    .logo{
+        flex-wrap: wrap;
     }
 
     .scrollMenu{
@@ -498,19 +571,45 @@ body{
     .parrafoCoverline{
         flex-direction: column;
     }
+
+    .areas{
+        flex-direction: column;
+    }
+
+    .tituloAreas{
+        flex-wrap: wrap;
+    }
+  
     
     .imagenesAreas{
         flex-direction: column;
     }
+   
+    .pd{
+        flex-direction: column;
+        }
+    
+        .productosDestacados{
+            flex-direction: column;
+        }
 
+        .textoPD{
+            flex-wrap: wrap;
+        }
   
     .imgPDestacados{
         flex-direction: column;
     }
     
     .contacForm{
-        flex-direction: wrap;
+        flex-direction: column;
+        flex-wrap: wrap;
     }
+
+    
+    .textoUbicacion{
+        flex-wrap: wrap;
+     }
 
     .ubicacionPic{
         flex-direction:column;
@@ -519,7 +618,37 @@ body{
     .pieDePagina{
         flex-direction: column;
     }
+
+    .email{
+        flex-direction: column;
+    }
+
+    .textoEmail{
+        flex-direction: column;
+        flex-wrap:wrap;
+    }
+
+    .textoNumeroTelefonico{
+        flex-direction: column;
+    }
+
+    .textoNumeroTelefonico{
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+    .whatsapp{
+        flex-direction: column;
+    }
+
+    .textoWhatsApp{
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
     
+    
+    
+
     
 
 }
@@ -528,7 +657,7 @@ body{
 
 @media  screen and (min-width: 1024px) {
     body {
-        background-color:blue;
+        background-color:rgba(173, 235, 250, 0.645);
     }
     
     .scrollMenu{
@@ -541,7 +670,7 @@ body{
 
       
     .parrafoCoverline{
-        flex-direction: column;
+        flex-direction: row;
     }
     
     .imgPDestacados{
