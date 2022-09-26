@@ -9,7 +9,7 @@ body{
     display:grid;
     grid-template-areas:
     "header"
-    "scrollMenu"
+    "navbar"
     "tituloAreas"
     "parrafoCoverline"
     "pDestacados"
@@ -74,24 +74,18 @@ body{
 
 /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
 
- .scrollMenu{
-    background-color: rgb(0, 0, 255);
-        grid-area: scrollMenu;
+ .navbar{
+        grid-area: navbar;
         display:flex;
         justify-content: center;
         align-items:center;
         overflow: auto;
-        padding: 20px;
-        margin: 20px;
+       
  }
 
  
-.scrollMenu a {
-    color:rgba(173, 235, 250, 0.645);
+.navbar a {
     text-align: center;
-    padding: 20px;
-    text-decoration:none;
-    margin-top: 5px;
     justify-content:center;
     align-content: space-around;
     align-items: center;
@@ -99,9 +93,7 @@ body{
     
   }
   
-.scrollMenu a:hover {
-    background-color:rgb(3, 3, 74) ;
-
+.navbar a:hover {
    
   }
 
@@ -464,7 +456,7 @@ body{
     .logo{
         flex-wrap: wrap;
     }
-    .scrollMenu{
+    .navbar{
         flex-direction: column;
     }
 
@@ -564,7 +556,7 @@ body{
         flex-wrap: wrap;
     }
 
-    .scrollMenu{
+    .navbar{
         flex-direction: column;
     }
     
@@ -660,7 +652,7 @@ body{
         background-color:rgba(173, 235, 250, 0.645);
     }
     
-    .scrollMenu{
+    .navbar{
         flex-direction: row;
     }
 
