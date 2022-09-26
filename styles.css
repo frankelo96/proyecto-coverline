@@ -5,7 +5,7 @@ body{
 /* implementando grid junto con flexbox */
 
 #gridArea{
-    background-color:rgb(192, 244, 246);
+    background-color:rgba(173, 235, 250, 0.645);
     display:grid;
     grid-template-areas:
     "header"
@@ -88,7 +88,7 @@ body{
 
  
 .scrollMenu a {
-    color:rgb(246, 236, 236);
+    color:rgba(173, 235, 250, 0.645);
     text-align: center;
     padding: 20px;
     text-decoration:none;
