@@ -1,68 +1,59 @@
-body{
+// Include any default variable overrides here (though functions won't be available)
+
+@import "../node_modules/bootstrap/scss/bootstrap";
+
+// Then add additional custom code here
+
+
+
+body {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     background-color: rgba(173, 235, 250, 0.645);
 }
 
 /* implementando grid junto con flexbox */
 
-#gridArea{
-    background-color:rgba(173, 235, 250, 0.645);
-    display:grid;
+#gridArea {
+    background-color: rgba(173, 235, 250, 0.645);
+    display: grid;
     grid-template-areas:
-    "header"
-    "navbar"
-    "tituloAreas"
-    "parrafoCoverline"
-    "pDestacados"
-    "contacto"
-    "tituloUbic"
-    "pieDePagina"
+        "header"
+        "navbar"
+        "tituloAreas"
+        "parrafoCoverline"
+        "contacto"
+        "tituloUbic"
+        "pieDePagina"
     ;
     grid-template-columns: 100%;
     grid-template-rows: 2fr 2fr 2fr 2fr;
-   
+
 }
- /* .header{
+
+/* .header{
     
  iconos de link hacia redes sociales.
  } */
 
- .header{
-     grid-area: header;
-    
+.header {
+    grid-area: header;
+
 }
 
- .redesSociales{
-    background-color:rgba(173, 235, 250, 0.645) ;
+.redesSociales {
+    background-color: rgba(173, 235, 250, 0.645);
     display: flex;
-    flex-direction:row;
+    flex-direction: row;
     justify-content: right;
     align-items: center;
-    
-    
-   
-     }
-
-
-.redesSociales img{
-    margin-right: 3rem;
-    margin: 0,5rem;
-    padding: 0,5rem;
-    width: 2rem;
-    height: 2rem;
-     
-}
-
-.titulo{
-    color:rgb(7, 7, 7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
+    margin-top: 2px;
 }
 
 
-.logo{
+
+
+
+.logo {
     background-color: rgb(0, 0, 255);
     display: flex;
     flex-direction: row;
@@ -75,128 +66,110 @@ body{
 
 /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
 
- .navbar{
-        grid-area: navbar;
-        display:flex;
-        justify-content: center;
-        align-items:center;
-        overflow: auto;
-       
- }
-
- 
-.navbar a {
-    text-align: center;
-    justify-content:center;
-    align-content: space-around;
+.navbar {
+    grid-area: navbar;
+    justify-content: center;
     align-items: center;
-    
-    
-  }
-  
-.navbar a:hover {
-   
-  }
 
-  /* fin de nuestro header */
-
-  /* seccion areas. */
-
-
-
-.tituloAreas{
-    grid-area: tituloAreas;
-    color:rgb(7, 7, 7);
-    justify-content:center;
-    text-align: center;
-    margin-bottom: 6rem;
 }
 
 
 
+/* fin de nuestro header */
 
-.areas{
-    background-color:rgba(173, 235, 250, 0.645) ;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+/* seccion areas. */
+
+
+
+.tituloAreas {
+    grid-area: tituloAreas;
+    color: rgb(7, 7, 7);
     justify-content: center;
     text-align: center;
-    
-
+    margin-bottom: 3rem;
 }
 
-/* clase de imagenes para areas */
+
+
+
+.areas {
+    color: rgb(7, 7, 7);
+    justify-content: center;
+    text-align: center;
+    margin-bottom: 50px;
+    padding-top: 50px;
+    margin-top: 50px;
+}
+
+
+
+
+// // // /* clase de imagenes para areas */
 
 
 
 
 
 
-.imagenesAreas{
+.imagenesAreas  {
     width: 100%;
     display: flex;
-    flex-direction: row;
     justify-content: center;
     text-align: center;
     align-items: center;
     margin-top: 6rem;
-    margin-bottom: 6rem;   
-}
+    margin-bottom: 6rem;
+    }
+
+// // // /* imagenes y titulos individuales para areas */
 
 
-.imagenesAreas img{
-    margin-left: 50px;
-
-}
-
-/* imagenes y titulos individuales para areas */
-
-
-.titulo1{
+.titulo1 {
     font-size: 25px;
-    color:rgb(7, 7, 7);
+    color: rgb(7, 7, 7);
     text-align: left;
     text-decoration: none;
-    margin-left: 50px;
+    margin-left: 40px;
+    margin-right: 40px;
 
 }
 
-.empresariales{
+.empresariales {
     width: 200px;
-    
+
 
 }
 
 
-.gastronomia{
+.gastronomia {
     width: 200px;
-   
+
 
 }
 
-.escolares{
+.escolares {
     width: 200px;
-    
+
 }
 
 
 
 
 
-/* seccion coverline */ /* inicia seccion parrafo descriptivo sobre la empresa coverline */
+/* seccion coverline */
+/* inicia seccion parrafo descriptivo sobre la empresa coverline */
 
-.parrafoCoverline{
+.parrafoCoverline {
     grid-area: parrafoCoverline;
     display: flex;
     text-align: center;
     font-size: 25px;
     padding: 95px 120px;
     font-weight: lighter;
-    color:rgb(246, 236, 236);
-    background: linear-gradient(rgb(0, 0, 255),rgb(82, 82, 251));
+    color: rgb(246, 236, 236);
+    background: linear-gradient(rgb(0, 0, 255), rgb(82, 82, 251));
     margin-top: 50px;
-    margin-bottom: 50px;
+    
 }
 
 
@@ -204,25 +177,27 @@ body{
 
 /* titulo h2 */
 
-.pd{
-    background-color:rgba(173, 235, 250, 0.645);  
+.pd {
+    background-color: rgba(173, 235, 250, 0.645);
 }
 
-.productosDestacados{
+.productosDestacados {
     grid-area: productosDestacados;
     color: rgb(7, 7, 7);
-    justify-content:center;
+    justify-content: center;
     text-align: center;
     margin-bottom: 50px;
+    padding-top: 50px;
+    margin-top: 50px;
 }
 
 /* subtitulo h3 */
 
-.textoPD{
-    color:rgb(7, 7, 7);
+.textoPD {
+    color: rgb(7, 7, 7);
     display: flex;
-    justify-content:space-around;
-    text-align:center;
+    justify-content: space-around;
+    text-align: center;
     margin-bottom: 3rem;
     margin-left: 2rem;
     margin-top: 1rem;
@@ -231,22 +206,22 @@ body{
 
 /* clase imagenes de productos destacados */
 
-.imgPDestacados{
+.imgPDestacados {
     width: 100%;
     display: flex;
     justify-content: center;
     text-align: center;
     align-items: center;
     margin-top: 6rem;
-    margin-bottom: 6rem;   
+    margin-bottom: 6rem;
 }
 
 
 /* imagenes y titulos individuales */
 
-.titulo01{
+.titulo01 {
     font-size: 25px;
-    color:rgb(7, 7, 7);
+    color: rgb(7, 7, 7);
     text-align: left;
     text-decoration: none;
     margin-left: 40px;
@@ -254,27 +229,27 @@ body{
 
 }
 
-.foto01{
-    width:200px;
+.foto01 {
+    width: 200px;
     margin-left: 40px;
-    
+
 
 }
 
 
 
-.foto02{
-    width:200px;
+.foto02 {
+    width: 200px;
     margin-left: 40px;
-   
+
 
 }
 
 
-.foto03{
-    width:200px;
+.foto03 {
+    width: 200px;
     margin-left: 40px;
-   
+
 
 }
 
@@ -283,29 +258,30 @@ body{
 
 
 /* seccion contacto y formulario  */
-.contact{
-    background-color:rgba(173, 235, 250, 0.645); 
+.contact {
+    background-color: rgba(173, 235, 250, 0.645);
     margin: 3rem;
     padding: 3rem;
 
 }
-.contacto{
-    grid-area:contacto;
-    color:rgb(7, 7, 7);
-    justify-content:center;
-    text-align:center;
-    font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif ;
+
+.contacto {
+    grid-area: contacto;
+    color: rgb(7, 7, 7);
+    justify-content: center;
+    text-align: center;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     margin-bottom: 50px;
-    
+
 }
 
-.contacForm{
+.contacForm {
     color: white;
     display: flex;
     flex-direction: row;
-    justify-content:center;
-    text-align:center;
-    font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif ;
+    justify-content: center;
+    text-align: center;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     margin-bottom: 50px;
     margin-left: 500px;
 
@@ -316,34 +292,34 @@ body{
 
 /* imagen mapa de ubicacion */
 
-.ubicacion{
-    background-color:rgba(173, 235, 250, 0.645); 
+.ubicacion {
+    background-color: rgba(173, 235, 250, 0.645);
     margin: 3rem;
     padding: 3rem;
 
 }
 
-.tituloUbic{
+.tituloUbic {
     grid-area: tituloUbic;
-    color:rgb(7, 7, 7);
+    color: rgb(7, 7, 7);
     display: flexbox;
     justify-content: center;
     text-align: center;
-   
-    
- }
-
- .ubicacionPic{
-     display: flex;
-     flex-direction: row;
-     justify-content: center;
-     width: 30%;
-     height: 70%;
-     margin-left: 35%;
- }
 
 
-.textoUbicacion{
+}
+
+.ubicacionPic {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    width: 30%;
+    height: 70%;
+    margin-left: 35%;
+}
+
+
+.textoUbicacion {
     text-align: center;
 
 }
@@ -354,333 +330,339 @@ body{
 
 /* inicia nuestra parte del footer (pie de pagina) */
 
-.pieDePagina{
+.pieDePagina {
     grid-area: pieDePagina;
-    background-color:rgba(173, 235, 250, 0.645); 
+    background-color: rgba(173, 235, 250, 0.645);
     display: flex;
-    margin:5rem;
+    margin: 5rem;
     padding: 5rem;
     justify-content: space-between;
     align-items: center;
     text-align: center;
-    
+   
+
 }
 
-.textoEmail{
-    color:rgb(7, 7, 7);
+.textoEmail {
+    color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-    
+
 }
 
 
-.emailPic{
+.emailPic {
     width: 100px;
     height: 100px;
-    
+
 }
 
 /* animacion de email */
 
-.emailPic{
-    height:100px;
-    transition:height 2s;
+.emailPic {
+    height: 100px;
+    transition: height 2s;
 }
 
-.emailPic:hover{
+.emailPic:hover {
     height: 90px;
 }
 
-.textoNumeroTelefonico{
-    color:rgb(7, 7, 7);
+.textoNumeroTelefonico {
+    color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-    
-    
+
+
 
 }
-.numPic{
+
+.numPic {
     width: 100px;
     height: 100px;
-  
+
 }
+
 /* animacion de numero telefonico */
 
-.numPic{
-    height:100px;
-    transition:height 2s;
+.numPic {
+    height: 100px;
+    transition: height 2s;
 }
 
-.numPic:hover{
+.numPic:hover {
     height: 90px;
 }
 
-.textoWhatsApp{
-    color:rgb(7, 7, 7);
+.textoWhatsApp {
+    color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-    
+
 
 }
-    
-.whatsAppImg{
+
+.whatsAppImg {
     width: 100px;
     height: 100px;
     margin-right: 40px;
-  
+
 }
+
 /* animacion de whats app */
 
-.whatsAppImg{
-    height:100px;
-    transition:height 2s;
+.whatsAppImg {
+    height: 100px;
+    transition: height 2s;
 }
 
-.whatsAppImg:hover{
+.whatsAppImg:hover {
     height: 90px;
 }
 
 /* *celular* */
 
-@media screen and (max-width: 480px) {
+@media screen and (max-width: 375px) {
     body {
         background-color: rgba(173, 235, 250, 0.645);
-            
+
     }
 
-    .redesSociales{
-        flex-wrap:column;
+    .redesSociales {
+        flex-wrap: column;
     }
 
-    .logo{
-        flex-wrap: wrap;
-    }
-    .navbar{
-        flex-direction: column;
-    }
-
-    .areas{
-        flex-direction: column;
-    }
-
-    .tituloAreas{
-        flex-wrap: wrap;
-    }
-  
-    .imagenesAreas{
-        flex-direction: column;
-    }
-
-
-    .parrafoCoverline{
-        flex-direction: column;
-    }
-
-    .pd{
-    flex-direction: column;
-    }
-
-    .productosDestacados{
-        flex-direction: column;
-    }
-
-    .textoPD{
+    .logo {
         flex-wrap: wrap;
     }
 
-    .imgPDestacados{
+    .navbar {
         flex-direction: column;
     }
 
-    .contacForm{
+    .areas {
         flex-direction: column;
+    }
+
+    .tituloAreas {
         flex-wrap: wrap;
     }
 
-     .textoUbicacion{
-        flex-wrap: wrap;
-     }
-
-    .ubicacionPic{
-        flex-direction:column;
+    .imagenesAreas {
+        flex-direction: column;
     }
 
-    .pieDePagina{
+
+    .parrafoCoverline {
+        flex-direction: column;
+    }
+
+    .pd {
+        flex-direction: column;
+    }
+
+    .productosDestacados {
+        flex-direction: column;
+    }
+
+    .textoPD {
+        flex-wrap: wrap;
+    }
+
+    .imgPDestacados {
+        flex-direction: column;
+    }
+
+    .contacForm {
         flex-direction: column;
         flex-wrap: wrap;
     }
 
-    .email{
+    .textoUbicacion {
+        flex-wrap: wrap;
+    }
+
+    .ubicacionPic {
         flex-direction: column;
     }
 
-    .textoEmail{
-        flex-direction: column;
-        flex-wrap:wrap;
-    }
-
-    .textoNumeroTelefonico{
-        flex-direction: column;
-    }
-
-    .textoNumeroTelefonico{
+    .pieDePagina {
         flex-direction: column;
         flex-wrap: wrap;
     }
 
-    .whatsapp{
+    .email {
         flex-direction: column;
     }
 
-    .textoWhatsApp{
+    .textoEmail {
         flex-direction: column;
         flex-wrap: wrap;
     }
-    
-    
 
+    .textoNumeroTelefonico {
+        flex-direction: column;
     }
+
+    .textoNumeroTelefonico {
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+    .whatsapp {
+        flex-direction: column;
+    }
+
+    .textoWhatsApp {
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+
+
+}
+
 /* *tablet* */
 
-@media screen and (min-width: 481px) and (max-with: 1023px) {
+@media screen and (min-width: 376px) and (max-with: 1023px) {
     body {
-        background-color:rgba(173, 235, 250, 0.645);
+        background-color: rgba(173, 235, 250, 0.645);
     }
 
-    .redesSociales{
+    .redesSociales {
         flex-wrap: wrap;
     }
 
-    .logo{
+    .logo {
         flex-wrap: wrap;
     }
 
-    .navbar{
-        flex-direction: column;
-    }
-    
-    .parrafoCoverline{
+    .navbar {
         flex-direction: column;
     }
 
-    .areas{
+    .parrafoCoverline {
         flex-direction: column;
     }
 
-    .tituloAreas{
-        flex-wrap: wrap;
-    }
-  
-    
-    .imagenesAreas{
+    .areas {
         flex-direction: column;
     }
-   
-    .pd{
-        flex-direction: column;
-        }
-    
-        .productosDestacados{
-            flex-direction: column;
-        }
 
-        .textoPD{
-            flex-wrap: wrap;
-        }
-  
-    .imgPDestacados{
-        flex-direction: column;
-    }
-    
-    .contacForm{
-        flex-direction: column;
+    .tituloAreas {
         flex-wrap: wrap;
     }
 
-    
-    .textoUbicacion{
+
+    .imagenesAreas {
+        flex-direction: column;
+    }
+
+    .pd {
+        flex-direction: column;
+    }
+
+    .productosDestacados {
+        flex-direction: column;
+    }
+
+    .textoPD {
         flex-wrap: wrap;
-     }
-
-    .ubicacionPic{
-        flex-direction:column;
     }
 
-    .pieDePagina{
+    .imgPDestacados {
         flex-direction: column;
     }
 
-    .email{
-        flex-direction: column;
-    }
-
-    .textoEmail{
-        flex-direction: column;
-        flex-wrap:wrap;
-    }
-
-    .textoNumeroTelefonico{
-        flex-direction: column;
-    }
-
-    .textoNumeroTelefonico{
+    .contacForm {
         flex-direction: column;
         flex-wrap: wrap;
     }
 
-    .whatsapp{
+
+    .textoUbicacion {
+        flex-wrap: wrap;
+    }
+
+    .ubicacionPic {
         flex-direction: column;
     }
 
-    .textoWhatsApp{
+    .pieDePagina {
+        flex-direction: column;
+    }
+
+    .email {
+        flex-direction: column;
+    }
+
+    .textoEmail {
         flex-direction: column;
         flex-wrap: wrap;
     }
-    
-    
-    
 
-    
+    .textoNumeroTelefonico {
+        flex-direction: column;
+    }
+
+    .textoNumeroTelefonico {
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+    .whatsapp {
+        flex-direction: column;
+    }
+
+    .textoWhatsApp {
+        flex-direction: column;
+        flex-wrap: wrap;
+    }
+
+
+
+
+
 
 }
 
 /* *computadora* */
 
-@media  screen and (min-width: 1024px) {
+@media screen and (min-width: 1024px) {
     body {
-        background-color:rgba(173, 235, 250, 0.645);
+        background-color: rgba(173, 235, 250, 0.645);
     }
-    
-    .navbar{
+
+    .navbar {
         flex-direction: row;
     }
 
-    .imagenesAreas{
+    .imagenesAreas {
         flex-direction: row;
     }
 
-      
-    .parrafoCoverline{
-        flex-direction: row;
-    }
-    
-    .imgPDestacados{
+
+    .parrafoCoverline {
         flex-direction: row;
     }
 
-    .contacForm{
+    .imgPDestacados {
         flex-direction: row;
     }
 
-    .ubicacionPic{
+    .contacForm {
         flex-direction: row;
     }
 
-    .pieDePagina{
+    .ubicacionPic {
         flex-direction: row;
     }
-    
-    
-    
+
+    .pieDePagina {
+        flex-direction: row;
+    }
+
+
+
 
 }
