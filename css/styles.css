@@ -8406,7 +8406,7 @@ body {
   flex-direction: row;
   justify-content: right;
   align-items: center;
-  margin-top: 20px; }
+  margin-top: 1rem; }
 
 .logo {
   background-color: blue;
