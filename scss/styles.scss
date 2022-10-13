@@ -10,6 +10,8 @@ $base-color:  rgba(173, 235, 250, 0.645);
 }
 
 
+
+
   
 
 body {
@@ -42,42 +44,43 @@ body {
   
   .header {
     grid-area: header;
-    
-  
-  }
-  
-  .redesSociales {
-    background-color:$base-color;
-    display: flex;
-    flex-direction: row;
-    justify-content: right;
-    align-items: center;
-    margin-top: 1rem;
-  }
-  
-  
-  
-  
-  
-  .logo {
-    background-color: rgb(0, 0, 255);
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    margin-top: 0;
-    padding-top: 0;
-  }
-  
-  
-  /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
-  
-  .navbar {
+
+    & .redesSociales {
+        background-color:$base-color;
+        display: flex;
+        flex-direction: row;
+        justify-content: right;
+        align-items: center;
+        margin-top: 1rem;
+      }
+
+      & .logo {
+        background-color: rgb(0, 0, 255);
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        margin-top: 0;
+        padding-top: 0;
+      }
+
+      
+      & .navbar {
     grid-area: navbar;
     justify-content: center;
     align-items: center;
   
   }
+  
+    
+  
+  }
+  
+  
+  
+  
+  /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
+  
   
   
   
@@ -87,13 +90,6 @@ body {
   
   
   
-  .tituloAreas {
-    grid-area: tituloAreas;
-    color:black;
-    justify-content: center;
-    text-align: center;
-    margin-bottom: 3rem;
-  }
   
   
   
@@ -105,6 +101,34 @@ body {
     margin-bottom: 50px;
     padding-top: 50px;
     margin-top: 50px;
+
+    .tituloAreas {
+        grid-area: tituloAreas;
+        color:black;
+        justify-content: center;
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+      
+
+    .imagenesAreas {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        text-align: center;
+        align-items: center;
+        margin-top: 6rem;
+        margin-bottom: 6rem;
+      }
+      .titulo1 {
+        font-size: 25px;
+        color: rgb(7, 7, 7);
+        text-align: left;
+        text-decoration: none;
+        margin-left: 40px;
+        margin-right: 40px;
+      
+      }
   }
   
   
@@ -115,48 +139,7 @@ body {
   
   
   
-  
-  
-  .imagenesAreas {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    text-align: center;
-    align-items: center;
-    margin-top: 6rem;
-    margin-bottom: 6rem;
-  }
-  
   // // // /* imagenes y titulos individuales para areas */
-  
-  
-  .titulo1 {
-    font-size: 25px;
-    color: rgb(7, 7, 7);
-    text-align: left;
-    text-decoration: none;
-    margin-left: 40px;
-    margin-right: 40px;
-  
-  }
-  
-  .empresariales {
-    width: 200px;
-  
-  
-  }
-  
-  
-  .gastronomia {
-    width: 200px;
-  
-  
-  }
-  
-  .escolares {
-    width: 200px;
-  
-  }
   
   
   
