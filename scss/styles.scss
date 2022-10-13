@@ -46,12 +46,18 @@ body {
     grid-area: header;
 
     & .redesSociales {
-        background-color:$base-color;
         display: flex;
         flex-direction: row;
         justify-content: right;
         align-items: center;
         margin-top: 1rem;
+        margin-bottom: 1rem;
+        img{
+             width:30px;
+             height:30px;
+             padding: 3px;
+
+        }
       }
 
       & .logo {

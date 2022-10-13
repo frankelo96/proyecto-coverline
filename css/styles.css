@@ -8405,12 +8405,16 @@ body {
 .header {
   grid-area: header; }
   .header .redesSociales {
-    background-color: rgba(173, 235, 250, 0.645);
     display: flex;
     flex-direction: row;
     justify-content: right;
     align-items: center;
-    margin-top: 1rem; }
+    margin-top: 1rem;
+    margin-bottom: 1rem; }
+    .header .redesSociales img {
+      width: 30px;
+      height: 30px;
+      padding: 3px; }
   .header .logo {
     background-color: blue;
     display: flex;
