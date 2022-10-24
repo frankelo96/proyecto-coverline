@@ -102,7 +102,9 @@ body {
   
   .areas {
     color: rgb(7, 7, 7);
-    justify-content: center;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
     text-align: center;
     margin-bottom: 50px;
     padding-top: 50px;
@@ -136,7 +138,6 @@ body {
       
       }
   }
-  
   
   
   
@@ -292,6 +293,7 @@ body {
     margin: 3rem;
     padding: 3rem;
   
+  
   }
   
   .tituloUbic {
@@ -318,7 +320,8 @@ body {
     text-align: center;
   
   }
-  
+
+
   
   
   
