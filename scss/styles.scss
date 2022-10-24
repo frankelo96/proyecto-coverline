@@ -168,9 +168,16 @@ body {
     padding: 95px 120px;
     font-weight: lighter;
     color: rgb(246, 236, 236);
-    background: linear-gradient(rgb(0, 0, 255), rgb(82, 82, 251));
+    background-color:rgb(0, 0, 255);
     margin-top: 50px;
+    animation-duration: 4s;
+    animation-name: parrafoCoverline ;
   
+  }
+
+  @keyframes parrafoCoverline {
+    from {background-color:rgb(0, 0, 255);}
+    to {background-color:rgb(28, 139, 176);}
   }
   
   

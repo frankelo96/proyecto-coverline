@@ -8477,8 +8477,16 @@ body {
   padding: 95px 120px;
   font-weight: lighter;
   color: #f6ecec;
-  background: linear-gradient(blue, #5252fb);
-  margin-top: 50px; }
+  background-color: blue;
+  margin-top: 50px;
+  animation-duration: 4s;
+  animation-name: parrafoCoverline; }
+
+@keyframes parrafoCoverline {
+  from {
+    background-color: blue; }
+  to {
+    background-color: rgba(203, 219, 225, 0.185); } }
 
 /* seccion productos destacados y sus respectivas imagenes */
 /* titulo h2 */
