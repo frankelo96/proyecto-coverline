@@ -8446,6 +8446,7 @@ body {
   margin-top: 50px; }
   .areas .tituloAreas {
     grid-area: tituloAreas;
+    display: flex;
     color: black;
     justify-content: center;
     text-align: center;
