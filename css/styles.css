@@ -8486,7 +8486,7 @@ body {
   from {
     background-color: blue; }
   to {
-    background-color: rgba(203, 219, 225, 0.185); } }
+    background-color: #1c8bb0; } }
 
 /* seccion productos destacados y sus respectivas imagenes */
 /* titulo h2 */
@@ -8512,37 +8512,6 @@ body {
   margin-left: 2rem;
   margin-top: 1rem;
   padding-top: 1rem; }
-
-/* clase imagenes de productos destacados */
-.imgPDestacados {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  text-align: center;
-  align-items: center;
-  margin-top: 6rem;
-  margin-bottom: 6rem; }
-
-/* imagenes y titulos individuales */
-.titulo01 {
-  font-size: 25px;
-  color: #070707;
-  text-align: left;
-  text-decoration: none;
-  margin-left: 40px;
-  margin-right: 40px; }
-
-.foto01 {
-  width: 200px;
-  margin-left: 40px; }
-
-.foto02 {
-  width: 200px;
-  margin-left: 40px; }
-
-.foto03 {
-  width: 200px;
-  margin-left: 40px; }
 
 /* seccion contacto y formulario  */
 .contact {
