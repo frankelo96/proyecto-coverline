@@ -1,165 +1,147 @@
 @import "../node_modules/bootstrap/scss/bootstrap";
 
- /* variables */
-$base-color:  rgba(173, 235, 250, 0.645);
+/* variables */
+$base-color: rgba(173, 235, 250, 0.645);
 
- /* mixins */
- @mixin respons {
-    flex-direction: column;
-    flex-wrap: wrap;
+/* mixins */
+@mixin respons {
+  flex-direction: column;
+  flex-wrap: wrap;
 }
 
 
 
 
-  
+
 
 body {
-    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
-    background-color:blue;
-    
-  }
-  
-  /* implementando grid junto con flexbox */
-  
-  #gridArea {
-    background-color:$base-color;
-    display: grid;
-    grid-template-areas:
-        "header"
-        "navbar"
-        "tituloAreas"
-        "parrafoCoverline"
-        "contacto"
-        "tituloUbic"
-        "pieDePagina"
-    ;
+  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+  background-color: blue;
 
-  }
-  
-  /* .header{
+}
+
+/* implementando grid junto con flexbox */
+
+#gridArea {
+  background-color: $base-color;
+  display: grid;
+  grid-template-areas:
+    "header"
+    "navbar"
+    "tituloAreas"
+    "parrafoCoverline"
+    "contacto"
+    "tituloUbic"
+    "pieDePagina"
+  ;
+
+}
+
+/* .header{
     
   iconos de link hacia redes sociales.
   } */
-  
-  .header {
-    grid-area: header;
 
-    & .redesSociales {
-        display: flex;
-        flex-direction: row;
-        justify-content: right;
-        align-items: center;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-        img{
-             width:30px;
-             height:30px;
-             padding: 3px;
+.header {
+  grid-area: header;
 
-        }
-      }
+  & .redesSociales {
+    display: flex;
+    flex-direction: row;
+    justify-content: right;
+    align-items: center;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
 
-      & .logo {
-        background-color: rgb(0, 0, 255);
-        display: flex;
-        flex-direction: row;
-        justify-content: center;
-        align-items: center;
-        margin-top: 0;
-        padding-top: 0;
-      }
+    img {
+      width: 30px;
+      height: 30px;
+      padding: 3px;
 
-      
-      & .navbar {
+    }
+  }
+
+  & .logo {
+    background-color: rgb(0, 0, 255);
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+
+  & .navbar {
     grid-area: navbar;
     justify-content: center;
     align-items: center;
-  
-  }
-  
-    
-  
-  }
-  
-  
-  
-  
-  /* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
-  
-  
-  
-  
-  /* fin de nuestro header */
-  
-  /* seccion areas. */
-  
-  
-  
-  .img-fluid{
-    width: 20px;
-    height: 20px;
 
   }
-  
- 
-  
-  .areas {
-    color: rgb(7, 7, 7);
+
+
+
+}
+
+
+
+
+/* scrollMenu areas, coverline , productos destacados, contacto, ubicacion */
+
+
+
+
+/* fin de nuestro header */
+
+/* seccion areas. */
+
+
+
+.img-fluid {
+  width: 20px;
+  height: 20px;
+
+}
+
+
+
+.areas {
+  color: rgb(7, 7, 7);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 50px;
+  padding-top: 50px;
+  margin-top: 50px;
+
+  .tituloAreas {
+    grid-area: tituloAreas;
     display: flex;
-    justify-content: space-around;
-    align-items: center;
+    color: black;
+    justify-content: center;
     text-align: center;
-    margin-bottom: 50px;
-    padding-top: 50px;
-    margin-top: 50px;
-
-    .tituloAreas {
-      grid-area: tituloAreas;
-      display: flex;
-      color:black;
-      justify-content: center;
-      text-align: center;
-      margin-bottom: 3rem;
-    }
-      
-
-    .imagenesAreas {
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        text-align: center;
-        align-items: center;
-        margin-top: 6rem;
-        margin-bottom: 6rem;
-      }
-      .titulo1 {
-        font-size: 25px;
-        color: rgb(7, 7, 7);
-        text-align: left;
-        text-decoration: none;
-        margin-left: 40px;
-        margin-right: 40px;
-      
-      }
+    margin-bottom: 3rem;
+    margin-left: 3rem;
   }
-  
-  
-  
+
+
+
+
   // // // /* clase de imagenes para areas */
-  
-  
-  
-  
+
+
+
+
   // // // /* imagenes y titulos individuales para areas */
-  
-  
-  
-  
-  
+
+
+
+
+
   /* seccion coverline */
   /* inicia seccion parrafo descriptivo sobre la empresa coverline */
-  
+
   .parrafoCoverline {
     grid-area: parrafoCoverline;
     display: flex;
@@ -168,27 +150,32 @@ body {
     padding: 95px 120px;
     font-weight: lighter;
     color: rgb(246, 236, 236);
-    background-color:rgb(0, 0, 255);
+    background-color: rgb(0, 0, 255);
     margin-top: 50px;
     animation-duration: 4s;
-    animation-name: parrafoCoverline ;
-  
+    animation-name: parrafoCoverline;
+
   }
 
   @keyframes parrafoCoverline {
-    from {background-color:rgb(0, 0, 255);}
-    to {background-color:rgb(28, 139, 176);}
+    from {
+      background-color: rgb(0, 0, 255);
+    }
+
+    to {
+      background-color: rgba(95, 95, 254, 0.87);
+    }
   }
-  
-  
+
+
   /* seccion productos destacados y sus respectivas imagenes */
-  
+
   /* titulo h2 */
-  
+
   .pd {
-    background-color:$base-color;
+    background-color: $base-color;
   }
-  
+
   .productosDestacados {
     grid-area: productosDestacados;
     color: rgb(7, 7, 7);
@@ -198,9 +185,9 @@ body {
     padding-top: 50px;
     margin-top: 50px;
   }
-  
+
   /* subtitulo h3 */
-  
+
   .textoPD {
     color: rgb(7, 7, 7);
     display: flex;
@@ -211,20 +198,20 @@ body {
     margin-top: 1rem;
     padding-top: 1rem;
   }
-  
-  
-  
-  
-  
+
+
+
+
+
   /* seccion contacto y formulario  */
   .contact {
-    background-color:$base-color;
+    background-color: $base-color;
     margin: 3rem;
     padding: 3rem;
-    
-  
+
+
   }
-  
+
   .contacto {
     grid-area: contacto;
     color: rgb(7, 7, 7);
@@ -233,7 +220,7 @@ body {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     margin-bottom: 50px
   }
-  
+
   .contacForm {
     color: white;
     display: flex;
@@ -243,32 +230,32 @@ body {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     margin-bottom: 50px;
     margin-left: 500px;
-  
+
   }
-  
-  
+
+
   /* seccion ubicacion */
-  
+
   /* imagen mapa de ubicacion */
-  
+
   .ubicacion {
-    background-color:$base-color;
+    background-color: $base-color;
     margin: 3rem;
     padding: 3rem;
-  
-  
+
+
   }
-  
+
   .tituloUbic {
     grid-area: tituloUbic;
     color: rgb(7, 7, 7);
     display: flexbox;
     justify-content: center;
     text-align: center;
-  
-  
+
+
   }
-  
+
   .ubicacionPic {
     display: flex;
     flex-direction: row;
@@ -277,347 +264,337 @@ body {
     height: 70%;
     margin-left: 35%;
   }
-  
-  
+
+
   .textoUbicacion {
     text-align: center;
-  
+
   }
 
 
-  
-  
-  
-  
+
+
+
+
   /* inicia nuestra parte del footer (pie de pagina) */
-  
+
   .pieDePagina {
     grid-area: pieDePagina;
-    background-color:$base-color;
+    background-color: $base-color;
     display: flex;
     margin: 5rem;
     padding: 5rem;
     justify-content: space-between;
     align-items: center;
     text-align: center;
-  
-  
+
+
   }
-  
+
   .textoEmail {
     color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-  
+
   }
-  
-  
+
+
   .emailPic {
     width: 100px;
     height: 100px;
-  
+
   }
-  
+
   /* animacion de email */
-  
+
   .emailPic {
     height: 100px;
     transition: height 2s;
   }
-  
+
   .emailPic:hover {
     height: 90px;
   }
-  
+
   .textoNumeroTelefonico {
     color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-  
-  
-  
+
+
+
   }
-  
+
   .numPic {
     width: 100px;
     height: 100px;
-  
+
   }
-  
+
   /* animacion de numero telefonico */
-  
+
   .numPic {
     height: 100px;
     transition: height 2s;
   }
-  
+
   .numPic:hover {
     height: 90px;
   }
-  
+
   .textoWhatsApp {
     color: rgb(7, 7, 7);
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: large;
-  
-  
+
+
   }
-  
+
   .whatsAppImg {
     width: 100px;
     height: 100px;
     margin-right: 40px;
-  
+
   }
-  
+
   /* animacion de whats app */
-  
+
   .whatsAppImg {
     height: 100px;
     transition: height 2s;
   }
-  
+
   .whatsAppImg:hover {
     height: 90px;
   }
-  
+
   /* *celular* */
-  
-  @media screen and (max-width: 375px) {
+
+  @media screen and (max-width: 358px) {
     body {
-        background-color: $base-color;
-  
+      background-color: $base-color;
+
     }
-  
+
     .redesSociales {
-        flex-wrap: column;
+      flex-wrap: column;
     }
-  
+
     .logo {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .navbar {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .areas {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .tituloAreas {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .imagenesAreas {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
-  
+
+
     .parrafoCoverline {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .pd {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .productosDestacados {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoPD {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .imgPDestacados {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .contacForm {
-        @include respons;
+      @include respons;
     }
-  
+
     .textoUbicacion {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .ubicacionPic {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .pieDePagina {
-        @include respons;
+      @include respons;
     }
-  
+
     .email {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoEmail {
-        @include respons;
+      @include respons;
     }
-  
+
     .textoNumeroTelefonico {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoNumeroTelefonico {
-        @include respons;
+      @include respons;
     }
-  
+
     .whatsapp {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoWhatsApp {
-        @include respons;
+      @include respons;
     }
-  
-  
-  
+
+
+
   }
-  
+
   /* *tablet* */
-  
+
   @media screen and (min-width: 376px) and (max-with: 1023px) {
     body {
-        background-color: $base-color;
+      background-color: $base-color;
     }
-  
+
     .redesSociales {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .logo {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .navbar {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .parrafoCoverline {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .areas {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .tituloAreas {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
-  
+
+
     .imagenesAreas {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .pd {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .productosDestacados {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoPD {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .imgPDestacados {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .contacForm {
-        @include respons;
+      @include respons;
     }
-  
-  
+
+
     .textoUbicacion {
-        flex-wrap: wrap;
+      flex-wrap: wrap;
     }
-  
+
     .ubicacionPic {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .pieDePagina {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .email {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoEmail {
-        @include respons;
+      @include respons;
     }
-  
+
     .textoNumeroTelefonico {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoNumeroTelefonico {
-        @include respons;
+      @include respons;
     }
-  
+
     .whatsapp {
-        flex-direction: column;
+      flex-direction: column;
     }
-  
+
     .textoWhatsApp {
-       
-    @include respons;
-     }
-  
-  
-  
-  
-  
-  
+
+      @include respons;
+    }
+
   }
-  
+
+
   /* *computadora* */
-  
+
   @media screen and (min-width: 1024px) {
     body {
-        background-color: $base-color;
+      background-color: $base-color;
     }
-  
+
     .navbar {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
+
     .imagenesAreas {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
-  
+
+
     .parrafoCoverline {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
+
     .imgPDestacados {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
+
     .contacForm {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
+
     .ubicacionPic {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
+
     .pieDePagina {
-        flex-direction: row;
+      flex-direction: row;
     }
-  
-  
-  
-  
-  }
-   
-  
+ }
