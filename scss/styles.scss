@@ -370,30 +370,28 @@ body {
 
   /* *celular* */
 
-  @media screen and (max-width: 358px) {
+  @media screen and (min-width: 320px) and (max-with: 1023px){
     body {
       background-color: $base-color;
-
+      width: 100%;
     }
 
     .redesSociales {
-      flex-wrap: column;
+      flex-direction: column;
     }
 
     .logo {
       flex-wrap: wrap;
+      flex-direction: column;
     }
 
     .navbar {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .areas {
       flex-direction: column;
-    }
-
-    .tituloAreas {
-      flex-wrap: wrap;
     }
 
     .imagenesAreas {
@@ -403,6 +401,7 @@ body {
 
     .parrafoCoverline {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .pd {
@@ -435,30 +434,37 @@ body {
 
     .pieDePagina {
       @include respons;
+      flex-wrap: wrap;
     }
 
     .email {
       flex-direction: column;
+      flex-wrap: wrap
     }
 
     .textoEmail {
       @include respons;
+      flex-wrap: wrap
     }
 
     .textoNumeroTelefonico {
       flex-direction: column;
+      flex-wrap: wrap
     }
 
     .textoNumeroTelefonico {
       @include respons;
+      flex-wrap: wrap
     }
 
     .whatsapp {
       flex-direction: column;
+      flex-wrap: wrap
     }
 
     .textoWhatsApp {
       @include respons;
+      flex-wrap: wrap
     }
 
 
@@ -470,6 +476,7 @@ body {
   @media screen and (min-width: 376px) and (max-with: 1023px) {
     body {
       background-color: $base-color;
+      width: 100%;
     }
 
     .redesSociales {
@@ -482,6 +489,7 @@ body {
 
     .navbar {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .parrafoCoverline {
@@ -511,6 +519,7 @@ body {
 
     .textoPD {
       flex-wrap: wrap;
+      flex-direction: column;
     }
 
     .imgPDestacados {
@@ -532,6 +541,7 @@ body {
 
     .pieDePagina {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .email {
@@ -540,14 +550,17 @@ body {
 
     .textoEmail {
       @include respons;
+      flex-wrap: wrap;
     }
 
     .textoNumeroTelefonico {
       flex-direction: column;
+      flex-wrap: wrap
     }
 
     .textoNumeroTelefonico {
       @include respons;
+      
     }
 
     .whatsapp {
@@ -557,6 +570,7 @@ body {
     .textoWhatsApp {
 
       @include respons;
+      flex-wrap: wrap;
     }
 
   }
@@ -597,4 +611,4 @@ body {
     .pieDePagina {
       flex-direction: row;
     }
- }
+  }
