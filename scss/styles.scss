@@ -450,10 +450,11 @@ body {
 
     .textoEmail {
       @include respons;
+      flex-direction: column;
       flex-wrap: wrap
     }
 
-    .textoNumeroTelefonico {
+    .numeroTelefonico {
       flex-direction: column;
       flex-wrap: wrap
     }
