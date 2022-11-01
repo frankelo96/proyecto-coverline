@@ -370,7 +370,7 @@ body {
 
   /* *celular* */
 
-  @media screen and (min-width: 320px){
+  @media screen and (min-width: 320px) and (max-width:768px) {
     body {
       background-color: $base-color;
       width: 100%;
@@ -378,11 +378,13 @@ body {
 
     .redesSociales {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .logo {
       flex-wrap: wrap;
-      flex-direction: column;
+      width: auto;
+      height: auto;
     }
 
     .navbar {
@@ -394,8 +396,9 @@ body {
       flex-direction: column;
     }
 
-    .imagenesAreas {
+    .carousel-inner {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
 
@@ -422,10 +425,12 @@ body {
 
     .contacForm {
       @include respons;
+      flex-wrap: wrap;
     }
 
     .textoUbicacion {
       flex-wrap: wrap;
+      flex-direction: column;
     }
 
     .ubicacionPic {
@@ -435,6 +440,7 @@ body {
     .pieDePagina {
       @include respons;
       flex-wrap: wrap;
+      flex-direction: column;
     }
 
     .email {
@@ -473,18 +479,21 @@ body {
 
   /* *tablet* */
 
-  @media screen and (min-width: 768px) {
+  @media screen and (min-width: 768px) and (max-width:1024px) {
     body {
       background-color: $base-color;
-      width: 100%;
+      width:100%;
     }
 
     .redesSociales {
       flex-wrap: wrap;
+      flex-direction: column;
     }
 
     .logo {
       flex-wrap: wrap;
+      width: auto;
+      height: auto;
     }
 
     .navbar {
@@ -494,6 +503,7 @@ body {
 
     .parrafoCoverline {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .areas {
@@ -505,8 +515,9 @@ body {
     }
 
 
-    .imagenesAreas {
+    .carousel-inner {
       flex-direction: column;
+      flex-wrap: wrap;
     }
 
     .pd {
@@ -528,6 +539,8 @@ body {
 
     .contacForm {
       @include respons;
+      flex-wrap: wrap;
+      flex-direction: column;
     }
 
 
@@ -587,7 +600,7 @@ body {
       flex-direction: row;
     }
 
-    .imagenesAreas {
+    .carousel-inner {
       flex-direction: row;
     }
 
