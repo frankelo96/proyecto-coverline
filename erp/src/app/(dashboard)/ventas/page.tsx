@@ -1,15 +1,17 @@
-import { Search } from "lucide-react";
+import { FileSpreadsheet, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ARCA_BADGE } from "@/components/sales/arca-badge";
 import { AuthorizeButton } from "@/components/sales/authorize-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FlashNotice } from "@/components/ui/flash-notice";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
+import { todayIso } from "@/lib/purchasing/labels";
 import { cn } from "@/lib/utils";
 import { arcaEnabled } from "@/server/arca/config";
 import { requirePageUser } from "@/server/auth/session";
@@ -32,15 +34,32 @@ export default async function SalesPage({ searchParams }: Props) {
   const { filtro, q, aviso } = await searchParams;
   const filter = FILTERS.find((f) => f.key === filtro)?.key ?? "todas";
   const [rows, pending] = await Promise.all([listSales(filter, q?.trim() || null), countPendingCae()]);
+  const today = todayIso();
+  const monthStart = `${today.slice(0, 8)}01`;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-bold tracking-tight">Ventas y comprobantes</h1>
-        <p className="text-sm text-muted-foreground">
-          {arcaEnabled() ? "Facturación electrónica ARCA activa." : "Facturación electrónica ARCA no configurada: las facturas quedan pendientes de CAE."}
-          {pending > 0 && <span className="font-semibold text-accent-strong"> {pending} comprobantes sin CAE.</span>}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Ventas y comprobantes</h1>
+          <p className="text-sm text-muted-foreground">
+            {arcaEnabled() ? "Facturación electrónica ARCA activa." : "Facturación electrónica ARCA no configurada: las facturas quedan pendientes de CAE."}
+            {pending > 0 && <span className="font-semibold text-accent-strong"> {pending} comprobantes sin CAE.</span>}
+          </p>
+        </div>
+        <form action="/api/exportar-ventas" className="flex flex-wrap items-end gap-2" aria-label="Exportar ventas a Excel">
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Desde
+            <Input type="date" name="desde" defaultValue={monthStart} className="h-9 w-40" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Hasta
+            <Input type="date" name="hasta" defaultValue={today} className="h-9 w-40" />
+          </label>
+          <Button type="submit" variant="outline" size="sm">
+            <FileSpreadsheet /> Exportar Excel
+          </Button>
+        </form>
       </div>
       <FlashNotice message={aviso} />
       <div className="flex flex-wrap items-center gap-3">

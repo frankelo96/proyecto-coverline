@@ -1,0 +1,33 @@
+# Blueprint de Render para levantar una instancia de prueba del ERP.
+# Render → New → Blueprint → elegir este repositorio y la rama. Crea la base
+# PostgreSQL y el servicio web; al arrancar aplica migraciones y carga los datos
+# de ejemplo (el seed es idempotente: no duplica nada en reinicios).
+databases:
+  - name: coverline-db
+    databaseName: coverline
+    user: coverline
+    plan: free
+
+services:
+  - type: web
+    name: coverline-erp
+    runtime: node
+    plan: free
+    rootDir: erp
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm run db:seed && npm start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coverline-db
+          property: connectionString
+      # Contraseña inicial de admin@coverline.local (Render la pide al crear el Blueprint).
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: ARCA_MODE
+        value: deshabilitado
+      - key: COMPANY_LEGAL_NAME
+        value: Coverline Uniformes

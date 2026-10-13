@@ -18,9 +18,13 @@ npm run dev                     # http://localhost:3000
 
 Producción: `npm run db:deploy && npm run build && npm start`.
 
+### Instancia de prueba en Render
+
+El archivo [`render.yaml`](../render.yaml) en la raíz del repositorio es un *Blueprint*: en [Render](https://render.com) → **New → Blueprint**, elegí el repositorio y la rama, y completá `SEED_ADMIN_PASSWORD` cuando lo pida. Crea la base PostgreSQL y el servicio web, aplica las migraciones y carga los datos de ejemplo. Ingreso: `admin@coverline.local` con esa contraseña. (En el plan gratuito el servicio se duerme tras 15 minutos sin uso y tarda ~1 minuto en despertar; la base gratuita vence a los 30 días.)
+
 | Script | Uso |
 | --- | --- |
-| `npm test` | Tests unitarios (Vitest): escandallo, producción, compras/pagos, POS, cajas, cheques, ticket, ARCA y permisos |
+| `npm test` | Tests unitarios (Vitest): escandallo, producción, compras/pagos, POS, cajas, cheques, ticket, ARCA, presupuestos, importación y permisos |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (config Next) |
 | `npm run db:studio` | Prisma Studio |
@@ -156,6 +160,20 @@ Ambos tipos guardan los datos del Libro IVA Compras: tipo de comprobante (A/B/C)
 - Reintegro: efectivo del cajón del turno abierto, transferencia o Mercado Pago desde su cuenta, o **descuento de la deuda en cuenta corriente** de esa venta.
 - El arqueo descuenta las devoluciones y el extracto del cliente las muestra como crédito.
 
+## Módulo B — CRM y presupuestos
+
+- **Clientes** (`/crm/clientes`): alta, edición, desactivación, búsqueda por nombre, CUIT/DNI, teléfono, localidad o etiqueta. Valida el dígito verificador del CUIT y exige CUIT a los responsables inscriptos.
+- **Ficha 360°** (`/crm/clientes/[id]`): compras de los últimos 12 meses, ticket promedio, última compra, saldo y crédito disponible, lo que más compra, presupuestos, oportunidades, órdenes de producción, últimas compras y **logos/diseños** (colores institucionales, puntadas, curva de talles habitual, link al archivo). Accesos directos a WhatsApp, email, presupuesto, oportunidad, orden de producción y cuenta corriente.
+- **Oportunidades** (`/crm/oportunidades`): tablero por etapa (nuevo → contactado → presupuestado → negociación → ganado/perdido) con valor estimado, cierre esperado (vencidas en rojo) y responsable. Perderla pide el motivo. Una oportunidad sin cliente se puede **dar de alta como cliente** y hereda sus presupuestos.
+- **Presupuestos** (`/crm/presupuestos`): ítems de catálogo o libres, precios netos, bonificación por línea e IVA discriminado por alícuota. Estados borrador → enviado → aceptado/rechazado; los vencidos se marcan solos y al reenviarlos se extiende la validez. Se editan mientras no estén cerrados; si no, se **duplican** como nueva versión. Versión **imprimible / PDF** (A4, con IVA discriminado para responsables inscriptos y precios finales para el resto) y envío por **WhatsApp o email** con el texto armado. Al aceptarlo: la oportunidad pasa a ganada y hay un botón para crear la **orden de producción** precargada.
+- **Campañas** (`/crm/campanas`): segmentación por tipo de cliente, etiquetas, mes habitual de compra y clientes sin comprar hace 3/6/12 meses; mensaje con `{nombre}`; WhatsApp uno por uno con el texto listo, email con todos en CCO y exportación del segmento. *El envío masivo automático requiere la API de WhatsApp Business o un proveedor de email (se conecta aparte).*
+
+## Maestros, importación y exportación
+
+- **Maestros** (`/maestros`): productos (con editor de **talles, colores, stock y códigos de barras**), materias primas y avíos, proveedores, talleres y **usuarios** (alta, rol, reseteo de contraseña, desactivación que cierra sus sesiones). Nada se borra: se desactiva y se conserva el historial. Los cambios quedan en el log de auditoría; un cambio de costo de material pasa por el historial de precios y recalcula las fichas técnicas.
+- **Importar** (Excel `.xlsx` o CSV, hasta 5.000 filas): plantilla descargable con hoja de instrucciones, reconocimiento flexible de encabezados (“Razón social”, “CUIT”, “Mail”…), números a la argentina (`1.234,56`), opciones por nombre (“RI”, “Escuela”), **vista previa** con filas nuevas / actualizaciones / errores antes de guardar, y se importan las filas válidas. Clientes por CUIT/DNI o nombre; productos por SKU con **una fila por talle/color**; materiales por código; proveedores y talleres por CUIT o nombre. Las columnas que no vienen en el archivo no se pisan.
+- **Exportar**: cada maestro a Excel o CSV (el archivo exportado se puede editar y volver a importar) y las **ventas del período** a Excel desde `/ventas`.
+
 ## Pendiente para los próximos módulos
 
-CRM y presupuestos, cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.
+Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

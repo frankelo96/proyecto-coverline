@@ -17,13 +17,30 @@ import { createOrderSchema, type CreateOrderInput } from "@/lib/validations/prod
 import { createOrderAction } from "@/server/actions/production.actions";
 import type { NewOrderFormData } from "@/server/queries/production-orders.queries";
 
-export function NewOrderForm({ data }: { data: NewOrderFormData }) {
+export interface NewOrderPrefill {
+  productId?: string | null;
+  clientId?: string | null;
+  notes?: string | null;
+}
+
+export function NewOrderForm({ data, prefill }: { data: NewOrderFormData; prefill?: NewOrderPrefill }) {
   const formId = useId();
   const router = useRouter();
   const { pending, status, setStatus, execute } = useServerAction();
   const form = useForm<CreateOrderInput>({
     resolver: zodResolver(createOrderSchema),
-    defaultValues: { productId: "", clientId: null, dueDate: null, notes: null, requiresPersonalization: false, items: [] },
+    defaultValues: (() => {
+      // Precarga desde un presupuesto aceptado o la ficha del cliente.
+      const p = data.products.find((x) => x.id === prefill?.productId);
+      return {
+        productId: p?.id ?? "",
+        clientId: data.clients.some((c) => c.id === prefill?.clientId) ? prefill!.clientId! : null,
+        dueDate: null,
+        notes: prefill?.notes ?? null,
+        requiresPersonalization: p?.hasPersonalization ?? false,
+        items: p ? p.variants.map((v) => ({ variantId: v.id, quantity: 0 })) : [],
+      };
+    })(),
   });
   const { register, setValue, handleSubmit, control, formState } = form;
   const productId = useWatch({ control, name: "productId" });

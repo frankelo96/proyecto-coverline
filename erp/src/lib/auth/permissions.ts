@@ -22,6 +22,12 @@ export const PERMISSIONS = {
   chequesManage: "cash:cheques",
   receivablesRead: "accounts:receivables:read",
   receivablesCollect: "accounts:receivables:collect",
+  crmRead: "crm:read",
+  crmWrite: "crm:write",
+  quotesWrite: "crm:quotes:write",
+  mastersRead: "masters:read",
+  mastersWrite: "masters:write",
+  usersManage: "admin:users",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

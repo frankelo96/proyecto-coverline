@@ -6,13 +6,13 @@ import { requirePageUser } from "@/server/auth/session";
 const NAV: (NavItem & { permission: string; hideIf?: string })[] = [
   { href: "/pos", label: "POS", permission: PERMISSIONS.posSell },
   { href: "/ventas", label: "Ventas", permission: PERMISSIONS.posSell },
+  { href: "/crm", label: "CRM", permission: PERMISSIONS.crmRead },
   { href: "/tesoreria", label: "Tesorería", permission: PERMISSIONS.cashRead },
   { href: "/tesoreria/cobranzas", label: "Cobranzas", permission: PERMISSIONS.receivablesCollect, hideIf: PERMISSIONS.cashRead },
-  { href: "/produccion/ordenes", label: "Producción", permission: PERMISSIONS.productionRead },
-  { href: "/produccion/talleres", label: "Talleres", permission: PERMISSIONS.workshopsRead },
-  { href: "/produccion/fichas", label: "Fichas técnicas", permission: PERMISSIONS.productionRead },
+  { href: "/produccion", label: "Producción", permission: PERMISSIONS.productionRead },
   { href: "/compras", label: "Compras", permission: PERMISSIONS.purchasesRead },
-  { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead },
+  { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead, hideIf: PERMISSIONS.purchasesRead },
+  { href: "/maestros", label: "Maestros", permission: PERMISSIONS.mastersRead },
 ];
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
