@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/*
+ * Paleta Coverline: tinta azul-grafito sobre papel cálido, acento naranja de
+ * señalización de taller. Tokens con nombres shadcn/ui.
+ */
+@theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-strong: var(--accent-strong);
+  --color-success: var(--success);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-chart-1: #1f3a5f;
+  --color-chart-2: #7c8b9c;
+  --color-chart-3: #b4530f;
+  --color-chart-4: #e8762b;
+  --color-chart-5: #5b2c83;
+  --color-chart-6: #2f5d50;
+  --color-chart-7: #3e4a57;
+  --color-chart-8: #a3a9b0;
+}
+
+:root {
+  --background: #f4f2ee;
+  --foreground: #18212b;
+  --card: #ffffff;
+  --primary: #18212b;
+  --primary-foreground: #ffffff;
+  --secondary: #e9e6e0;
+  --muted: #f1f2f3;
+  --muted-foreground: #5b6673;
+  --accent: #e8762b;
+  --accent-foreground: #18212b;
+  --accent-strong: #9a4510;
+  --success: #2f6b4f;
+  --destructive: #b3261e;
+  --border: #dde1e5;
+  --input: #c9ced4;
+  --ring: #1f3a5f;
+  --ink: #18212b;
+  --ink-foreground: #f4f2ee;
+  --ink-muted: #b8c2ce;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0f151c;
+    --foreground: #e8ebee;
+    --card: #17202a;
+    --primary: #e8ebee;
+    --primary-foreground: #0f151c;
+    --secondary: #222c37;
+    --muted: #1d2731;
+    --muted-foreground: #9aa6b2;
+    --accent: #f08a45;
+    --accent-foreground: #0f151c;
+    --accent-strong: #f5a066;
+    --success: #6cc49a;
+    --destructive: #f2867e;
+    --border: #2a3542;
+    --input: #3a4654;
+    --ring: #8fb3e0;
+    --ink: #070b10;
+    --ink-foreground: #e8ebee;
+    --ink-muted: #9aa6b2;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}

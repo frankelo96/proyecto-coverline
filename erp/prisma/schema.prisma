@@ -1,0 +1,990 @@
+// =============================================================================
+// Coverline Uniformes — ERP / CRM / Producción / POS
+// PostgreSQL + Prisma ORM 7 (driver adapter @prisma/adapter-pg)
+//
+// Convenciones:
+//   - Montos de dinero:        Decimal(14, 2)
+//   - Costos unitarios:        Decimal(14, 4)  (telas por metro/kg, avíos por unidad)
+//   - Cantidades / consumos:   Decimal(12, 4)  (permite venta fraccionada y m/kg)
+//   - Porcentajes:             Decimal(6, 2)
+//   - Tablas en snake_case vía @@map, columnas en camelCase.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum ClientType {
+  PARTICULAR
+  ESCUELA
+  EMPRESA
+  CLINICA
+  GASTRONOMICO
+  OTRO
+}
+
+enum TaxCondition {
+  RESPONSABLE_INSCRIPTO
+  MONOTRIBUTO
+  EXENTO
+  CONSUMIDOR_FINAL
+}
+
+enum DocumentType {
+  CUIT
+  CUIL
+  DNI
+  PASAPORTE
+}
+
+enum LeadStatus {
+  NUEVO
+  CONTACTADO
+  PRESUPUESTADO
+  NEGOCIACION
+  GANADO
+  PERDIDO
+}
+
+enum QuoteStatus {
+  BORRADOR
+  ENVIADO
+  ACEPTADO
+  RECHAZADO
+  VENCIDO
+}
+
+enum RawMaterialType {
+  TELA
+  AVIO
+  EMPAQUE
+  INSUMO
+}
+
+enum UnitOfMeasure {
+  METRO
+  KILOGRAMO
+  UNIDAD
+  PAR
+  CONO
+  ROLLO
+}
+
+enum ProductCategory {
+  TRABAJO
+  ESCOLAR
+  MEDICA
+  GASTRONOMICA
+  ACCESORIO
+}
+
+enum PricingMode {
+  MARKUP // precio = costo * (1 + markup%)
+  MARGIN // precio = costo / (1 - margen%)
+}
+
+enum ServiceType {
+  CORTE
+  CONFECCION
+  BORDADO
+  ESTAMPADO
+  SUBLIMACION
+  PLANCHADO
+  EMPAQUE
+  FLETE
+  OTRO
+}
+
+enum WorkshopType {
+  CONFECCION
+  BORDADO
+  ESTAMPADO
+  SUBLIMACION
+  PLANCHADO
+}
+
+enum ProductionStage {
+  CORTE_INTERNO
+  EN_TALLER_CONFECCION
+  EN_PERSONALIZACION
+  CONTROL_CALIDAD_PLANCHADO
+  LISTO_ENTREGA
+}
+
+enum ProductionOrderStatus {
+  BORRADOR
+  EN_PROCESO
+  COMPLETADA
+  CANCELADA
+}
+
+enum WorkshopRemitType {
+  ENVIO
+  RECEPCION
+}
+
+enum SaleChannel {
+  MOSTRADOR
+  WHATSAPP
+  WEB
+  MAYORISTA
+}
+
+enum SaleStatus {
+  PRESUPUESTO
+  PENDIENTE
+  CONFIRMADA
+  ENTREGADA
+  ANULADA
+}
+
+enum DeliveryMethod {
+  RETIRO_SUCURSAL
+  ENVIO
+}
+
+enum InvoiceType {
+  FACTURA_A
+  FACTURA_B
+  FACTURA_C
+  NOTA_CREDITO_A
+  NOTA_CREDITO_B
+  NOTA_CREDITO_C
+  TICKET_INTERNO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  MERCADO_PAGO
+  MODO
+  TRANSFERENCIA
+  CUENTA_CORRIENTE
+}
+
+enum CashRegisterKind {
+  CAJA_DIARIA
+  CAJA_ADMINISTRATIVA
+  BILLETERA_VIRTUAL
+  BANCO
+}
+
+enum CashSessionStatus {
+  ABIERTA
+  CERRADA
+}
+
+enum CashMovementType {
+  APERTURA
+  INGRESO
+  EGRESO
+  AJUSTE
+  TRANSFERENCIA_ENTRADA
+  TRANSFERENCIA_SALIDA
+}
+
+enum AccountStatus {
+  PENDIENTE
+  PARCIAL
+  CANCELADO
+  ANULADO
+}
+
+enum PurchaseStatus {
+  BORRADOR
+  RECIBIDA
+  ANULADA
+}
+
+enum CostSnapshotReason {
+  MANUAL
+  CAMBIO_PRECIO_MATERIAL
+  CAMBIO_TARIFA_SERVICIO
+  CAMBIO_FICHA_TECNICA
+  COMPRA
+}
+
+// -----------------------------------------------------------------------------
+// SEGURIDAD Y AUDITORÍA
+// -----------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  /// Permisos con formato "modulo:accion" (ej. "pos:discount", "production:cost:write")
+  permissions String[]
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  active       Boolean  @default(true)
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedLeads           Lead[]
+  quotes               Quote[]
+  sales                Sale[]
+  paymentsCreated      Payment[]
+  cashMovements        CashMovement[]
+  sessionsOpened       CashRegisterSession[]     @relation("SessionOpenedBy")
+  sessionsClosed       CashRegisterSession[]     @relation("SessionClosedBy")
+  productionStageLogs  ProductionStageLog[]
+  costSnapshots        ProductCostSnapshot[]
+  materialPriceChanges RawMaterialPriceHistory[]
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entity    String
+  entityId  String
+  action    String
+  /// Motivo obligatorio para acciones sensibles (descuentos, anulaciones, ajustes de caja)
+  reason    String?
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// CRM
+// -----------------------------------------------------------------------------
+
+model Client {
+  id              String       @id @default(cuid())
+  type            ClientType
+  businessName    String
+  fantasyName     String?
+  documentType    DocumentType @default(DNI)
+  documentNumber  String?
+  taxCondition    TaxCondition @default(CONSUMIDOR_FINAL)
+  email           String?
+  phone           String?
+  whatsapp        String?
+  address         String?
+  city            String?
+  province        String?
+  postalCode      String?
+  /// Límite para ventas en cuenta corriente / fiado. 0 = sin crédito.
+  creditLimit     Decimal      @default(0) @db.Decimal(14, 2)
+  paymentTermDays Int          @default(0)
+  /// Segmentación de marketing (ej. "reposicion-anual", "colegio-nivel-inicial")
+  tags            String[]
+  /// Mes(es) del año en que el cliente suele comprar (1-12) para campañas
+  purchaseMonths  Int[]
+  notes           String?
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  designs          ClientDesign[]
+  leads            Lead[]
+  quotes           Quote[]
+  sales            Sale[]
+  productionOrders ProductionOrder[]
+  receivables      AccountReceivable[]
+
+  @@unique([documentType, documentNumber])
+  @@index([type])
+  @@index([businessName])
+  @@map("clients")
+}
+
+/// Activos de personalización del cliente: logos, matrices de bordado, colores y curvas de talles.
+model ClientDesign {
+  id                  String   @id @default(cuid())
+  clientId            String
+  client              Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                String
+  vectorLogoUrl       String?
+  embroideryFileUrl   String?
+  stitchCount         Int?
+  institutionalColors String[]
+  /// Ej. {"S": 10, "M": 25, "L": 20, "XL": 5}
+  sizeCurve           Json?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  productionOrders ProductionOrder[]
+
+  @@index([clientId])
+  @@map("client_designs")
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  name           String
+  company        String?
+  email          String?
+  phone          String?
+  source         String?
+  status         LeadStatus @default(NUEVO)
+  estimatedValue Decimal?   @db.Decimal(14, 2)
+  expectedClose  DateTime?
+  notes          String?
+  clientId       String?
+  client         Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  ownerId        String?
+  owner          User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  quotes Quote[]
+
+  @@index([status])
+  @@map("leads")
+}
+
+model Quote {
+  id         String      @id @default(cuid())
+  number     Int         @unique @default(autoincrement())
+  status     QuoteStatus @default(BORRADOR)
+  clientId   String?
+  client     Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  leadId     String?
+  lead       Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  validUntil DateTime
+  subtotal   Decimal     @db.Decimal(14, 2)
+  taxTotal   Decimal     @db.Decimal(14, 2)
+  total      Decimal     @db.Decimal(14, 2)
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  items QuoteItem[]
+
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  description String
+  quantity    Decimal  @db.Decimal(12, 4)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  vatRate     Decimal  @default(21) @db.Decimal(6, 2)
+  subtotal    Decimal  @db.Decimal(14, 2)
+
+  @@map("quote_items")
+}
+
+// -----------------------------------------------------------------------------
+// ABASTECIMIENTO
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id              String       @id @default(cuid())
+  businessName    String
+  cuit            String?      @unique
+  taxCondition    TaxCondition @default(RESPONSABLE_INSCRIPTO)
+  email           String?
+  phone           String?
+  address         String?
+  paymentTermDays Int          @default(30)
+  notes           String?
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  rawMaterials RawMaterial[]
+  purchases    Purchase[]
+  payables     AccountPayable[]
+
+  @@map("suppliers")
+}
+
+/// Telas (por metro o kg) y avíos (botones, cierres, elásticos, abrojos, hilos, etiquetas...).
+model RawMaterial {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  name        String
+  type        RawMaterialType
+  uom         UnitOfMeasure
+  /// Composición o descripción técnica (ej. "50% algodón 50% poliéster")
+  composition String?
+  color       String?
+  widthCm     Decimal?        @db.Decimal(8, 2)
+  /// Rendimiento metros por kg, para convertir compras en kg a consumo en metros
+  metersPerKg Decimal?        @db.Decimal(10, 4)
+  /// Costo de reposición vigente por unidad de medida (base del escandallo)
+  currentCost Decimal         @db.Decimal(14, 4)
+  stockQty    Decimal         @default(0) @db.Decimal(14, 4)
+  minStock    Decimal         @default(0) @db.Decimal(14, 4)
+  supplierId  String?
+  supplier    Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  bomLines      ProductBOM[]
+  priceHistory  RawMaterialPriceHistory[]
+  purchaseItems PurchaseItem[]
+
+  @@index([type])
+  @@map("raw_materials")
+}
+
+model RawMaterialPriceHistory {
+  id            String      @id @default(cuid())
+  rawMaterialId String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  previousCost  Decimal     @db.Decimal(14, 4)
+  newCost       Decimal     @db.Decimal(14, 4)
+  source        String      @default("MANUAL")
+  purchaseId    String?
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+
+  @@index([rawMaterialId, createdAt])
+  @@map("raw_material_price_history")
+}
+
+model Purchase {
+  id            String         @id @default(cuid())
+  supplierId    String
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  invoiceType   InvoiceType?
+  invoiceNumber String?
+  remitNumber   String?
+  status        PurchaseStatus @default(BORRADOR)
+  date          DateTime       @default(now())
+  subtotal      Decimal        @db.Decimal(14, 2)
+  taxTotal      Decimal        @db.Decimal(14, 2)
+  total         Decimal        @db.Decimal(14, 2)
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  items    PurchaseItem[]
+  payables AccountPayable[]
+
+  @@index([supplierId, date])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id            String        @id @default(cuid())
+  purchaseId    String
+  purchase      Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  rawMaterialId String
+  rawMaterial   RawMaterial   @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+  quantity      Decimal       @db.Decimal(14, 4)
+  uom           UnitOfMeasure
+  unitCost      Decimal       @db.Decimal(14, 4)
+  vatRate       Decimal       @default(21) @db.Decimal(6, 2)
+  subtotal      Decimal       @db.Decimal(14, 2)
+
+  @@map("purchase_items")
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCTO, FICHA TÉCNICA (BOM) Y ESCANDALLO
+// -----------------------------------------------------------------------------
+
+model Product {
+  id            String          @id @default(cuid())
+  sku           String          @unique
+  name          String
+  category      ProductCategory
+  description   String?
+  pricingMode   PricingMode     @default(MARKUP)
+  /// Markup sobre costo (MARKUP) o margen sobre precio (MARGIN), en %
+  pricingPct    Decimal         @default(100) @db.Decimal(6, 2)
+  /// Gastos generales prorrateados sobre el costo directo, en %
+  overheadPct   Decimal         @default(0) @db.Decimal(6, 2)
+  vatRate       Decimal         @default(21) @db.Decimal(6, 2)
+  /// Precio de lista neto vigente (sin IVA)
+  listPrice     Decimal         @default(0) @db.Decimal(14, 2)
+  /// Costo unitario calculado por el último escandallo (cache desnormalizado)
+  currentCost   Decimal         @default(0) @db.Decimal(14, 4)
+  costUpdatedAt DateTime?
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  variants         ProductVariant[]
+  bom              ProductBOM[]
+  services         ProductServiceCost[]
+  costSnapshots    ProductCostSnapshot[]
+  productionOrders ProductionOrder[]
+  saleItems        SaleItem[]
+  quoteItems       QuoteItem[]
+
+  @@index([category])
+  @@map("products")
+}
+
+model ProductVariant {
+  id                 String   @id @default(cuid())
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                String   @unique
+  size               String
+  color              String?
+  barcode            String?  @unique
+  stockQty           Decimal  @default(0) @db.Decimal(12, 4)
+  /// Ajuste de precio por talle especial (ej. XXXL +10%)
+  priceAdjustmentPct Decimal  @default(0) @db.Decimal(6, 2)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  productionItems ProductionOrderItem[]
+  saleItems       SaleItem[]
+
+  @@unique([productId, size, color])
+  @@map("product_variants")
+}
+
+/// Línea de la ficha técnica: consumo de una materia prima por prenda.
+model ProductBOM {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rawMaterialId String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+  /// Consumo neto por prenda en la UoM de la materia prima (ej. 1.20 m)
+  quantity      Decimal     @db.Decimal(12, 4)
+  /// Merma / desperdicio de corte en %
+  wastePct      Decimal     @default(0) @db.Decimal(6, 2)
+  notes         String?
+  sortOrder     Int         @default(0)
+
+  @@unique([productId, rawMaterialId])
+  @@map("product_bom")
+}
+
+/// Tarifario de procesos: corte, fasón de talleres, bordado, estampado, planchado, flete.
+model ServiceCost {
+  id         String      @id @default(cuid())
+  type       ServiceType
+  name       String
+  workshopId String?
+  workshop   Workshop?   @relation(fields: [workshopId], references: [id], onDelete: SetNull)
+  /// Tarifa por unidad (prenda, pieza, millar de puntadas, viaje prorrateado...)
+  unitCost   Decimal     @db.Decimal(14, 4)
+  unitLabel  String      @default("prenda")
+  validFrom  DateTime    @default(now())
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  products ProductServiceCost[]
+
+  @@index([type, active])
+  @@map("service_costs")
+}
+
+/// Proceso aplicado a un producto (escandallo de mano de obra / servicios).
+model ProductServiceCost {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  serviceCostId String
+  serviceCost   ServiceCost @relation(fields: [serviceCostId], references: [id], onDelete: Restrict)
+  quantity      Decimal     @default(1) @db.Decimal(12, 4)
+  notes         String?
+  sortOrder     Int         @default(0)
+
+  @@unique([productId, serviceCostId])
+  @@map("product_service_costs")
+}
+
+/// Foto inmutable del escandallo para trazabilidad de costos e historial de precios.
+model ProductCostSnapshot {
+  id             String             @id @default(cuid())
+  productId      String
+  product        Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reason         CostSnapshotReason
+  materialsCost  Decimal            @db.Decimal(14, 4)
+  servicesCost   Decimal            @db.Decimal(14, 4)
+  overheadCost   Decimal            @db.Decimal(14, 4)
+  totalCost      Decimal            @db.Decimal(14, 4)
+  suggestedPrice Decimal            @db.Decimal(14, 2)
+  /// Detalle línea por línea (CostBreakdown serializado)
+  breakdown      Json
+  userId         String?
+  user           User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
+
+  @@index([productId, createdAt])
+  @@map("product_cost_snapshots")
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCCIÓN Y TALLERES
+// -----------------------------------------------------------------------------
+
+model Workshop {
+  id         String         @id @default(cuid())
+  name       String
+  types      WorkshopType[]
+  isInternal Boolean        @default(false)
+  cuit       String?        @unique
+  contact    String?
+  phone      String?
+  address    String?
+  notes      String?
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  serviceCosts ServiceCost[]
+  remits       WorkshopRemit[]
+  stageLogs    ProductionStageLog[]
+  payables     AccountPayable[]
+
+  @@map("workshops")
+}
+
+model ProductionOrder {
+  id                String                @id @default(cuid())
+  number            Int                   @unique @default(autoincrement())
+  productId         String
+  product           Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  clientId          String?
+  client            Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientDesignId    String?
+  clientDesign      ClientDesign?         @relation(fields: [clientDesignId], references: [id], onDelete: SetNull)
+  saleId            String?
+  sale              Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  status            ProductionOrderStatus @default(BORRADOR)
+  currentStage      ProductionStage       @default(CORTE_INTERNO)
+  quantityPlanned   Int
+  quantityFinished  Int                   @default(0)
+  /// Costo unitario estimado del escandallo al lanzar la orden
+  estimatedUnitCost Decimal               @db.Decimal(14, 4)
+  /// Costo real acumulado (materiales consumidos + fasón + fletes)
+  actualCost        Decimal               @default(0) @db.Decimal(14, 2)
+  dueDate           DateTime?
+  notes             String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  items     ProductionOrderItem[]
+  stageLogs ProductionStageLog[]
+  remits    WorkshopRemit[]
+
+  @@index([status, currentStage])
+  @@map("production_orders")
+}
+
+model ProductionOrderItem {
+  id                String          @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  variantId         String
+  variant           ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  quantity          Int
+  quantityFinished  Int             @default(0)
+
+  @@unique([productionOrderId, variantId])
+  @@map("production_order_items")
+}
+
+model ProductionStageLog {
+  id                String           @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder  @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  fromStage         ProductionStage?
+  toStage           ProductionStage
+  workshopId        String?
+  workshop          Workshop?        @relation(fields: [workshopId], references: [id], onDelete: SetNull)
+  quantityIn        Int
+  quantityOut       Int
+  wasteQty          Int              @default(0)
+  userId            String?
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  notes             String?
+  createdAt         DateTime         @default(now())
+
+  @@index([productionOrderId, createdAt])
+  @@map("production_stage_logs")
+}
+
+/// Remito de envío/recepción a talleres externos: piezas enviadas vs. recibidas, merma y fasón.
+model WorkshopRemit {
+  id                String            @id @default(cuid())
+  number            Int               @unique @default(autoincrement())
+  type              WorkshopRemitType
+  workshopId        String
+  workshop          Workshop          @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  productionOrderId String
+  productionOrder   ProductionOrder   @relation(fields: [productionOrderId], references: [id], onDelete: Restrict)
+  stage             ProductionStage
+  date              DateTime          @default(now())
+  pieces            Int
+  wasteQty          Int               @default(0)
+  /// Fasón por prenda acordado (en remitos de RECEPCION genera deuda con el taller)
+  laborUnitCost     Decimal           @default(0) @db.Decimal(14, 2)
+  laborTotal        Decimal           @default(0) @db.Decimal(14, 2)
+  notes             String?
+  createdAt         DateTime          @default(now())
+
+  payables AccountPayable[]
+
+  @@index([workshopId, date])
+  @@map("workshop_remits")
+}
+
+// -----------------------------------------------------------------------------
+// VENTAS, POS Y CAJAS
+// -----------------------------------------------------------------------------
+
+model Sale {
+  id              String               @id @default(cuid())
+  number          Int                  @unique @default(autoincrement())
+  channel         SaleChannel          @default(MOSTRADOR)
+  status          SaleStatus           @default(PENDIENTE)
+  clientId        String?
+  client          Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cashSessionId   String?
+  cashSession     CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  // --- Comprobante fiscal (ARCA/AFIP) ---
+  invoiceType     InvoiceType          @default(TICKET_INTERNO)
+  pointOfSale     Int?
+  invoiceNumber   Int?
+  cae             String?
+  caeDueDate      DateTime?
+  // --- Totales ---
+  subtotal        Decimal              @db.Decimal(14, 2)
+  discountTotal   Decimal              @default(0) @db.Decimal(14, 2)
+  discountReason  String?
+  taxTotal        Decimal              @db.Decimal(14, 2)
+  total           Decimal              @db.Decimal(14, 2)
+  // --- Entrega ---
+  deliveryMethod  DeliveryMethod       @default(RETIRO_SUCURSAL)
+  shippingAddress String?
+  shippingCost    Decimal              @default(0) @db.Decimal(14, 2)
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  items            SaleItem[]
+  payments         Payment[]
+  receivables      AccountReceivable[]
+  productionOrders ProductionOrder[]
+  cashMovements    CashMovement[]
+
+  @@unique([invoiceType, pointOfSale, invoiceNumber])
+  @@index([createdAt])
+  @@index([clientId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id             String          @id @default(cuid())
+  saleId         String
+  sale           Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId      String?
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description    String
+  /// Admite venta fraccionada (ej. 1.5 m de tela al público)
+  quantity       Decimal         @db.Decimal(12, 4)
+  unitPrice      Decimal         @db.Decimal(14, 2)
+  discountPct    Decimal         @default(0) @db.Decimal(6, 2)
+  discountReason String?
+  vatRate        Decimal         @default(21) @db.Decimal(6, 2)
+  subtotal       Decimal         @db.Decimal(14, 2)
+  /// Costo unitario al momento de la venta (para rentabilidad real)
+  unitCost       Decimal         @default(0) @db.Decimal(14, 4)
+
+  @@index([productId])
+  @@map("sale_items")
+}
+
+/// Caja física, billetera virtual o cuenta bancaria.
+model CashRegister {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  kind            CashRegisterKind
+  /// Las cajas físicas requieren turnos (apertura/cierre ciego); bancos y billeteras no.
+  requiresSession Boolean          @default(true)
+  bankName        String?
+  cbu             String?
+  alias           String?
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  sessions  CashRegisterSession[]
+  movements CashMovement[]
+  payments  Payment[]
+
+  @@map("cash_registers")
+}
+
+/// Turno de caja. Regla de negocio (servicio): una sola sesión ABIERTA por caja.
+model CashRegisterSession {
+  id             String            @id @default(cuid())
+  cashRegisterId String
+  cashRegister   CashRegister      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  status         CashSessionStatus @default(ABIERTA)
+  openedById     String
+  openedBy       User              @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt       DateTime          @default(now())
+  openingAmount  Decimal           @db.Decimal(14, 2)
+  closedById     String?
+  closedBy       User?             @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closedAt       DateTime?
+  /// Calculado por el sistema al cierre (apertura + ingresos - egresos en efectivo)
+  expectedAmount Decimal?          @db.Decimal(14, 2)
+  /// Declarado por el cajero a ciegas (sin ver el esperado)
+  declaredAmount Decimal?          @db.Decimal(14, 2)
+  /// declarado - esperado: >0 sobrante, <0 faltante
+  difference     Decimal?          @db.Decimal(14, 2)
+  notes          String?
+
+  movements CashMovement[]
+  sales     Sale[]
+
+  @@index([cashRegisterId, status])
+  @@map("cash_register_sessions")
+}
+
+model CashMovement {
+  id              String               @id @default(cuid())
+  cashRegisterId  String
+  cashRegister    CashRegister         @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  sessionId       String?
+  session         CashRegisterSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  type            CashMovementType
+  method          PaymentMethod
+  /// Siempre positivo; el signo lo determina `type`
+  amount          Decimal              @db.Decimal(14, 2)
+  concept         String
+  saleId          String?
+  sale            Sale?                @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  /// Vincula ambas patas de una transferencia entre cajas
+  transferGroupId String?
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt       DateTime             @default(now())
+
+  payment Payment?
+
+  @@index([cashRegisterId, createdAt])
+  @@index([sessionId])
+  @@map("cash_movements")
+}
+
+model Payment {
+  id                  String             @id @default(cuid())
+  method              PaymentMethod
+  amount              Decimal            @db.Decimal(14, 2)
+  /// Nro. de operación, últimos 4 de tarjeta, id de Mercado Pago, etc.
+  reference           String?
+  receiptUrl          String?
+  cardBrand           String?
+  installments        Int?
+  surchargePct        Decimal            @default(0) @db.Decimal(6, 2)
+  saleId              String?
+  sale                Sale?              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  accountReceivableId String?
+  accountReceivable   AccountReceivable? @relation(fields: [accountReceivableId], references: [id], onDelete: SetNull)
+  accountPayableId    String?
+  accountPayable      AccountPayable?    @relation(fields: [accountPayableId], references: [id], onDelete: SetNull)
+  cashRegisterId      String?
+  cashRegister        CashRegister?      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  cashMovementId      String?            @unique
+  cashMovement        CashMovement?      @relation(fields: [cashMovementId], references: [id], onDelete: SetNull)
+  createdById         String
+  createdBy           User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt           DateTime           @default(now())
+
+  @@index([saleId])
+  @@index([createdAt, method])
+  @@map("payments")
+}
+
+// -----------------------------------------------------------------------------
+// CUENTAS CORRIENTES
+// -----------------------------------------------------------------------------
+
+/// Documento deudor del cliente (venta en cta. cte., nota de débito, saldo inicial).
+model AccountReceivable {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  saleId      String?
+  sale        Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  description String
+  issueDate   DateTime      @default(now())
+  dueDate     DateTime
+  amount      Decimal       @db.Decimal(14, 2)
+  balance     Decimal       @db.Decimal(14, 2)
+  status      AccountStatus @default(PENDIENTE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments Payment[]
+
+  @@index([clientId, status, dueDate])
+  @@map("accounts_receivable")
+}
+
+/// Deuda con proveedor de materia prima o con taller (fasón).
+model AccountPayable {
+  id              String         @id @default(cuid())
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  workshopId      String?
+  workshop        Workshop?      @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  purchaseId      String?
+  purchase        Purchase?      @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  workshopRemitId String?
+  workshopRemit   WorkshopRemit? @relation(fields: [workshopRemitId], references: [id], onDelete: SetNull)
+  description     String
+  issueDate       DateTime       @default(now())
+  dueDate         DateTime
+  amount          Decimal        @db.Decimal(14, 2)
+  balance         Decimal        @db.Decimal(14, 2)
+  status          AccountStatus  @default(PENDIENTE)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  payments Payment[]
+
+  @@index([supplierId, status, dueDate])
+  @@index([workshopId, status, dueDate])
+  @@map("accounts_payable")
+}
