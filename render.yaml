@@ -29,5 +29,6 @@ services:
         sync: false
       - key: ARCA_MODE
         value: deshabilitado
-      - key: COMPANY_LEGAL_NAME
-        value: Coverline Uniformes
+      # Los presupuestos siguen la numeración actual de Contagram.
+      - key: QUOTE_NEXT_NUMBER
+        value: "377"

@@ -333,7 +333,7 @@ export function QuoteForm({ data, initial }: { data: QuoteFormData; initial: Quo
             <Input id={`${uid}-pay`} value={header.paymentTerms} onChange={(e) => setHeader((h) => ({ ...h, paymentTerms: e.target.value }))} placeholder="50% anticipo, saldo contra entrega" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`${uid}-delivery`}>Plazo de entrega</Label>
+            <Label htmlFor={`${uid}-delivery`}>Entrega y envío</Label>
             <Input id={`${uid}-delivery`} value={header.deliveryTerms} onChange={(e) => setHeader((h) => ({ ...h, deliveryTerms: e.target.value }))} placeholder="20 días hábiles desde la aprobación" />
           </div>
           <div className="flex flex-col gap-1.5 md:col-span-3">

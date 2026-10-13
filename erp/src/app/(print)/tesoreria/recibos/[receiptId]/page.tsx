@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { DocumentHeader } from "@/components/documents/document-header";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
@@ -23,18 +24,7 @@ export default async function ReceiptPrintPage({ params }: Props) {
       <div className="flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
-        <div>
-          <p className="text-xl font-bold tracking-wide">COVERLINE UNIFORMES</p>
-          <p>Cobranzas</p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold">RECIBO</p>
-          <p className="font-mono text-base">N° {String(r.number).padStart(6, "0")}</p>
-          <p>Fecha: {new Date(r.date).toLocaleDateString("es-AR")}</p>
-          <p className="text-xs">Documento no válido como factura</p>
-        </div>
-      </header>
+      <DocumentHeader title="Recibo" number={String(r.number).padStart(8, "0")} date={r.date} letter="X" letterNote="No válido como factura" />
       <p>
         Recibimos de <strong>{r.clientName}</strong>
         {r.clientDocument && ` (${r.clientDocument})`} la suma de <strong className="font-mono">{formatMoney(r.amount)}</strong>.

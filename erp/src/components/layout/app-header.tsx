@@ -1,9 +1,10 @@
 "use client";
 
-import { LogOut, Shirt } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BrandLogo } from "@/components/documents/brand-logo";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/server/actions/auth.actions";
 
@@ -22,8 +23,7 @@ export function AppHeader({ items, userName, roleName }: { items: NavItem[]; use
     <header className="bg-ink text-ink-foreground">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-8">
         <Link href="/" className="flex items-center gap-3 rounded-md focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none">
-          <Shirt aria-hidden="true" className="size-6 text-accent" />
-          <span className="text-lg font-bold tracking-wide">COVERLINE</span>
+          <BrandLogo variant="corto" tone="blanco" className="h-6 w-auto" priority />
           <span className="hidden text-sm text-ink-muted sm:inline">ERP</span>
         </Link>
         <nav aria-label="Módulos" className="order-3 flex w-full flex-wrap gap-1 text-sm lg:order-none lg:w-auto">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { DocumentHeader } from "@/components/documents/document-header";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
@@ -32,18 +33,13 @@ export default async function RemitPrintPage({ params }: Props) {
         <PrintButton />
       </div>
 
-      <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
-        <div>
-          <p className="text-xl font-bold tracking-wide">COVERLINE UNIFORMES</p>
-          <p>Indumentaria de trabajo, escolar, médica y gastronómica</p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold">{isSend ? "REMITO DE ENVÍO A TALLER" : "REMITO DE RECEPCIÓN DE TALLER"}</p>
-          <p className="font-mono text-base">N° {String(r.number).padStart(6, "0")}</p>
-          <p>Fecha: {new Date(r.date).toLocaleDateString("es-AR")}</p>
-          <p className="text-xs">Documento no válido como factura</p>
-        </div>
-      </header>
+      <DocumentHeader
+        title={isSend ? "Remito envío a taller" : "Remito recepción de taller"}
+        number={String(r.number).padStart(8, "0")}
+        date={r.date}
+        letter="R"
+        letterNote="No válido como factura"
+      />
 
       <section className="grid grid-cols-2 gap-6">
         <div>

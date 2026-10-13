@@ -143,10 +143,14 @@ export async function getQuoteDetail(id: string) {
           taxCondition: q.client.taxCondition,
           address: [q.client.address, q.client.city, q.client.province].filter(Boolean).join(", ") || null,
           email: q.client.email,
+          phone: q.client.phone ?? q.client.whatsapp,
+          type: q.client.type,
           whatsapp: whatsappNumber(q.client.whatsapp ?? q.client.phone),
         }
       : null,
-    lead: q.lead ? { id: q.lead.id, name: q.lead.name, company: q.lead.company, email: q.lead.email, whatsapp: whatsappNumber(q.lead.phone), status: q.lead.status } : null,
+    lead: q.lead
+      ? { id: q.lead.id, name: q.lead.name, company: q.lead.company, email: q.lead.email, phone: q.lead.phone, whatsapp: whatsappNumber(q.lead.phone), status: q.lead.status }
+      : null,
     items: q.items.map((i) => ({
       id: i.id,
       productId: i.productId,

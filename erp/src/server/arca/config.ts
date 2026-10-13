@@ -39,14 +39,25 @@ export function arcaConfig() {
   };
 }
 
-/** Datos del emisor que se imprimen en los comprobantes. */
+/**
+ * Datos del emisor que se imprimen en facturas, presupuestos, remitos y demás
+ * documentos. Se pueden sobrescribir por variables de entorno (COMPANY_*).
+ */
 export function companyInfo() {
+  const cuit = process.env.ARCA_CUIT || process.env.COMPANY_CUIT || "30-71194129-7";
+  const digits = cuit.replace(/\D/g, "");
   return {
-    legalName: process.env.COMPANY_LEGAL_NAME ?? "Coverline Uniformes",
-    cuit: process.env.ARCA_CUIT ?? null,
-    taxCondition: "IVA Responsable Inscripto",
-    iibb: process.env.COMPANY_IIBB ?? null,
-    startDate: process.env.COMPANY_START_DATE ?? null,
-    address: process.env.COMPANY_ADDRESS ?? null,
+    legalName: process.env.COMPANY_LEGAL_NAME || "Uniformes de la Recta SRL",
+    tradeName: process.env.COMPANY_TRADE_NAME || "Coverline Uniformes",
+    cuit: digits.length === 11 ? `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}` : cuit,
+    taxCondition: "Responsable Inscripto",
+    iibb: process.env.COMPANY_IIBB || "280552097",
+    startDate: process.env.COMPANY_START_DATE || "12/12/2011",
+    address: process.env.COMPANY_ADDRESS || "Pasaje Emilio Huespe 75 - 5000 - Centro - Córdoba",
+    phone: process.env.COMPANY_PHONE || "3515512455",
+    email: process.env.COMPANY_EMAIL || "admin@uniformescoverline.com",
+    web: process.env.COMPANY_WEB || "www.uniformescoverline.com",
   };
 }
+
+export type CompanyInfo = ReturnType<typeof companyInfo>;

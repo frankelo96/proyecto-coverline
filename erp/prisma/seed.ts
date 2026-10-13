@@ -362,6 +362,16 @@ async function main() {
   }
 
   await seedCrmDemo();
+
+  // Continuar la numeración de presupuestos del sistema anterior (nunca retrocede).
+  const nextQuote = Number(process.env.QUOTE_NEXT_NUMBER);
+  if (Number.isInteger(nextQuote) && nextQuote > 1) {
+    await prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('quotes', 'number'), GREATEST($1::int - 1, (SELECT COALESCE(MAX(number), 0) FROM quotes), 1))`,
+      nextQuote,
+    );
+    console.log(`  Presupuestos: el próximo número es ${nextQuote} (o el siguiente al último existente)`);
+  }
 }
 
 /** Clientes, oportunidades y presupuestos de ejemplo para recorrer el CRM (solo si no hay oportunidades). */

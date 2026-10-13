@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 
+import { BrandLogo } from "@/components/documents/brand-logo";
 import { PrintButton } from "@/components/production/print-button";
 import { Button } from "@/components/ui/button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
@@ -33,9 +34,9 @@ export default async function TicketPage({ params, searchParams }: Props) {
   const fontSize = `calc(${mm}mm / ${(TICKET_COLUMNS[width] * 0.6).toFixed(2)})`;
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-0">
       <style>{`@page { size: ${width}mm auto; margin: 2mm 4mm; }`}</style>
-      <div className="flex flex-wrap items-center justify-center gap-2 print:hidden">
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-2 print:hidden">
         {([58, 80] as const).map((w) => (
           <Button key={w} asChild variant={w === width ? "default" : "outline"} size="sm">
             <Link href={`?ancho=${w}`}>{w} mm</Link>
@@ -47,6 +48,9 @@ export default async function TicketPage({ params, searchParams }: Props) {
           </a>
         </Button>
         <PrintButton />
+      </div>
+      <div className="box-content flex justify-center bg-white px-2 pt-2 print:p-0" style={{ width: `${mm}mm` }}>
+        <BrandLogo className="h-auto w-[70%]" priority />
       </div>
       <pre
         // box-content: el ancho de 72/48 mm es el del texto; el borde y el relleno son solo de la vista previa.

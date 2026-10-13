@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { docNumber, DocumentHeader } from "@/components/documents/document-header";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { computeQuoteTotals } from "@/lib/crm/quote-math";
 import { formatMoney, formatNumber } from "@/lib/format";
+import { CLIENT_TYPE_LABELS } from "@/lib/masters/labels";
 import { TAX_CONDITION_LABELS } from "@/lib/purchasing/labels";
-import { companyInfo } from "@/server/arca/config";
 import { requirePageUser } from "@/server/auth/session";
 import { getQuoteDetail } from "@/server/queries/crm.queries";
 
@@ -18,23 +19,38 @@ type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const q = await getQuoteDetail((await params).id);
   // El título es el nombre sugerido al "Guardar como PDF".
-  return { title: q ? `Presupuesto ${q.number} - ${q.client?.name ?? q.lead?.company ?? q.lead?.name ?? ""}`.trim() : "Presupuesto" };
+  return { title: q ? `Presupuesto ${docNumber(q.number)} - ${q.client?.name ?? q.lead?.company ?? q.lead?.name ?? ""}`.trim() : "Presupuesto" };
 }
 
-const date = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
+const pct = (n: number) => `${formatNumber(n)}%`;
 
+/** Presupuesto en A4 con el mismo formato que el que envía Coverline hoy. */
 export default async function QuotePrintPage({ params }: Props) {
   await requirePageUser(PERMISSIONS.crmRead);
   const q = await getQuoteDetail((await params).id);
   if (!q) notFound();
-  const company = companyInfo();
   const totals = computeQuoteTotals(q.items);
-  const showVat = q.client?.taxCondition === "RESPONSABLE_INSCRIPTO" || !q.client;
-  const discountWithVat = totals.lines.reduce((a, l, i) => a + l.discount * (1 + q.items[i].vatRate / 100), 0);
+  const taxed = totals.vatByRate.filter((v) => v.rate > 0).reduce((a, v) => a + v.base, 0);
+  const untaxed = totals.vatByRate.filter((v) => v.rate === 0).reduce((a, v) => a + v.base, 0);
+  const party = q.client?.name ?? q.lead?.company ?? q.lead?.name ?? "-";
+  const contact = q.lead?.name && q.lead.name !== party ? q.lead.name : null;
+
+  const clientRows: [string, string][] = [
+    ["Cliente", party],
+    ["Contacto", contact ?? "-"],
+    ["Teléfono", q.client?.phone ?? q.lead?.phone ?? "-"],
+    ["Domicilio", q.client?.address ?? "-"],
+  ];
+  const fiscalRows: [string, string][] = [
+    ["CUIT", q.client?.document?.replace(/^(CUIT|CUIL|DNI|PASAPORTE) /, "") ?? "-"],
+    ["Condición IVA", q.client ? TAX_CONDITION_LABELS[q.client.taxCondition] : "-"],
+    ["Categoría", q.client ? CLIENT_TYPE_LABELS[q.client.type] : "-"],
+    ["Vendedor", q.userName],
+  ];
 
   return (
-    <div className="mx-auto flex max-w-[210mm] flex-col gap-6 bg-white p-8 text-[12.5px] text-black print:p-0">
-      <style>{`@page { size: A4; margin: 14mm 12mm; }`}</style>
+    <div className="mx-auto flex min-h-[297mm] max-w-[210mm] flex-col gap-3 bg-white p-8 text-[12px] text-black print:min-h-0 print:p-0">
+      <style>{`@page { size: A4; margin: 10mm; }`}</style>
       <div className="flex justify-between gap-2 print:hidden">
         <Link href={`/crm/presupuestos/${q.id}`} className="text-sm underline underline-offset-4">
           Volver al presupuesto
@@ -45,119 +61,103 @@ export default async function QuotePrintPage({ params }: Props) {
         </div>
       </div>
 
-      <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-2xl font-bold tracking-wide">COVERLINE UNIFORMES</p>
-          <p>{company.legalName}</p>
-          {company.cuit && <p>CUIT {company.cuit} · {company.taxCondition}</p>}
-          {company.address && <p>{company.address}</p>}
-          <p>Recta Martinolli · Villa Allende</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xl font-bold">PRESUPUESTO</p>
-          <p className="font-mono text-lg">N° {String(q.number).padStart(6, "0")}</p>
-          <p>Fecha: {date(q.createdAt)}</p>
-          <p className="font-semibold">Válido hasta: {date(q.validUntil)}</p>
-          <p className="mt-1 text-[10px] uppercase">Documento no válido como factura</p>
-        </div>
-      </header>
+      <DocumentHeader
+        title="Presupuesto"
+        number={docNumber(q.number)}
+        date={q.createdAt}
+        letter="X"
+        footer={[{ label: "Fecha de Vto. del Presupuesto", value: new Date(q.validUntil).toLocaleDateString("es-AR") }]}
+      />
 
-      <section className="grid grid-cols-2 gap-4 border border-black p-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase">Cliente</p>
-          <p className="font-semibold">{q.client?.name ?? q.lead?.company ?? q.lead?.name}</p>
-          {q.lead?.company && !q.client && <p>At. {q.lead.name}</p>}
-          {q.client?.document && <p>{q.client.document}</p>}
-          {q.client && <p>{TAX_CONDITION_LABELS[q.client.taxCondition]}</p>}
-        </div>
-        <div>
-          {q.client?.address && <p>{q.client.address}</p>}
-          {(q.client?.email ?? q.lead?.email) && <p>{q.client?.email ?? q.lead?.email}</p>}
-          <p className="mt-1">Atendido por: {q.userName}</p>
-        </div>
+      <section className="grid grid-cols-2 gap-x-6 border border-black px-4 py-2 text-[12.5px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3">
+          {clientRows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="font-bold">{k}:</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3">
+          {fiscalRows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="font-bold">{k}:</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-y border-black text-left">
-            <th className="py-1.5 pr-2">Descripción</th>
-            <th className="py-1.5 pr-2 text-right">Cant.</th>
-            <th className="py-1.5 pr-2 text-right">Precio unit.{showVat ? " neto" : ""}</th>
-            <th className="py-1.5 pr-2 text-right">Bonif.</th>
-            {showVat && <th className="py-1.5 pr-2 text-right">IVA</th>}
-            <th className="py-1.5 text-right">Importe</th>
+      <table className="w-full border-collapse border border-black text-[11.5px]">
+        <thead className="bg-black/15">
+          <tr>
+            {["Código", "Descripción", "Cant.", "Precio Unit.", "% Bonif.", "Subtotal", "Alícuota IVA", "Subtotal c/IVA"].map((h, i) => (
+              <th key={h} className={`border border-black px-1.5 py-1 ${i === 1 ? "text-left" : "text-center"}`}>
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {q.items.map((i, idx) => {
             const line = totals.lines[idx];
-            // Consumidor final / monotributo: precios con IVA incluido.
-            const unit = showVat ? i.unitPrice : i.unitPrice * (1 + i.vatRate / 100);
             return (
-              <tr key={i.id} className="border-b border-black/20 align-top">
-                <td className="py-1.5 pr-2 whitespace-pre-line">
-                  {i.sku && <span className="mr-1.5 font-mono text-[10px]">{i.sku}</span>}
-                  {i.description}
-                </td>
-                <td className="py-1.5 pr-2 text-right">{formatNumber(i.quantity)}</td>
-                <td className="py-1.5 pr-2 text-right font-mono">{formatMoney(unit)}</td>
-                <td className="py-1.5 pr-2 text-right">{i.discountPct ? `${formatNumber(i.discountPct)}%` : ""}</td>
-                {showVat && <td className="py-1.5 pr-2 text-right">{formatNumber(i.vatRate)}%</td>}
-                <td className="py-1.5 text-right font-mono">{formatMoney(showVat ? line.net : line.total)}</td>
+              <tr key={i.id} className="align-top">
+                <td className="border-x border-black px-1.5 py-1 text-center font-mono text-[10px] whitespace-nowrap">{i.sku ?? "-"}</td>
+                <td className="border-x border-black px-1.5 py-1 whitespace-pre-line uppercase">{i.description}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{formatNumber(i.quantity)}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{formatMoney(i.unitPrice)}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{pct(i.discountPct)}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{formatMoney(line.net)}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{pct(i.vatRate)}</td>
+                <td className="border-x border-black px-1.5 py-1 text-right">{formatMoney(line.total)}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
 
+      <div className="flex-1" />
+
       <section className="flex justify-end">
-        <dl className="grid w-80 grid-cols-[1fr_auto] gap-x-6 gap-y-1">
-          {showVat ? (
+        <dl className="grid min-w-[90mm] grid-cols-[1fr_auto] gap-x-6 gap-y-1 border border-black bg-black/15 px-4 py-3 text-[13px]">
+          {taxed > 0 && (
             <>
-              <dt>Subtotal neto</dt>
-              <dd className="text-right font-mono">{formatMoney(totals.subtotal)}</dd>
-              {totals.vatByRate.map((v) => (
-                <div key={v.rate} className="contents">
-                  <dt>IVA {formatNumber(v.rate)}%</dt>
-                  <dd className="text-right font-mono">{formatMoney(v.vat)}</dd>
-                </div>
-              ))}
+              <dt>Importe Neto Gravado</dt>
+              <dd className="text-right">{formatMoney(taxed)}</dd>
             </>
-          ) : (
-            totals.discountTotal > 0 && (
-              <>
-                <dt>Bonificaciones incluidas</dt>
-                <dd className="text-right font-mono">{formatMoney(discountWithVat)}</dd>
-              </>
-            )
           )}
-          <dt className="border-t-2 border-black pt-1 text-base font-bold">TOTAL</dt>
-          <dd className="border-t-2 border-black pt-1 text-right font-mono text-base font-bold">{formatMoney(totals.total)}</dd>
-          {!showVat && <dd className="col-span-2 text-right text-[10px]">Precios con IVA incluido</dd>}
+          {untaxed > 0 && (
+            <>
+              <dt>Importe Neto No Gravado</dt>
+              <dd className="text-right">{formatMoney(untaxed)}</dd>
+            </>
+          )}
+          {totals.vatByRate
+            .filter((v) => v.rate > 0)
+            .map((v) => (
+              <div key={v.rate} className="contents">
+                <dt>IVA {pct(v.rate)}</dt>
+                <dd className="text-right">{formatMoney(v.vat)}</dd>
+              </div>
+            ))}
+          <dt className="pt-1 text-base font-bold">Total Presupuesto</dt>
+          <dd className="pt-1 text-right text-base font-bold">{formatMoney(totals.total)}</dd>
         </dl>
       </section>
 
-      <section className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase">Forma de pago</p>
-          <p>{q.paymentTerms ?? "A convenir"}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase">Plazo de entrega</p>
-          <p>{q.deliveryTerms ?? "A convenir"}</p>
-        </div>
-        {q.notes && (
-          <div className="col-span-2">
-            <p className="text-[10px] font-semibold uppercase">Observaciones</p>
-            <p className="whitespace-pre-line">{q.notes}</p>
-          </div>
-        )}
+      <section className="min-h-16 border border-black px-4 py-2 text-[13px]">
+        <strong>Formas de Pago:</strong> {q.paymentTerms ?? "A convenir"}
       </section>
-
-      <footer className="mt-10 grid grid-cols-2 gap-16 text-center">
-        <div className="border-t border-black pt-2">Coverline Uniformes</div>
-        <div className="border-t border-black pt-2">Aceptación del cliente (firma y aclaración)</div>
-      </footer>
+      <section className="min-h-16 border border-black px-4 py-2 text-[13px]">
+        <strong>Entrega y envío:</strong> {q.deliveryTerms ?? "A convenir"}
+      </section>
+      {q.notes && (
+        <section className="border border-black px-4 py-2 text-[13px] whitespace-pre-line">
+          <strong>Observaciones:</strong> {q.notes}
+        </section>
+      )}
+      <p className="pt-1 text-[10px] text-black/60">Documento no válido como factura. Precios sujetos a modificación una vez vencido el presupuesto.</p>
     </div>
   );
 }

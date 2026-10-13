@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { DocumentHeader } from "@/components/documents/document-header";
 import { notFound } from "next/navigation";
 
 import { PrintButton } from "@/components/production/print-button";
@@ -32,23 +33,17 @@ export default async function SessionReportPage({ params }: Props) {
         </Link>
         <PrintButton />
       </div>
-      <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
-        <div>
-          <p className="text-xl font-bold tracking-wide">COVERLINE UNIFORMES</p>
-          <p>
-            {r.branchName} · {r.registerName}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold">ARQUEO DE TURNO</p>
-          <p>Apertura: {dt(r.openedAt)} — {r.openedBy}</p>
-          {r.closedAt && (
-            <p>
-              Cierre: {dt(r.closedAt)} — {r.closedBy}
-            </p>
-          )}
-        </div>
-      </header>
+      <DocumentHeader
+        title="Arqueo de turno"
+        date={r.openedAt}
+        dateLabel="Apertura"
+        internal
+        footer={[
+          { label: "Caja", value: `${r.branchName} · ${r.registerName}` },
+          { label: "Abrió", value: `${dt(r.openedAt)} — ${r.openedBy}` },
+          ...(r.closedAt ? [{ label: "Cerró", value: `${dt(r.closedAt)} — ${r.closedBy}` }] : []),
+        ]}
+      />
 
       {closed && (
         <section className="grid grid-cols-3 gap-4">

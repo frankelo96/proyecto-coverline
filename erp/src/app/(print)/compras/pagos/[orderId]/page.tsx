@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { DocumentHeader } from "@/components/documents/document-header";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
@@ -28,17 +29,7 @@ export default async function PaymentOrderPrintPage({ params }: Props) {
       <div className="flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
-        <div>
-          <p className="text-xl font-bold tracking-wide">COVERLINE UNIFORMES</p>
-          <p>Administración</p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold">ORDEN DE PAGO</p>
-          <p className="font-mono text-base">N° {String(o.number).padStart(6, "0")}</p>
-          <p>Fecha: {new Date(o.date).toLocaleDateString("es-AR")}</p>
-        </div>
-      </header>
+      <DocumentHeader title="Orden de pago" number={String(o.number).padStart(8, "0")} date={o.date} letter="X" letterNote="No válido como factura" />
 
       <section>
         <p className="text-xs font-semibold uppercase">Beneficiario</p>

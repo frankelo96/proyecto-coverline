@@ -1,9 +1,10 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Printer } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CostSheetEditor } from "@/components/production/cost-sheet-editor";
+import { Button } from "@/components/ui/button";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 import { getCostSheetEditorData } from "@/server/queries/production.queries";
@@ -35,12 +36,26 @@ export default async function CostSheetPage({ params }: Props) {
   const canEdit = hasPermission(user.permissions, PERMISSIONS.productionCostWrite);
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href="/produccion/fichas"
-        className="inline-flex min-h-10 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft aria-hidden="true" className="size-4" /> Fichas técnicas
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          href="/produccion/fichas"
+          className="inline-flex min-h-10 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft aria-hidden="true" className="size-4" /> Fichas técnicas
+        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <a href={`/produccion/fichas/${productId}/imprimir?costos=0`} target="_blank" rel="noreferrer">
+              <Printer /> Ficha de producto (para taller)
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a href={`/produccion/fichas/${productId}/imprimir`} target="_blank" rel="noreferrer">
+              <Printer /> Escandallo con costos
+            </a>
+          </Button>
+        </div>
+      </div>
       <CostSheetEditor key={data.product.id} data={data} canEdit={canEdit} />
     </div>
   );
