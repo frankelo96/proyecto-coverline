@@ -5,6 +5,7 @@ import { requirePageUser } from "@/server/auth/session";
 /** Rutas habilitadas con el permiso que las muestra. Cada módulo nuevo se suma acá. */
 const NAV: (NavItem & { permission: string; hideIf?: string })[] = [
   { href: "/pos", label: "POS", permission: PERMISSIONS.posSell },
+  { href: "/ventas", label: "Ventas", permission: PERMISSIONS.posSell },
   { href: "/tesoreria", label: "Tesorería", permission: PERMISSIONS.cashRead },
   { href: "/tesoreria/cobranzas", label: "Cobranzas", permission: PERMISSIONS.receivablesCollect, hideIf: PERMISSIONS.cashRead },
   { href: "/produccion/ordenes", label: "Producción", permission: PERMISSIONS.productionRead },

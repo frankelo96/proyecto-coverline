@@ -9,6 +9,8 @@ export interface TicketData {
   businessName: string;
   branchName: string;
   branchAddress: string | null;
+  /** Datos fiscales del emisor (CUIT, condición IVA, IIBB, inicio de actividades) */
+  issuerLines?: string[];
   voucherLabel: string;
   number: number;
   date: Date;
@@ -71,6 +73,7 @@ export function renderTicketText(t: TicketData, width: TicketWidth): string {
   out.push(center(t.businessName.toUpperCase(), cols));
   out.push(center(t.branchName, cols));
   if (t.branchAddress) for (const l of wrap(t.branchAddress, cols)) out.push(center(l, cols));
+  for (const line of t.issuerLines ?? []) for (const l of wrap(line, cols)) out.push(l);
   out.push(rule);
   out.push(leftRight(t.voucherLabel, `N ${String(t.number).padStart(8, "0")}`, cols));
   out.push(leftRight(t.date.toLocaleDateString("es-AR"), t.date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), cols));

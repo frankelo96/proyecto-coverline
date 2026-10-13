@@ -202,6 +202,20 @@ enum CashMovementType {
   TRANSFERENCIA_SALIDA
 }
 
+enum SaleKind {
+  VENTA
+  /// Devolución: nota de crédito (A/B) o devolución interna sobre un ticket
+  DEVOLUCION
+}
+
+/// Estado del comprobante frente a ARCA (facturación electrónica WSFEv1).
+enum ArcaStatus {
+  NO_APLICA
+  PENDIENTE
+  AUTORIZADO
+  RECHAZADO
+}
+
 enum ChequeKind {
   TERCERO
   PROPIO
@@ -318,6 +332,19 @@ model User {
   auditLogs            AuditLog[]
 
   @@map("users")
+}
+
+/// Ticket de acceso WSAA de ARCA (válido ~12 h), cacheado por servicio.
+model ArcaToken {
+  id        String   @id @default(cuid())
+  service   String   @unique
+  token     String
+  sign      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("arca_tokens")
 }
 
 /// Sesión de login. La cookie guarda un token aleatorio; en la base solo se guarda su SHA-256.
@@ -909,39 +936,54 @@ model WorkshopRemit {
 // -----------------------------------------------------------------------------
 
 model Sale {
-  id              String               @id @default(cuid())
-  number          Int                  @unique @default(autoincrement())
-  channel         SaleChannel          @default(MOSTRADOR)
-  status          SaleStatus           @default(PENDIENTE)
-  clientId        String?
-  client          Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  userId          String
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-  cashSessionId   String?
-  cashSession     CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
-  branchId        String?
-  branch          Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  id                  String               @id @default(cuid())
+  number              Int                  @unique @default(autoincrement())
+  channel             SaleChannel          @default(MOSTRADOR)
+  status              SaleStatus           @default(PENDIENTE)
+  clientId            String?
+  client              Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cashSessionId       String?
+  cashSession         CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  branchId            String?
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
   /// Vuelto entregado en efectivo
-  changeAmount    Decimal              @default(0) @db.Decimal(14, 2)
+  changeAmount        Decimal              @default(0) @db.Decimal(14, 2)
   // --- Comprobante fiscal (ARCA/AFIP) ---
-  invoiceType     InvoiceType          @default(TICKET_INTERNO)
-  pointOfSale     Int?
-  invoiceNumber   Int?
-  cae             String?
-  caeDueDate      DateTime?
+  invoiceType         InvoiceType          @default(TICKET_INTERNO)
+  pointOfSale         Int?
+  invoiceNumber       Int?
+  cae                 String?
+  caeDueDate          DateTime?
+  kind                SaleKind             @default(VENTA)
+  /// Venta original de una devolución / nota de crédito
+  originalSaleId      String?
+  originalSale        Sale?                @relation("SaleReturns", fields: [originalSaleId], references: [id], onDelete: Restrict)
+  returns             Sale[]               @relation("SaleReturns")
+  returnReason        String?
+  // --- ARCA ---
+  arcaStatus          ArcaStatus           @default(NO_APLICA)
+  arcaError           String?
+  arcaObservations    Json?
+  arcaAttempts        Int                  @default(0)
+  /// Número pedido a ARCA en el último intento (para recuperar el CAE si la respuesta se perdió)
+  arcaRequestedNumber Int?
+  arcaLockedAt        DateTime?
+  arcaAuthorizedAt    DateTime?
   // --- Totales ---
-  subtotal        Decimal              @db.Decimal(14, 2)
-  discountTotal   Decimal              @default(0) @db.Decimal(14, 2)
-  discountReason  String?
-  taxTotal        Decimal              @db.Decimal(14, 2)
-  total           Decimal              @db.Decimal(14, 2)
+  subtotal            Decimal              @db.Decimal(14, 2)
+  discountTotal       Decimal              @default(0) @db.Decimal(14, 2)
+  discountReason      String?
+  taxTotal            Decimal              @db.Decimal(14, 2)
+  total               Decimal              @db.Decimal(14, 2)
   // --- Entrega ---
-  deliveryMethod  DeliveryMethod       @default(RETIRO_SUCURSAL)
-  shippingAddress String?
-  shippingCost    Decimal              @default(0) @db.Decimal(14, 2)
-  notes           String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  deliveryMethod      DeliveryMethod       @default(RETIRO_SUCURSAL)
+  shippingAddress     String?
+  shippingCost        Decimal              @default(0) @db.Decimal(14, 2)
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   items            SaleItem[]
   payments         Payment[]
@@ -952,6 +994,8 @@ model Sale {
   @@unique([invoiceType, pointOfSale, invoiceNumber])
   @@index([createdAt])
   @@index([clientId])
+  @@index([arcaStatus])
+  @@index([originalSaleId])
   @@map("sales")
 }
 
@@ -973,6 +1017,11 @@ model SaleItem {
   subtotal       Decimal         @db.Decimal(14, 2)
   /// Costo unitario al momento de la venta (para rentabilidad real)
   unitCost       Decimal         @default(0) @db.Decimal(14, 4)
+  /// En devoluciones: ítem de la venta original y si volvió al stock
+  originalItemId String?
+  originalItem   SaleItem?       @relation("ReturnedItems", fields: [originalItemId], references: [id], onDelete: Restrict)
+  returnedItems  SaleItem[]      @relation("ReturnedItems")
+  restocked      Boolean         @default(false)
 
   @@index([productId])
   @@map("sale_items")

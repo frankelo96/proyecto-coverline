@@ -19,11 +19,14 @@ import {
   saleSchema,
   transferSchema,
 } from "@/lib/validations/treasury";
+import { authorizeSale, type AuthorizeResult } from "@/server/arca/authorize";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { applyChequeAction } from "@/server/services/cheque.service";
 import { createSale } from "@/server/services/pos.service";
 import { createReceipt } from "@/server/services/receivables.service";
+import { createReturn } from "@/server/services/returns.service";
+import { returnSchema } from "@/lib/validations/returns";
 import { closeSession, manualMovement, openSession, transferBetween } from "@/server/services/treasury.service";
 
 const TX = { timeout: 20_000 };
@@ -121,7 +124,9 @@ export async function chequeAction(raw: unknown): Promise<ActionResult> {
   }
 }
 
-export async function createSaleAction(raw: unknown): Promise<ActionResult<{ id: string; number: number; change: number; warnings: string[] }>> {
+export async function createSaleAction(
+  raw: unknown,
+): Promise<ActionResult<{ id: string; number: number; change: number; warnings: string[]; arca: AuthorizeResult | null }>> {
   try {
     const user = await requireActionUser(PERMISSIONS.posSell);
     const input = saleSchema.parse(raw);
@@ -129,11 +134,14 @@ export async function createSaleAction(raw: unknown): Promise<ActionResult<{ id:
       (tx) => createSale(tx, input, { id: user.id, name: user.name, canDiscount: hasPermission(user.permissions, PERMISSIONS.posDiscount) }),
       TX,
     );
+    // El CAE se pide después de confirmar la venta: si ARCA no responde, la venta queda registrada y pendiente.
+    const arca = r.fiscal ? await authorizeSale(r.id) : null;
     revalidateTreasury();
+    revalidatePath("/ventas", "layout");
     return {
       ok: true,
-      data: { id: r.id, number: r.number, change: r.change, warnings: r.warnings },
-      message: `Venta #${r.number} por ${formatMoney(r.total)}${r.change > 0 ? ` · vuelto ${formatMoney(r.change)}` : ""}`,
+      data: { id: r.id, number: r.number, change: r.change, warnings: r.warnings, arca },
+      message: `Venta #${r.number} por ${formatMoney(r.total)}${r.change > 0 ? ` · vuelto ${formatMoney(r.change)}` : ""}${arca ? ` · ${arca.message}` : ""}`,
     };
   } catch (e) {
     return toError(e);
@@ -149,6 +157,36 @@ export async function createReceiptAction(raw: unknown): Promise<ActionResult<{ 
     revalidateTreasury();
     revalidatePath("/tesoreria/cobranzas", "layout");
     return { ok: true, data: { id: r.id, number: r.number }, message: `Recibo #${r.number} por ${formatMoney(r.total)} registrado` };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+export async function authorizeSaleAction(raw: unknown): Promise<ActionResult<AuthorizeResult>> {
+  try {
+    await requireActionUser(PERMISSIONS.posSell);
+    const { saleId } = z.object({ saleId: z.string().min(1) }).parse(raw);
+    const r = await authorizeSale(saleId);
+    revalidatePath("/ventas", "layout");
+    return r.ok ? { ok: true, data: r, message: r.message } : { ok: false, error: r.message };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+export async function createReturnAction(raw: unknown): Promise<ActionResult<{ id: string; number: number; arca: AuthorizeResult | null }>> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.posReturn);
+    const input = returnSchema.parse(raw);
+    const r = await db.$transaction((tx) => createReturn(tx, input, { id: user.id }), TX);
+    const arca = r.fiscal ? await authorizeSale(r.id) : null;
+    revalidateTreasury();
+    revalidatePath("/ventas", "layout");
+    return {
+      ok: true,
+      data: { id: r.id, number: r.number, arca },
+      message: `Devolución #${r.number} por ${formatMoney(r.total)} registrada${arca ? ` · ${arca.message}` : ""}`,
+    };
   } catch (e) {
     return toError(e);
   }

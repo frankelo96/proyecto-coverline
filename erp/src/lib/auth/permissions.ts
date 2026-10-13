@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   payablesPay: "accounts:payables:pay",
   posSell: "pos:sell",
   posDiscount: "pos:discount",
+  posReturn: "pos:return",
   cashSession: "cash:session",
   cashRead: "cash:read",
   cashManage: "cash:manage",

@@ -36,7 +36,7 @@ const ROLES = [
   {
     name: "VENDEDOR",
     description: "POS, clientes y presupuestos",
-    permissions: ["pos:sell", "pos:discount", "crm:read", "crm:write", "cash:session", "accounts:receivables:collect", "production:read"],
+    permissions: ["pos:sell", "pos:discount", "pos:return", "crm:read", "crm:write", "cash:session", "accounts:receivables:collect", "production:read"],
   },
   { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*"] },
 ];

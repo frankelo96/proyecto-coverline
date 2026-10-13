@@ -81,7 +81,7 @@ export async function getTerminalData(registerId: string) {
     where: { cashRegisterId: register.id, status: "ABIERTA" },
     include: {
       openedBy: { select: { name: true } },
-      sales: { orderBy: { number: "desc" }, take: 8, select: { id: true, number: true, total: true, createdAt: true, client: { select: { businessName: true } } } },
+      sales: { orderBy: { number: "desc" }, take: 8, select: { id: true, number: true, kind: true, total: true, createdAt: true, client: { select: { businessName: true } } } },
     },
   });
   const [products, clients, balances, vaults] = await Promise.all([
@@ -115,7 +115,13 @@ export async function getTerminalData(registerId: string) {
           id: session.id,
           openedAt: session.openedAt.toISOString(),
           openedBy: session.openedBy.name,
-          recentSales: session.sales.map((s) => ({ id: s.id, number: s.number, total: s.total.toNumber(), at: s.createdAt.toISOString(), client: s.client?.businessName ?? null })),
+          recentSales: session.sales.map((s) => ({
+            id: s.id,
+            number: s.number,
+            total: (s.kind === "DEVOLUCION" ? -1 : 1) * s.total.toNumber(),
+            at: s.createdAt.toISOString(),
+            client: s.client?.businessName ?? null,
+          })),
         }
       : null,
     catalog,
@@ -148,11 +154,15 @@ export async function getSaleForTicket(saleId: string) {
   if (!s) return null;
   return {
     number: s.number,
+    kind: s.kind,
     invoiceType: s.invoiceType,
-    voucherLabel: INVOICE_LABELS[s.invoiceType],
+    voucherLabel: s.kind === "DEVOLUCION" && s.invoiceType === "TICKET_INTERNO" ? "Devolución" : INVOICE_LABELS[s.invoiceType],
     voucherNumber: s.invoiceNumber ?? s.number,
     pointOfSale: s.pointOfSale,
     caePending: s.invoiceType !== "TICKET_INTERNO" && !s.cae,
+    cae: s.cae,
+    caeDueDate: s.caeDueDate,
+    returnReason: s.returnReason,
     date: s.createdAt,
     branchName: s.branch?.name ?? "",
     branchAddress: s.branch?.address ?? null,
@@ -196,9 +206,9 @@ export async function getSessionReport(sessionId: string) {
   });
   if (!s) return null;
   const byMethod = new Map<PaymentMethod, number>();
-  for (const p of [...s.sales.flatMap((x) => x.payments), ...s.receipts.flatMap((x) => x.payments)]) {
-    byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount.toNumber());
-  }
+  const sign = (kind: string) => (kind === "DEVOLUCION" ? -1 : 1);
+  for (const x of s.sales) for (const p of x.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + sign(x.kind) * p.amount.toNumber());
+  for (const p of s.receipts.flatMap((x) => x.payments)) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount.toNumber());
   const change = s.sales.reduce((a, x) => a + x.changeAmount.toNumber(), 0);
   return {
     id: s.id,
@@ -216,8 +226,10 @@ export async function getSessionReport(sessionId: string) {
     declaredAmount: s.declaredAmount?.toNumber() ?? null,
     difference: s.difference?.toNumber() ?? null,
     notes: s.notes,
-    salesCount: s.sales.length,
-    salesTotal: s.sales.reduce((a, x) => a + x.total.toNumber(), 0),
+    salesCount: s.sales.filter((x) => x.kind === "VENTA").length,
+    salesTotal: s.sales.filter((x) => x.kind === "VENTA").reduce((a, x) => a + x.total.toNumber(), 0),
+    returnsCount: s.sales.filter((x) => x.kind === "DEVOLUCION").length,
+    returnsTotal: s.sales.filter((x) => x.kind === "DEVOLUCION").reduce((a, x) => a + x.total.toNumber(), 0),
     receiptsTotal: s.receipts.reduce((a, x) => a + x.amount.toNumber(), 0),
     change,
     byMethod: [...byMethod.entries()].map(([method, amount]) => ({ method, amount: method === "EFECTIVO" ? amount - change : amount })),
@@ -404,13 +416,25 @@ export async function listClientBalances(): Promise<ClientBalanceRow[]> {
 export async function getClientAccount(clientId: string) {
   const client = await db.client.findUnique({ where: { id: clientId } });
   if (!client) return null;
-  const [receivables, receipts, cheques, registers] = await Promise.all([
+  const [receivables, receipts, cheques, registers, creditNotes] = await Promise.all([
     db.accountReceivable.findMany({ where: { clientId }, orderBy: { issueDate: "asc" } }),
     db.receipt.findMany({ where: { clientId }, orderBy: { date: "asc" } }),
     db.cheque.findMany({ where: { clientId, kind: "TERCERO" }, orderBy: { paymentDate: "desc" }, take: 30 }),
     listRegisterOptions(),
+    db.sale.findMany({
+      where: { clientId, kind: "DEVOLUCION", payments: { some: { method: "CUENTA_CORRIENTE" } } },
+      include: { payments: { where: { method: "CUENTA_CORRIENTE" } } },
+    }),
   ]);
   const events = [
+    ...creditNotes.map((n) => ({
+      key: `n-${n.id}`,
+      at: n.createdAt,
+      description: `Devolución #${n.number} (${INVOICE_LABELS[n.invoiceType]})`,
+      debit: 0,
+      credit: n.payments.reduce((a, p) => a + p.amount.toNumber(), 0),
+      href: `/ventas/${n.id}`,
+    })),
     ...receivables.map((r) => ({ key: `d-${r.id}`, at: r.issueDate, description: r.description, debit: r.amount.toNumber(), credit: 0, href: r.saleId ? `/pos/tickets/${r.saleId}` : null })),
     ...receipts.map((r) => ({ key: `r-${r.id}`, at: r.date, description: `Recibo #${r.number}`, debit: 0, credit: r.amount.toNumber(), href: `/tesoreria/recibos/${r.id}` })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());

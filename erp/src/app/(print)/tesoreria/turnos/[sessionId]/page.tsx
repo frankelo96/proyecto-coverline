@@ -81,6 +81,12 @@ export default async function SessionReportPage({ params }: Props) {
             )}
             <dt>Ventas ({r.salesCount})</dt>
             <dd className="text-right font-mono">{formatMoney(r.salesTotal)}</dd>
+            {r.returnsCount > 0 && (
+              <>
+                <dt>Devoluciones ({r.returnsCount})</dt>
+                <dd className="text-right font-mono">-{formatMoney(r.returnsTotal)}</dd>
+              </>
+            )}
             <dt>Cobranzas de cuenta corriente</dt>
             <dd className="text-right font-mono">{formatMoney(r.receiptsTotal)}</dd>
           </dl>

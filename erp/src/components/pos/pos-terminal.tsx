@@ -295,7 +295,10 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                 {data.session.recentSales.map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-3 py-2">
                     <span>
-                      <span className="font-mono">#{s.number}</span> · {new Date(s.at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                      <Link href={`/ventas/${s.id}`} className="font-mono underline-offset-4 hover:underline">
+                        #{s.number}
+                      </Link>{" "}
+                      · {new Date(s.at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                       {s.client && <span className="text-muted-foreground"> · {s.client}</span>}
                     </span>
                     <span className="flex items-center gap-2">

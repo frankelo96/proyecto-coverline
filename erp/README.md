@@ -20,7 +20,7 @@ Producción: `npm run db:deploy && npm run build && npm start`.
 
 | Script | Uso |
 | --- | --- |
-| `npm test` | Tests unitarios (Vitest): escandallo, producción, compras/pagos, POS, cajas, cheques, ticket y permisos |
+| `npm test` | Tests unitarios (Vitest): escandallo, producción, compras/pagos, POS, cajas, cheques, ticket, ARCA y permisos |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (config Next) |
 | `npm run db:studio` | Prisma Studio |
@@ -137,6 +137,25 @@ Ambos tipos guardan los datos del Libro IVA Compras: tipo de comprobante (A/B/C)
 
 **Cobranzas de cuenta corriente** (`/tesoreria/cobranzas`): saldos por antigüedad, extracto y recibo imprimible con imputación automática del vencimiento más viejo al más nuevo.
 
+## Facturación electrónica ARCA (WSFEv1)
+
+- **Configuración** (`.env`): `ARCA_MODE` (`deshabilitado` | `homologacion` | `produccion`), `ARCA_CUIT`, `ARCA_CERT` y `ARCA_KEY` (ruta o PEM del certificado emitido por ARCA para el CUIT), y los datos del emisor que se imprimen (`COMPANY_*`). Con `deshabilitado` las facturas quedan *pendientes de CAE*.
+- **WSAA**: el ticket de acceso se firma en CMS/PKCS#7 (SHA-256) con el certificado y se guarda en la base (`ArcaToken`) mientras esté vigente (~12 h), para no pedir uno por factura.
+- **Autorización**: la venta se confirma primero (stock, caja, cuenta corriente) y después se pide el CAE: último autorizado + 1. Las facturas A/B y notas de crédito A/B toman el número de ARCA; los tickets internos tienen numeración propia.
+- **Receptor y montos**: factura A solo a responsables inscriptos con CUIT; B a consumidor final (con o sin documento), exento o monotributo, con la condición frente al IVA del receptor (RG 5616). Neto e IVA por alícuota con el mismo redondeo que el POS; se valida que coincidan con el total antes de enviar.
+- **Robustez**: bloqueo optimista contra pedidos simultáneos del mismo comprobante. Si ARCA autoriza pero la respuesta se pierde (corte de red), el reintento consulta el comprobante (`FECompConsultar`) y **recupera el CAE sin consumir otro número**. Errores de red → queda pendiente; rechazos → se guardan los códigos y mensajes de ARCA.
+- **Comprobantes pendientes** en `/ventas?filtro=pendientes`, con botón para reintentar.
+- **Ticket fiscal**: CUIT, condición IVA, IIBB e inicio de actividades del emisor, desglose de IVA en comprobantes A, CAE con vencimiento y **QR fiscal (RG 4291)**.
+- Probado con tests sobre los mensajes SOAP y de punta a punta contra un servidor simulado local. **No se probó contra los servidores reales de ARCA** (sin acceso de red desde el entorno de desarrollo): hacer la primera prueba en homologación.
+
+## Devoluciones y notas de crédito
+
+- Desde el detalle de la venta (`/ventas/[id]`): se eligen cantidades por artículo (hasta lo vendido menos lo ya devuelto), si vuelve al stock o es fallado, y el motivo (obligatorio y auditado).
+- Factura A/B → **nota de crédito A/B electrónica** asociada a la factura (la factura debe tener CAE). Ticket interno → devolución interna.
+- El importe es proporcional a lo cobrado (respeta descuentos); si se devuelve todo lo que queda de una línea, se toma exactamente su saldo.
+- Reintegro: efectivo del cajón del turno abierto, transferencia o Mercado Pago desde su cuenta, o **descuento de la deuda en cuenta corriente** de esa venta.
+- El arqueo descuenta las devoluciones y el extracto del cliente las muestra como crédito.
+
 ## Pendiente para los próximos módulos
 
-Facturación electrónica ARCA (las facturas A/B ya se numeran por punto de venta y quedan "pendientes de CAE"), notas de crédito y devoluciones, liquidación de tarjetas (comisiones y acreditación diferida), CRM y presupuestos, Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.
+CRM y presupuestos, cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.

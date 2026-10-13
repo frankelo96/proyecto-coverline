@@ -2,6 +2,7 @@ import "server-only";
 
 import { renderTicketText, type TicketWidth } from "@/lib/pos/ticket";
 import { METHOD_LABELS } from "@/lib/treasury/cash";
+import { companyInfo } from "@/server/arca/config";
 import { getSaleForTicket } from "@/server/queries/treasury.queries";
 
 export const parseWidth = (v: string | null | undefined): TicketWidth => (v === "58" ? 58 : 80);
@@ -9,10 +10,24 @@ export const parseWidth = (v: string | null | undefined): TicketWidth => (v === 
 export async function buildTicketText(saleId: string, width: TicketWidth) {
   const s = await getSaleForTicket(saleId);
   if (!s) return null;
-  const voucher = s.invoiceType === "TICKET_INTERNO" ? "Ticket no fiscal" : `${s.voucherLabel} ${String(s.pointOfSale ?? 0).padStart(5, "0")}`;
+  const voucher =
+    s.invoiceType === "TICKET_INTERNO" ? (s.kind === "DEVOLUCION" ? "Devolucion no fiscal" : "Ticket no fiscal") : `${s.voucherLabel} ${String(s.pointOfSale ?? 0).padStart(5, "0")}`;
+  const company = companyInfo();
+  const fiscal = s.invoiceType !== "TICKET_INTERNO";
+  const issuerLines = fiscal
+    ? [
+        company.legalName,
+        company.cuit ? `CUIT ${company.cuit}` : null,
+        company.taxCondition,
+        company.iibb ? `IIBB ${company.iibb}` : null,
+        company.startDate ? `Inicio de actividades ${company.startDate}` : null,
+        company.address,
+      ].filter((l): l is string => !!l)
+    : [];
   const text = renderTicketText(
     {
       businessName: "Coverline Uniformes",
+      issuerLines,
       branchName: s.branchName,
       branchAddress: s.branchAddress,
       voucherLabel: voucher,
@@ -22,13 +37,19 @@ export async function buildTicketText(saleId: string, width: TicketWidth) {
       clientName: s.clientName,
       items: s.items,
       discountTotal: s.discountTotal,
-      showVat: s.invoiceType === "FACTURA_A",
+      showVat: s.invoiceType === "FACTURA_A" || s.invoiceType === "NOTA_CREDITO_A",
       subtotal: s.subtotal,
       taxTotal: s.taxTotal,
       total: s.total,
       payments: s.payments.map((p) => ({ label: `${METHOD_LABELS[p.method]}${p.detail ? ` ${p.detail}` : ""}`, amount: p.amount })),
       change: s.change,
-      footer: s.caePending ? "Comprobante pendiente de autorizacion ARCA. Gracias por su compra." : "Gracias por su compra. Cambios dentro de los 30 dias con ticket.",
+      footer: s.caePending
+        ? "Comprobante pendiente de autorizacion ARCA."
+        : s.cae
+          ? `CAE ${s.cae} Vto. ${s.caeDueDate?.toLocaleDateString("es-AR") ?? ""}${s.kind === "DEVOLUCION" ? "" : " - Gracias por su compra."}`
+          : s.kind === "DEVOLUCION"
+            ? `Motivo: ${s.returnReason ?? ""}`
+            : "Gracias por su compra. Cambios dentro de los 30 dias con ticket.",
     },
     width,
   );

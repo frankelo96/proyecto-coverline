@@ -10,6 +10,7 @@ import Decimal from "decimal.js";
 
 import { Prisma } from "@/generated/prisma/client";
 import type { InvoiceType } from "@/generated/prisma/enums";
+import { isFiscal } from "@/lib/arca/codes";
 import { formatMoney } from "@/lib/format";
 import { addDays, computeSaleTotals, finalUnitPrice, planPayments, SaleError } from "@/lib/pos/sale-math";
 import { TreasuryError } from "@/lib/treasury/cash";
@@ -19,6 +20,13 @@ import { lockRegister, openSessionOf } from "@/server/services/treasury.service"
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
+
+/** Siguiente número de ticket interno del punto de venta (bloquea la sucursal para no repetir). */
+export async function nextInternalNumber(tx: Tx, branchId: string, pointOfSale: number) {
+  await tx.$queryRaw`SELECT id FROM branches WHERE id = ${branchId} FOR UPDATE`;
+  const last = await tx.sale.aggregate({ where: { invoiceType: "TICKET_INTERNO", pointOfSale }, _max: { invoiceNumber: true } });
+  return (last._max.invoiceNumber ?? 0) + 1;
+}
 
 export async function clientOpenBalance(tx: Tx, clientId: string) {
   const agg = await tx.accountReceivable.aggregate({ where: { clientId, status: { in: ["PENDIENTE", "PARCIAL"] } }, _sum: { balance: true } });
@@ -86,11 +94,10 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
     }
   }
 
-  // --- Numeración interna por tipo y punto de venta (la CAE se solicita al integrar ARCA)
-  await tx.$queryRaw`SELECT id FROM branches WHERE id = ${branch.id} FOR UPDATE`;
+  // --- Numeración: los tickets internos se numeran acá; las facturas reciben número y CAE de ARCA.
   const pointOfSale = branch.pointOfSale ?? 1;
-  const last = await tx.sale.aggregate({ where: { invoiceType: input.invoiceType as InvoiceType, pointOfSale }, _max: { invoiceNumber: true } });
-  const invoiceNumber = (last._max.invoiceNumber ?? 0) + 1;
+  const fiscal = isFiscal(input.invoiceType as InvoiceType);
+  const invoiceNumber = fiscal ? null : await nextInternalNumber(tx, branch.id, pointOfSale);
 
   const sale = await tx.sale.create({
     data: {
@@ -103,6 +110,7 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
       invoiceType: input.invoiceType,
       pointOfSale,
       invoiceNumber,
+      arcaStatus: fiscal ? "PENDIENTE" : "NO_APLICA",
       subtotal: D(totals.subtotal),
       discountTotal: D(totals.discountTotal),
       discountReason: hasDiscount ? input.discountReason : null,
@@ -174,5 +182,5 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
     });
   }
 
-  return { ...sale, total: totals.total, change: plan.change, warnings };
+  return { ...sale, total: totals.total, change: plan.change, warnings, fiscal };
 }
