@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CostSheetEditor } from "@/components/production/cost-sheet-editor";
+import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
+import { requirePageUser } from "@/server/auth/session";
 import { getCostSheetEditorData } from "@/server/queries/production.queries";
 import { CostingServiceError } from "@/server/services/costing.service";
 
@@ -27,8 +29,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function CostSheetPage({ params }: Props) {
+  const user = await requirePageUser(PERMISSIONS.productionRead);
   const { productId } = await params;
   const data = await loadData(productId);
+  const canEdit = hasPermission(user.permissions, PERMISSIONS.productionCostWrite);
   return (
     <div className="flex flex-col gap-4">
       <Link
@@ -37,7 +41,7 @@ export default async function CostSheetPage({ params }: Props) {
       >
         <ChevronLeft aria-hidden="true" className="size-4" /> Fichas técnicas
       </Link>
-      <CostSheetEditor key={data.product.id} data={data} />
+      <CostSheetEditor key={data.product.id} data={data} canEdit={canEdit} />
     </div>
   );
 }

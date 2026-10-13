@@ -29,12 +29,12 @@ const ROLES = [
   {
     name: "PRODUCCION",
     description: "Fichas técnicas, órdenes y talleres",
-    permissions: ["production:read", "production:write", "production:cost:write", "purchases:read"],
+    permissions: ["production:*", "purchases:read"],
   },
   {
     name: "VENDEDOR",
     description: "POS, clientes y presupuestos",
-    permissions: ["pos:sell", "pos:discount", "crm:read", "crm:write", "cash:session"],
+    permissions: ["pos:sell", "pos:discount", "crm:read", "crm:write", "cash:session", "production:read"],
   },
   { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*"] },
 ];
@@ -197,7 +197,7 @@ async function main() {
     const rm = await prisma.rawMaterial.upsert({
       where: { code: m.code },
       update: data,
-      create: { ...data, code: m.code, currentCost: D(m.cost) },
+      create: { ...data, code: m.code, currentCost: D(m.cost), stockQty: D(m.type === "TELA" ? 400 : m.type === "INSUMO" ? 20 : 3000) },
     });
     materialIds.set(m.code, rm.id);
   }
@@ -225,6 +225,21 @@ async function main() {
       }));
     serviceIds.set(s.key, sc.id);
   }
+
+  // --- Cliente de ejemplo --------------------------------------------------------
+  await prisma.client.upsert({
+    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-70000000-7" } },
+    update: {},
+    create: {
+      type: "ESCUELA",
+      businessName: "Instituto San Martín (ejemplo)",
+      documentType: "CUIT",
+      documentNumber: "30-70000000-7",
+      taxCondition: "EXENTO",
+      tags: ["colegio", "reposicion-anual"],
+      purchaseMonths: [11, 12, 2],
+    },
+  });
 
   // --- Productos, variantes y fichas técnicas --------------------------------
   for (const p of PRODUCTS) {

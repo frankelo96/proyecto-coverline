@@ -232,16 +232,23 @@ model Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   name         String
   passwordHash String
-  active       Boolean  @default(true)
+  active       Boolean   @default(true)
   roleId       String
-  role         Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  lastLoginAt  DateTime?
+  /// Intentos fallidos consecutivos; al superar el límite se bloquea temporalmente
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
+  authSessions         Session[]
+  remitsCreated        WorkshopRemit[]
+  productionOrders     ProductionOrder[]
   ownedLeads           Lead[]
   quotes               Quote[]
   sales                Sale[]
@@ -255,6 +262,22 @@ model User {
   auditLogs            AuditLog[]
 
   @@map("users")
+}
+
+/// Sesión de login. La cookie guarda un token aleatorio; en la base solo se guarda su SHA-256.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model AuditLog {
@@ -673,28 +696,36 @@ model Workshop {
 }
 
 model ProductionOrder {
-  id                String                @id @default(cuid())
-  number            Int                   @unique @default(autoincrement())
-  productId         String
-  product           Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
-  clientId          String?
-  client            Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  clientDesignId    String?
-  clientDesign      ClientDesign?         @relation(fields: [clientDesignId], references: [id], onDelete: SetNull)
-  saleId            String?
-  sale              Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  status            ProductionOrderStatus @default(BORRADOR)
-  currentStage      ProductionStage       @default(CORTE_INTERNO)
-  quantityPlanned   Int
-  quantityFinished  Int                   @default(0)
+  id                      String                @id @default(cuid())
+  number                  Int                   @unique @default(autoincrement())
+  productId               String
+  product                 Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  clientId                String?
+  client                  Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientDesignId          String?
+  clientDesign            ClientDesign?         @relation(fields: [clientDesignId], references: [id], onDelete: SetNull)
+  saleId                  String?
+  sale                    Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  status                  ProductionOrderStatus @default(BORRADOR)
+  currentStage            ProductionStage       @default(CORTE_INTERNO)
+  quantityPlanned         Int
+  /// Piezas vivas en el proceso: planificadas menos mermas acumuladas
+  quantityInProcess       Int                   @default(0)
+  quantityFinished        Int                   @default(0)
+  /// Si pasa por bordado/estampado/sublimación antes de control de calidad
+  requiresPersonalization Boolean               @default(false)
   /// Costo unitario estimado del escandallo al lanzar la orden
-  estimatedUnitCost Decimal               @db.Decimal(14, 4)
+  estimatedUnitCost       Decimal               @db.Decimal(14, 4)
   /// Costo real acumulado (materiales consumidos + fasón + fletes)
-  actualCost        Decimal               @default(0) @db.Decimal(14, 2)
-  dueDate           DateTime?
-  notes             String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  actualCost              Decimal               @default(0) @db.Decimal(14, 2)
+  dueDate                 DateTime?
+  notes                   String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdById             String?
+  createdBy               User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 
   items     ProductionOrderItem[]
   stageLogs ProductionStageLog[]
@@ -754,10 +785,13 @@ model WorkshopRemit {
   laborUnitCost     Decimal           @default(0) @db.Decimal(14, 2)
   laborTotal        Decimal           @default(0) @db.Decimal(14, 2)
   notes             String?
+  createdById       String?
+  createdBy         User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime          @default(now())
 
   payables AccountPayable[]
 
+  @@index([productionOrderId])
   @@index([workshopId, date])
   @@map("workshop_remits")
 }

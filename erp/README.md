@@ -20,7 +20,7 @@ Producción: `npm run db:deploy && npm run build && npm start`.
 
 | Script | Uso |
 | --- | --- |
-| `npm test` | Tests unitarios (Vitest) del motor de escandallo |
+| `npm test` | Tests unitarios (Vitest): escandallo, flujo de producción y permisos |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (config Next) |
 | `npm run db:studio` | Prisma Studio |
@@ -65,6 +65,28 @@ erp/
 - **Simulador**: el editor recalcula en vivo con el mismo motor que el servidor. Se pueden sobrescribir costos unitarios o aplicar una variación % a todas las telas sin persistirlos; al guardar, el servidor siempre usa los precios de reposición vigentes.
 - **Alertas**: aumento contra el costo vigente de la ficha y precio de lista por debajo del sugerido o del costo.
 
+## Login y permisos
+
+- Sesiones en base (`Session`): la cookie `cl_session` (httpOnly, SameSite=Lax, Secure en producción) guarda un token aleatorio y la base solo su SHA-256. Duración: 7 días.
+- Contraseñas con scrypt. 5 intentos fallidos bloquean la cuenta 15 minutos.
+- `src/proxy.ts` hace el chequeo rápido de cookie; la validación real está en `requirePageUser` / `requireActionUser` (`src/server/auth/session.ts`).
+- Permisos por rol con comodines (`*`, `production:*`). Ver `src/lib/auth/permissions.ts`.
+- Usuario inicial del seed: `admin@coverline.local` con la clave de `SEED_ADMIN_PASSWORD` (cambiala en producción).
+
+## Módulo A — Órdenes de producción y talleres
+
+Etapas: **Corte interno → Taller de confección → Personalización (opcional) → Calidad y planchado → Listo / stock**.
+
+- **Alta** con curva de talles, cliente opcional, fecha comprometida y si pasa por personalización.
+- **Lanzar a corte**: descuenta del stock el consumo bruto de la ficha técnica y lo suma al costo real; avisa faltantes.
+- **Cerrar corte**: piezas efectivamente cortadas; la diferencia es merma de corte.
+- **Remitos a talleres** (`WorkshopRemit`): envíos y recepciones parciales a uno o varios talleres. Se controla lo enviado contra lo recibido + merma; no se puede recibir más de lo que tiene cada taller. Cada recepción genera la deuda de fasón (`AccountPayable`, 30 días) con la tarifa sugerida por la ficha técnica. La etapa avanza sola cuando vuelve todo.
+- **Calidad**: prendas aprobadas por talle ingresan al stock de cada variante; el resto queda como merma.
+- **Trazabilidad**: cada cambio de etapa queda en `ProductionStageLog` con usuario, piezas que entran/salen y merma. Las cancelaciones exigen motivo y quedan en `AuditLog`.
+- **Talleres**: piezas en poder de cada taller (con antigüedad) y fasón a pagar / vencido.
+- **Remito imprimible** A4 en `/produccion/remitos/[id]`.
+- Las operaciones bloquean la fila de la orden (`SELECT … FOR UPDATE`) para evitar dobles registros simultáneos.
+
 ## Pendiente para los próximos módulos
 
-Autenticación y sesiones (el modelo `User`/`Role` ya existe; las Server Actions aún no registran el usuario), POS y cajas, CRM, compras y cuentas corrientes, facturación ARCA y reportes.
+POS y cajas, CRM y presupuestos, compras y cuentas corrientes (incluido el pago de fasón a talleres), facturación ARCA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.

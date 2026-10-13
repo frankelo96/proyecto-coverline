@@ -1,15 +1,18 @@
 "use client";
 
-import { Shirt } from "lucide-react";
+import { LogOut, Shirt } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+import { logoutAction } from "@/server/actions/auth.actions";
 
-/** Rutas habilitadas. Cada módulo nuevo (POS, CRM, Compras, Reportes) se suma acá al implementarse. */
-const NAV_ITEMS = [{ href: "/produccion/fichas", label: "Fichas técnicas" }] as const;
+export interface NavItem {
+  href: string;
+  label: string;
+}
 
-export function AppHeader() {
+export function AppHeader({ items, userName, roleName }: { items: NavItem[]; userName: string; roleName: string }) {
   const pathname = usePathname();
   return (
     <header className="bg-ink text-ink-foreground">
@@ -17,10 +20,10 @@ export function AppHeader() {
         <Link href="/" className="flex items-center gap-3 rounded-md focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none">
           <Shirt aria-hidden="true" className="size-6 text-accent" />
           <span className="text-lg font-bold tracking-wide">COVERLINE</span>
-          <span className="hidden text-sm text-ink-muted sm:inline">ERP · Producción</span>
+          <span className="hidden text-sm text-ink-muted sm:inline">ERP</span>
         </Link>
-        <nav aria-label="Módulos" className="flex flex-wrap gap-1 text-sm">
-          {NAV_ITEMS.map((item) => {
+        <nav aria-label="Módulos" className="order-3 flex w-full flex-wrap gap-1 text-sm lg:order-none lg:w-auto">
+          {items.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -37,6 +40,22 @@ export function AppHeader() {
             );
           })}
         </nav>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="hidden text-right leading-tight sm:block">
+            <span className="block">{userName}</span>
+            <span className="block text-xs text-ink-muted">{roleName}</span>
+          </span>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="flex size-10 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-white/10 hover:text-ink-foreground"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+            >
+              <LogOut aria-hidden="true" className="size-4" />
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );

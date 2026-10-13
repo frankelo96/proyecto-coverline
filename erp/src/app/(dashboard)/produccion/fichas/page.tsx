@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 
 import { ProductCostTable } from "@/components/production/product-cost-table";
+import { PERMISSIONS } from "@/lib/auth/permissions";
+import { requirePageUser } from "@/server/auth/session";
 import { listProductsWithCost } from "@/server/queries/production.queries";
 
 export const metadata: Metadata = { title: "Fichas técnicas" };
 export const dynamic = "force-dynamic";
 
 export default async function FichasPage() {
+  await requirePageUser(PERMISSIONS.productionRead);
   const products = await listProductsWithCost();
   return (
     <div className="flex flex-col gap-6">

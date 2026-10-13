@@ -61,7 +61,7 @@ function firstErrorMessage(errors: FieldErrors<CostSheetFormValues>): string | n
 
 type Status = { kind: "success" | "error"; text: string } | null;
 
-export function CostSheetEditor({ data }: { data: CostSheetEditorData }) {
+export function CostSheetEditor({ data, canEdit }: { data: CostSheetEditorData; canEdit: boolean }) {
   const router = useRouter();
   const formId = useId();
   const [isSaving, startSaving] = useTransition();
@@ -255,9 +255,11 @@ export function CostSheetEditor({ data }: { data: CostSheetEditorData }) {
           >
             <RotateCcw /> Restablecer
           </Button>
-          <Button type="submit" disabled={isSaving}>
-            {isSaving ? <Loader2 className="animate-spin" /> : <Save />} Guardar ficha
-          </Button>
+          {canEdit && (
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? <Loader2 className="animate-spin" /> : <Save />} Guardar ficha
+            </Button>
+          )}
         </div>
       </div>
 
@@ -664,6 +666,7 @@ export function CostSheetEditor({ data }: { data: CostSheetEditorData }) {
             </p>
           )}
 
+          {canEdit && (
           <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
             <input
               type="checkbox"
@@ -674,7 +677,11 @@ export function CostSheetEditor({ data }: { data: CostSheetEditorData }) {
             Al guardar, actualizar el precio de lista con el sugerido
             {breakdown && <span className="ml-auto font-mono tabular-nums">{formatMoney(breakdown.suggestedNetPrice)}</span>}
           </label>
-          {simulated && (
+          )}
+          {!canEdit && (
+            <p className="text-xs text-muted-foreground">Modo simulación: tu rol no permite guardar cambios en la ficha.</p>
+          )}
+          {canEdit && simulated && (
             <p className="text-xs text-muted-foreground">
               Al guardar se usan siempre los precios de reposición vigentes; los valores simulados no se persisten.
             </p>
