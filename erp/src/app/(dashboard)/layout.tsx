@@ -7,6 +7,8 @@ const NAV: (NavItem & { permission: string })[] = [
   { href: "/produccion/ordenes", label: "Órdenes de producción", permission: PERMISSIONS.productionRead },
   { href: "/produccion/talleres", label: "Talleres", permission: PERMISSIONS.workshopsRead },
   { href: "/produccion/fichas", label: "Fichas técnicas", permission: PERMISSIONS.productionRead },
+  { href: "/compras", label: "Compras", permission: PERMISSIONS.purchasesRead },
+  { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead },
 ];
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {

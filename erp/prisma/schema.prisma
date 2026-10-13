@@ -206,6 +206,25 @@ enum PurchaseStatus {
   ANULADA
 }
 
+/// Separa la compra de bienes (stock) de la factura de servicios de talleres.
+enum PurchaseKind {
+  MERCADERIA
+  SERVICIO_TALLER
+}
+
+enum PurchaseItemType {
+  MATERIA_PRIMA
+  AVIO_INSUMO
+  PRODUCTO_TERMINADO
+  SERVICIO_CONFECCION
+  SERVICIO_PERSONALIZACION
+}
+
+enum ProductSourcing {
+  FABRICADO
+  REVENTA
+}
+
 enum CostSnapshotReason {
   MANUAL
   CAMBIO_PRECIO_MATERIAL
@@ -247,6 +266,8 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   authSessions         Session[]
+  purchasesCreated     Purchase[]
+  paymentOrders        PaymentOrder[]
   remitsCreated        WorkshopRemit[]
   productionOrders     ProductionOrder[]
   ownedLeads           Lead[]
@@ -443,9 +464,10 @@ model Supplier {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  rawMaterials RawMaterial[]
-  purchases    Purchase[]
-  payables     AccountPayable[]
+  rawMaterials  RawMaterial[]
+  purchases     Purchase[]
+  payables      AccountPayable[]
+  paymentOrders PaymentOrder[]
 
   @@map("suppliers")
 }
@@ -497,41 +519,78 @@ model RawMaterialPriceHistory {
   @@map("raw_material_price_history")
 }
 
+/// Comprobante de compra. MERCADERIA: proveedor + ítems con stock. SERVICIO_TALLER: taller + recepciones facturadas.
 model Purchase {
-  id            String         @id @default(cuid())
-  supplierId    String
-  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  invoiceType   InvoiceType?
-  invoiceNumber String?
-  remitNumber   String?
-  status        PurchaseStatus @default(BORRADOR)
-  date          DateTime       @default(now())
-  subtotal      Decimal        @db.Decimal(14, 2)
-  taxTotal      Decimal        @db.Decimal(14, 2)
-  total         Decimal        @db.Decimal(14, 2)
-  notes         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  number         Int            @unique @default(autoincrement())
+  kind           PurchaseKind
+  supplierId     String?
+  supplier       Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  workshopId     String?
+  workshop       Workshop?      @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  invoiceType    InvoiceType?
+  pointOfSale    Int?
+  invoiceNumber  String?
+  remitNumber    String?
+  status         PurchaseStatus @default(BORRADOR)
+  /// Fecha del comprobante (base del Libro IVA Compras)
+  date           DateTime       @default(now())
+  dueDate        DateTime?
+  /// Neto (gravado + no gravado)
+  subtotal       Decimal        @db.Decimal(14, 2)
+  /// IVA discriminado total
+  taxTotal       Decimal        @db.Decimal(14, 2)
+  vat21          Decimal        @default(0) @db.Decimal(14, 2)
+  vat105         Decimal        @default(0) @db.Decimal(14, 2)
+  vat27          Decimal        @default(0) @db.Decimal(14, 2)
+  perceptionIva  Decimal        @default(0) @db.Decimal(14, 2)
+  perceptionIibb Decimal        @default(0) @db.Decimal(14, 2)
+  otherTaxes     Decimal        @default(0) @db.Decimal(14, 2)
+  total          Decimal        @db.Decimal(14, 2)
+  notes          String?
+  createdById    String?
+  createdBy      User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  items    PurchaseItem[]
-  payables AccountPayable[]
+  items          PurchaseItem[]
+  payables       AccountPayable[]
+  invoicedRemits WorkshopRemit[]
 
   @@index([supplierId, date])
+  @@index([workshopId, date])
+  @@index([kind, date])
   @@map("purchases")
 }
 
 model PurchaseItem {
-  id            String        @id @default(cuid())
-  purchaseId    String
-  purchase      Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  rawMaterialId String
-  rawMaterial   RawMaterial   @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
-  quantity      Decimal       @db.Decimal(14, 4)
-  uom           UnitOfMeasure
-  unitCost      Decimal       @db.Decimal(14, 4)
-  vatRate       Decimal       @default(21) @db.Decimal(6, 2)
-  subtotal      Decimal       @db.Decimal(14, 2)
+  id               String           @id @default(cuid())
+  purchaseId       String
+  purchase         Purchase         @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemType         PurchaseItemType
+  description      String
+  rawMaterialId    String?
+  rawMaterial      RawMaterial?     @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+  productVariantId String?
+  productVariant   ProductVariant?  @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  workshopRemitId  String?
+  workshopRemit    WorkshopRemit?   @relation(fields: [workshopRemitId], references: [id], onDelete: Restrict)
+  /// Cantidad y unidad tal como figuran en el comprobante (ej. 25 kg)
+  quantity         Decimal          @db.Decimal(14, 4)
+  uom              UnitOfMeasure
+  /// Precio unitario neto del comprobante
+  unitCost         Decimal          @db.Decimal(14, 4)
+  vatRate          Decimal          @default(21) @db.Decimal(6, 2)
+  subtotal         Decimal          @db.Decimal(14, 2)
+  /// Cantidad y costo convertidos a la unidad de stock (ej. 65 m a $/m)
+  stockQuantity    Decimal?         @db.Decimal(14, 4)
+  stockUnitCost    Decimal?         @db.Decimal(14, 4)
+  /// Costo de reposición vigente antes de esta compra (auditoría del impacto)
+  previousUnitCost Decimal?         @db.Decimal(14, 4)
+  updatedCost      Boolean          @default(false)
 
+  @@index([rawMaterialId])
+  @@index([productVariantId])
   @@map("purchase_items")
 }
 
@@ -544,6 +603,8 @@ model Product {
   sku           String          @unique
   name          String
   category      ProductCategory
+  /// FABRICADO: costo por escandallo. REVENTA: costo = último precio de compra.
+  sourcing      ProductSourcing @default(FABRICADO)
   description   String?
   pricingMode   PricingMode     @default(MARKUP)
   /// Markup sobre costo (MARKUP) o margen sobre precio (MARGIN), en %
@@ -588,6 +649,7 @@ model ProductVariant {
   updatedAt          DateTime @updatedAt
 
   productionItems ProductionOrderItem[]
+  purchaseItems   PurchaseItem[]
   saleItems       SaleItem[]
 
   @@unique([productId, size, color])
@@ -674,23 +736,28 @@ model ProductCostSnapshot {
 // -----------------------------------------------------------------------------
 
 model Workshop {
-  id         String         @id @default(cuid())
-  name       String
-  types      WorkshopType[]
-  isInternal Boolean        @default(false)
-  cuit       String?        @unique
-  contact    String?
-  phone      String?
-  address    String?
-  notes      String?
-  active     Boolean        @default(true)
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  name            String
+  types           WorkshopType[]
+  isInternal      Boolean        @default(false)
+  cuit            String?        @unique
+  /// Define si factura con IVA discriminado (A) o no (C, monotributo)
+  taxCondition    TaxCondition   @default(MONOTRIBUTO)
+  paymentTermDays Int            @default(30)
+  contact         String?
+  phone           String?
+  address         String?
+  notes           String?
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  serviceCosts ServiceCost[]
-  remits       WorkshopRemit[]
-  stageLogs    ProductionStageLog[]
-  payables     AccountPayable[]
+  serviceCosts  ServiceCost[]
+  remits        WorkshopRemit[]
+  stageLogs     ProductionStageLog[]
+  payables      AccountPayable[]
+  purchases     Purchase[]
+  paymentOrders PaymentOrder[]
 
   @@map("workshops")
 }
@@ -787,9 +854,13 @@ model WorkshopRemit {
   notes             String?
   createdById       String?
   createdBy         User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  /// Factura del taller que incluyó esta recepción
+  purchaseId        String?
+  purchase          Purchase?         @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   createdAt         DateTime          @default(now())
 
-  payables AccountPayable[]
+  payables      AccountPayable[]
+  purchaseItems PurchaseItem[]
 
   @@index([productionOrderId])
   @@index([workshopId, date])
@@ -880,9 +951,10 @@ model CashRegister {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  sessions  CashRegisterSession[]
-  movements CashMovement[]
-  payments  Payment[]
+  paymentOrders PaymentOrder[]
+  sessions      CashRegisterSession[]
+  movements     CashMovement[]
+  payments      Payment[]
 
   @@map("cash_registers")
 }
@@ -930,6 +1002,8 @@ model CashMovement {
   sale            Sale?                @relation(fields: [saleId], references: [id], onDelete: SetNull)
   /// Vincula ambas patas de una transferencia entre cajas
   transferGroupId String?
+  paymentOrderId  String?
+  paymentOrder    PaymentOrder?        @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
   userId          String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt       DateTime             @default(now())
@@ -939,6 +1013,33 @@ model CashMovement {
   @@index([cashRegisterId, createdAt])
   @@index([sessionId])
   @@map("cash_movements")
+}
+
+/// Orden de pago a proveedor o taller. Imputa a uno o varios comprobantes (un Payment por cada uno).
+model PaymentOrder {
+  id             String        @id @default(cuid())
+  number         Int           @unique @default(autoincrement())
+  supplierId     String?
+  supplier       Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  workshopId     String?
+  workshop       Workshop?     @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  date           DateTime      @default(now())
+  method         PaymentMethod
+  cashRegisterId String
+  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  amount         Decimal       @db.Decimal(14, 2)
+  reference      String?
+  notes          String?
+  createdById    String
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+
+  payments      Payment[]
+  cashMovements CashMovement[]
+
+  @@index([supplierId, date])
+  @@index([workshopId, date])
+  @@map("payment_orders")
 }
 
 model Payment {
@@ -955,6 +1056,8 @@ model Payment {
   sale                Sale?              @relation(fields: [saleId], references: [id], onDelete: Cascade)
   accountReceivableId String?
   accountReceivable   AccountReceivable? @relation(fields: [accountReceivableId], references: [id], onDelete: SetNull)
+  paymentOrderId      String?
+  paymentOrder        PaymentOrder?      @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
   accountPayableId    String?
   accountPayable      AccountPayable?    @relation(fields: [accountPayableId], references: [id], onDelete: SetNull)
   cashRegisterId      String?

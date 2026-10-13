@@ -20,7 +20,7 @@ Producción: `npm run db:deploy && npm run build && npm start`.
 
 | Script | Uso |
 | --- | --- |
-| `npm test` | Tests unitarios (Vitest): escandallo, flujo de producción y permisos |
+| `npm test` | Tests unitarios (Vitest): escandallo, flujo de producción, compras/pagos y permisos |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (config Next) |
 | `npm run db:studio` | Prisma Studio |
@@ -87,6 +87,23 @@ Etapas: **Corte interno → Taller de confección → Personalización (opcional
 - **Remito imprimible** A4 en `/produccion/remitos/[id]`.
 - Las operaciones bloquean la fila de la orden (`SELECT … FOR UPDATE`) para evitar dobles registros simultáneos.
 
+## Módulo D — Compras y cuentas a pagar
+
+Las compras se separan en dos tipos de comprobante (`Purchase.kind`):
+
+**Mercadería** (`/compras/mercaderia/nueva`), con ítems clasificados en:
+- **Materia prima** (telas): se pueden comprar por metro o por kg; la cantidad y el costo se convierten a la unidad de stock con el rendimiento m/kg de la tela.
+- **Avíos, insumos y empaque**.
+- **Producto terminado**: si el producto es de reventa (`Product.sourcing = REVENTA`), actualiza su costo con el último precio de compra.
+
+Al registrar: sube el stock, guarda el costo anterior y el nuevo en cada ítem, actualiza el costo de reposición (con historial) y recalcula en cascada las fichas técnicas. El formulario anticipa la variación de costo, cuántas fichas se recalculan y advierte variaciones de ±30% o más; el resultado lista las fichas cuyo precio de lista quedó por debajo del sugerido.
+
+**Servicios de taller** (`/compras/talleres/nueva`): factura de un taller de confección o personalización cargada sobre las recepciones con remito todavía no facturadas. La factura reemplaza la deuda provisoria de cada recepción (los pagos ya hechos se reimputan a la factura, sin duplicar deuda) y, si el precio facturado difiere del pactado, ajusta el costo real de la orden de producción.
+
+Ambos tipos guardan los datos del Libro IVA Compras: tipo de comprobante (A/B/C), punto de venta y número, neto, IVA por alícuota (21 / 10,5 / 27), percepciones de IVA e IIBB y otros impuestos. Solo la factura A discrimina IVA. Se bloquea la carga duplicada del mismo comprobante. La anulación revierte stock o recepciones y exige motivo (queda auditada); no se permite si tiene pagos.
+
+**Cuentas a pagar** (`/compras/cuentas`): saldos de proveedores y talleres con antigüedad (a vencer, 1-30, 31-60, 61-90, +90 días), extracto con saldo corrido y **órdenes de pago** que imputan un importe a varios comprobantes (del vencimiento más viejo al más nuevo), registran el egreso en la caja o cuenta elegida y se imprimen para firmar.
+
 ## Pendiente para los próximos módulos
 
-POS y cajas, CRM y presupuestos, compras y cuentas corrientes (incluido el pago de fasón a talleres), facturación ARCA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.
+POS y cajas (apertura/cierre de turno: hoy los pagos en efectivo se registran como egreso de la caja, pero solo quedan dentro de un arqueo si hay un turno abierto), CRM y presupuestos, cuentas corrientes de clientes, facturación ARCA, Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.

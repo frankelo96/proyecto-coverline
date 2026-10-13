@@ -13,7 +13,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "../src/generated/prisma/client";
 import type {
   ProductCategory,
+  ProductSourcing,
   RawMaterialType,
+  TaxCondition,
   ServiceType,
   UnitOfMeasure,
   WorkshopType,
@@ -42,6 +44,7 @@ const ROLES = [
 const SUPPLIERS = [
   { cuit: "30-71111111-1", businessName: "Textil del Oeste S.A.", paymentTermDays: 60 },
   { cuit: "30-72222222-2", businessName: "Avíos Once S.R.L.", paymentTermDays: 30 },
+  { cuit: "30-73333333-3", businessName: "Calzados Industriales S.R.L.", paymentTermDays: 45 },
 ];
 
 const MATERIALS: {
@@ -69,11 +72,11 @@ const MATERIALS: {
   { code: "EMP-BOL-PP", name: "Bolsa PP con solapa", type: "EMPAQUE", uom: "UNIDAD", cost: 60, supplier: "30-72222222-2" },
 ];
 
-const WORKSHOPS: { cuit: string | null; name: string; types: WorkshopType[]; isInternal: boolean }[] = [
-  { cuit: null, name: "Planta Coverline", types: ["PLANCHADO"], isInternal: true },
-  { cuit: "20-30333333-3", name: "Taller Confecciones Morón", types: ["CONFECCION"], isInternal: false },
-  { cuit: "27-30444444-4", name: "Bordados Ituzaingó", types: ["BORDADO"], isInternal: false },
-  { cuit: "20-30555555-5", name: "Estampería Haedo", types: ["ESTAMPADO", "SUBLIMACION"], isInternal: false },
+const WORKSHOPS: { cuit: string | null; name: string; types: WorkshopType[]; isInternal: boolean; taxCondition: TaxCondition; paymentTermDays: number }[] = [
+  { cuit: null, name: "Planta Coverline", types: ["PLANCHADO"], isInternal: true, taxCondition: "RESPONSABLE_INSCRIPTO", paymentTermDays: 0 },
+  { cuit: "20-30333333-3", name: "Taller Confecciones Morón", types: ["CONFECCION"], isInternal: false, taxCondition: "RESPONSABLE_INSCRIPTO", paymentTermDays: 15 },
+  { cuit: "27-30444444-4", name: "Bordados Ituzaingó", types: ["BORDADO"], isInternal: false, taxCondition: "MONOTRIBUTO", paymentTermDays: 15 },
+  { cuit: "20-30555555-5", name: "Estampería Haedo", types: ["ESTAMPADO", "SUBLIMACION"], isInternal: false, taxCondition: "MONOTRIBUTO", paymentTermDays: 30 },
 ];
 
 const SERVICES: { key: string; type: ServiceType; name: string; cost: number; unitLabel: string; workshop?: string }[] = [
@@ -92,6 +95,8 @@ const PRODUCTS: {
   sku: string;
   name: string;
   category: ProductCategory;
+  sourcing?: ProductSourcing;
+  baseCost?: number;
   pricingPct: number;
   overheadPct: number;
   listPrice: number;
@@ -148,6 +153,20 @@ const PRODUCTS: {
       { key: "planchado", quantity: 1 },
       { key: "flete-taller", quantity: 2 },
     ],
+  },
+  {
+    sku: "ZS-ACE-100",
+    name: "Zapato de seguridad puntera de acero",
+    category: "ACCESORIO",
+    sourcing: "REVENTA",
+    baseCost: 38000,
+    pricingPct: 60,
+    overheadPct: 0,
+    listPrice: 62000,
+    sizes: ["38", "39", "40", "41", "42", "43", "44", "45"],
+    color: "Negro",
+    bom: [],
+    services: [],
   },
 ];
 
@@ -206,7 +225,9 @@ async function main() {
   const workshopIds = new Map<string, string>();
   for (const w of WORKSHOPS) {
     const existing = await prisma.workshop.findFirst({ where: { name: w.name } });
-    const ws = existing ?? (await prisma.workshop.create({ data: w }));
+    const ws = existing
+      ? await prisma.workshop.update({ where: { id: existing.id }, data: { taxCondition: w.taxCondition, paymentTermDays: w.paymentTermDays } })
+      : await prisma.workshop.create({ data: w });
     workshopIds.set(w.name, ws.id);
   }
   const serviceIds = new Map<string, string>();
@@ -250,6 +271,9 @@ async function main() {
         sku: p.sku,
         name: p.name,
         category: p.category,
+        sourcing: p.sourcing ?? "FABRICADO",
+        currentCost: D(p.baseCost ?? 0),
+        costUpdatedAt: p.baseCost ? new Date() : null,
         pricingMode: "MARKUP",
         pricingPct: D(p.pricingPct),
         overheadPct: D(p.overheadPct),
@@ -265,6 +289,10 @@ async function main() {
       });
     }
 
+    if (p.sourcing === "REVENTA") {
+      console.log(`  ${p.sku.padEnd(12)} reventa, costo ${p.baseCost}`);
+      continue;
+    }
     const hasSheet = (await prisma.productBOM.count({ where: { productId: product.id } })) > 0;
     if (!hasSheet) {
       await prisma.productBOM.createMany({

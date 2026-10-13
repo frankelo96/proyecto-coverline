@@ -14,6 +14,10 @@ export interface NavItem {
 
 export function AppHeader({ items, userName, roleName }: { items: NavItem[]; userName: string; roleName: string }) {
   const pathname = usePathname();
+  // Activo: el ítem con el prefijo más largo que coincide (/compras vs /compras/cuentas).
+  const activeHref = items
+    .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
   return (
     <header className="bg-ink text-ink-foreground">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-8">
@@ -24,7 +28,7 @@ export function AppHeader({ items, userName, roleName }: { items: NavItem[]; use
         </Link>
         <nav aria-label="Módulos" className="order-3 flex w-full flex-wrap gap-1 text-sm lg:order-none lg:w-auto">
           {items.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = item.href === activeHref;
             return (
               <Link
                 key={item.href}

@@ -9,6 +9,10 @@ export const PERMISSIONS = {
   productionWrite: "production:write",
   productionCostWrite: "production:cost:write",
   workshopsRead: "production:workshops:read",
+  purchasesRead: "purchases:read",
+  purchasesWrite: "purchases:write",
+  payablesRead: "accounts:payables:read",
+  payablesPay: "accounts:payables:pay",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
