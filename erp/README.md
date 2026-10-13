@@ -20,7 +20,7 @@ Producción: `npm run db:deploy && npm run build && npm start`.
 
 | Script | Uso |
 | --- | --- |
-| `npm test` | Tests unitarios (Vitest): escandallo, flujo de producción, compras/pagos y permisos |
+| `npm test` | Tests unitarios (Vitest): escandallo, producción, compras/pagos, POS, cajas, cheques, ticket y permisos |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (config Next) |
 | `npm run db:studio` | Prisma Studio |
@@ -104,6 +104,39 @@ Ambos tipos guardan los datos del Libro IVA Compras: tipo de comprobante (A/B/C)
 
 **Cuentas a pagar** (`/compras/cuentas`): saldos de proveedores y talleres con antigüedad (a vencer, 1-30, 31-60, 61-90, +90 días), extracto con saldo corrido y **órdenes de pago** que imputan un importe a varios comprobantes (del vencimiento más viejo al más nuevo), registran el egreso en la caja o cuenta elegida y se imprimen para firmar.
 
+## Módulo C — POS, cajas, tesorería y cheques
+
+**Sucursales y cajas**
+- Locales **Recta Martinolli** y **Villa Allende**, cada uno con su **caja diaria** que trabaja por turnos.
+- **Caja negra** (resguardo, sin turnos): recibe los retiros de efectivo de las cajas diarias y desde ahí salen los pagos en efectivo.
+- **Banco** y **Mercado Pago** como cuentas; cada una declara qué medios de cobro se le acreditan por defecto (`CashRegister.defaultForMethods`).
+- Regla dura: ninguna caja que trabaja por turnos acepta movimientos sin turno abierto, y ninguna caja física puede quedar con saldo negativo. Lo que está en el cajón del local nunca se mezcla con tesorería.
+
+**Turnos** (`/pos/[caja]`)
+- Apertura con el efectivo contado; si no coincide con el cierre anterior, se registra la diferencia y se avisa.
+- Durante el turno: retiros a caja negra e ingresos/egresos menores con concepto. El POS nunca muestra el saldo del cajón.
+- **Cierre ciego**: se declara lo contado sin ver lo esperado; el sobrante o faltante queda como ajuste auditado. Se elige el fondo que queda para el día siguiente y el resto se retira a caja negra en el mismo paso.
+- Arqueo imprimible con esperado vs. contado, cobros por medio y movimientos del cajón.
+
+**Venta**
+- Búsqueda por prenda, talle o SKU con Enter para agregar.
+- Venta fraccionada e ítems libres (medidas especiales, arreglos).
+- Precios calculados por el servidor (lista neta + IVA + ajuste de talle).
+- Descuentos por línea o generales, con permiso y motivo obligatorio (auditados).
+- Comprobante: ticket, factura B o factura A (solo a responsables inscriptos con CUIT); numeración por punto de venta del local.
+- Medios de cobro: efectivo con vuelto, débito, crédito con cuotas, Mercado Pago, MODO, transferencia, cheque, eCheq y cuenta corriente (con control del límite de crédito).
+- Destino de cada cobro: el efectivo va al cajón; tarjetas, QR y transferencias a su cuenta; los cheques a cartera; la cuenta corriente genera deuda del cliente.
+- Ticket térmico **58 mm (32 columnas) / 80 mm (48 columnas)** en pantalla y en texto plano ASCII para enviar a impresoras ESC/POS (`/api/tickets/[id]?ancho=58|80`).
+
+**Cheques y eCheqs** (`/tesoreria/cheques`)
+- **De terceros**: se reciben en ventas y cobranzas y quedan en cartera. Desde ahí se depositan, se cobran en efectivo o se **endosan a proveedores y talleres** en la orden de pago. Si se rechazan, se reabre la deuda del cliente y, si estaban endosados, también la del proveedor.
+- **Propios / eCheqs**: se emiten en la orden de pago contra una cuenta bancaria y recién descuentan del banco al marcarlos debitados.
+- Se valida el ciclo de vida, el plazo de pago diferido (máx. 360 días) y que no se cobren ni depositen antes de su fecha.
+
+**Órdenes de pago con varios instrumentos**: efectivo de caja negra, transferencia, endoso de cheques de terceros y cheque propio o eCheq, combinados en una misma orden.
+
+**Cobranzas de cuenta corriente** (`/tesoreria/cobranzas`): saldos por antigüedad, extracto y recibo imprimible con imputación automática del vencimiento más viejo al más nuevo.
+
 ## Pendiente para los próximos módulos
 
-POS y cajas (apertura/cierre de turno: hoy los pagos en efectivo se registran como egreso de la caja, pero solo quedan dentro de un arqueo si hay un turno abierto), CRM y presupuestos, cuentas corrientes de clientes, facturación ARCA, Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.
+Facturación electrónica ARCA (las facturas A/B ya se numeran por punto de venta y quedan "pendientes de CAE"), notas de crédito y devoluciones, liquidación de tarjetas (comisiones y acreditación diferida), CRM y presupuestos, Libro IVA y reportes. Alta/edición de usuarios, talleres y materias primas desde la app.

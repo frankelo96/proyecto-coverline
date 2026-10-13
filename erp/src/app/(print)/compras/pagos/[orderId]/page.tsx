@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
-import { PAYMENT_METHOD_LABELS } from "@/lib/validations/purchasing";
 import { requirePageUser } from "@/server/auth/session";
 import { getPaymentOrderForPrint } from "@/server/queries/purchasing.queries";
 
@@ -74,20 +73,19 @@ export default async function PaymentOrderPrintPage({ params }: Props) {
         </tfoot>
       </table>
 
-      <section className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase">Forma de pago</p>
-          <p>
-            {PAYMENT_METHOD_LABELS[o.method as keyof typeof PAYMENT_METHOD_LABELS] ?? o.method} — {o.registerName}
-          </p>
-          {o.reference && <p>Referencia: {o.reference}</p>}
-        </div>
-        {o.notes && (
-          <div>
-            <p className="text-xs font-semibold uppercase">Observaciones</p>
-            <p>{o.notes}</p>
-          </div>
-        )}
+      <section>
+        <p className="mb-1 text-xs font-semibold uppercase">Forma de pago</p>
+        <table className="w-full border-collapse">
+          <tbody>
+            {o.instruments.map((i, idx) => (
+              <tr key={idx} className="border-b border-black/30">
+                <td className="py-1.5">{i.label}</td>
+                <td className="py-1.5 text-right font-mono">{formatMoney(i.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {o.notes && <p className="mt-3">Observaciones: {o.notes}</p>}
       </section>
 
       <footer className="mt-16 grid grid-cols-2 gap-16">

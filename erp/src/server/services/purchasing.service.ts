@@ -12,7 +12,10 @@
 import Decimal from "decimal.js";
 
 import { Prisma } from "@/generated/prisma/client";
-import type { InvoiceType, PurchaseItemType } from "@/generated/prisma/enums";
+import type { InvoiceType, PaymentMethod, PurchaseItemType } from "@/generated/prisma/enums";
+import { chequeLabel } from "@/lib/treasury/cheques";
+import { endorseCheque, issueOwnCheque } from "@/server/services/cheque.service";
+import { addMovement, lockRegister } from "@/server/services/treasury.service";
 import { formatMoney } from "@/lib/format";
 import { STAGE_LABELS } from "@/lib/production/workflow";
 import {
@@ -25,7 +28,7 @@ import {
   PurchasingError,
 } from "@/lib/purchasing/math";
 import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
-import type { MerchandisePurchaseInput, PaymentOrderInput, WorkshopInvoiceInput } from "@/lib/validations/purchasing";
+import type { MerchandisePurchaseInput, PaymentInstrument, PaymentOrderInput, WorkshopInvoiceInput } from "@/lib/validations/purchasing";
 import { priceFromCost } from "@/lib/costing/escandallo";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
 
@@ -415,9 +418,6 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
   if (!creditor) throw new PurchasingError("Acreedor inexistente");
   const creditorName = "businessName" in creditor ? creditor.businessName : creditor.name;
 
-  const register = await tx.cashRegister.findUnique({ where: { id: input.cashRegisterId } });
-  if (!register || !register.active) throw new PurchasingError("Caja o cuenta inexistente");
-
   await tx.$queryRaw`SELECT id FROM accounts_payable WHERE id IN (${Prisma.join(input.payableIds)}) FOR UPDATE`;
   const payables = await tx.accountPayable.findMany({ where: { id: { in: input.payableIds } } });
   if (payables.length !== new Set(input.payableIds).size) throw new PurchasingError("Algún comprobante no existe");
@@ -427,38 +427,83 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     if (p.status !== "PENDIENTE" && p.status !== "PARCIAL") throw new PurchasingError(`"${p.description}" no tiene saldo pendiente`);
   }
 
+  // Cheques de terceros a endosar: se toman por su importe completo.
+  const chequeIds = input.instruments.flatMap((i) => (i.type === "THIRD_CHEQUE" ? [i.chequeId] : []));
+  if (new Set(chequeIds).size !== chequeIds.length) throw new PurchasingError("Hay cheques repetidos");
+  const cheques = chequeIds.length ? await tx.cheque.findMany({ where: { id: { in: chequeIds } } }) : [];
+  const amountOf = (i: PaymentInstrument) =>
+    i.type === "THIRD_CHEQUE" ? new Decimal(cheques.find((c) => c.id === i.chequeId)?.amount.toString() ?? "0") : new Decimal(i.amount);
+  const total = input.instruments.reduce((a, i) => a.plus(amountOf(i)), new Decimal(0)).toDecimalPlaces(2);
+
   const allocations = allocatePayment(
-    input.amount,
+    total.toNumber(),
     payables.map((p) => ({ id: p.id, balance: p.balance.toNumber(), dueDate: p.dueDate })),
   );
+
+  const methods = new Set(
+    input.instruments.map((i) => (i.type === "REGISTER" ? i.method : i.type === "OWN_CHEQUE" ? (i.format === "ECHEQ" ? "ECHEQ" : "CHEQUE") : "CHEQUE")),
+  );
+  const summaryMethod = (methods.size === 1 ? [...methods][0] : "MIXTO") as PaymentMethod;
 
   const order = await tx.paymentOrder.create({
     data: {
       supplierId: isSupplier ? creditor.id : null,
       workshopId: isSupplier ? null : creditor.id,
-      method: input.method,
-      cashRegisterId: register.id,
-      amount: D(input.amount),
-      reference: input.reference,
+      method: summaryMethod,
+      amount: D(total),
       notes: input.notes,
       createdById: userId,
     },
     select: { id: true, number: true },
   });
+  const concept = `Orden de pago #${order.number} — ${creditorName}`;
+
+  for (const inst of input.instruments) {
+    if (inst.type === "REGISTER") {
+      const register = await lockRegister(tx, inst.cashRegisterId);
+      await addMovement(tx, {
+        register,
+        type: "EGRESO",
+        method: inst.method,
+        amount: inst.amount,
+        concept: `${concept} (${PAYMENT_METHOD_LABELS[inst.method]}${inst.reference ? ` ${inst.reference}` : ""})`,
+        userId,
+        paymentOrderId: order.id,
+      });
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: order.id, method: inst.method, amount: D(inst.amount), cashRegisterId: register.id, reference: inst.reference },
+      });
+    } else if (inst.type === "THIRD_CHEQUE") {
+      const cheque = await endorseCheque(tx, inst.chequeId, order.id, creditorName);
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: order.id, method: cheque.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: cheque.amount, chequeId: cheque.id, reference: chequeLabel(cheque) },
+      });
+    } else {
+      const cheque = await issueOwnCheque(
+        tx,
+        {
+          format: inst.format,
+          bankRegisterId: inst.bankRegisterId,
+          number: inst.number,
+          amount: inst.amount,
+          issueDate: new Date(),
+          paymentDate: new Date(inst.paymentDate),
+          deliveredTo: creditorName,
+          paymentOrderId: order.id,
+        },
+        userId,
+      );
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: order.id, method: inst.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: D(inst.amount), cashRegisterId: inst.bankRegisterId, chequeId: cheque.id, reference: chequeLabel(cheque) },
+      });
+    }
+  }
 
   for (const a of allocations) {
     const p = payables.find((x) => x.id === a.payableId)!;
     const newBalance = new Decimal(p.balance.toString()).minus(a.amount);
     await tx.payment.create({
-      data: {
-        method: input.method,
-        amount: D(a.amount),
-        reference: input.reference,
-        accountPayableId: p.id,
-        paymentOrderId: order.id,
-        cashRegisterId: register.id,
-        createdById: userId,
-      },
+      data: { method: summaryMethod, amount: D(a.amount), accountPayableId: p.id, paymentOrderId: order.id, createdById: userId },
     });
     await tx.accountPayable.update({
       where: { id: p.id },
@@ -466,22 +511,5 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     });
   }
 
-  // Egreso en caja/cuenta. Si la caja trabaja por turnos y hay uno abierto, queda dentro del arqueo.
-  const session = register.requiresSession
-    ? await tx.cashRegisterSession.findFirst({ where: { cashRegisterId: register.id, status: "ABIERTA" }, select: { id: true } })
-    : null;
-  await tx.cashMovement.create({
-    data: {
-      cashRegisterId: register.id,
-      sessionId: session?.id ?? null,
-      type: "EGRESO",
-      method: input.method,
-      amount: D(input.amount),
-      concept: `Orden de pago #${order.number} — ${creditorName} (${PAYMENT_METHOD_LABELS[input.method]})`,
-      paymentOrderId: order.id,
-      userId,
-    },
-  });
-
-  return { ...order, allocated: allocations.length, message: `Orden de pago #${order.number} por ${formatMoney(input.amount)} registrada` };
+  return { ...order, allocated: allocations.length, message: `Orden de pago #${order.number} por ${formatMoney(total.toNumber())} registrada` };
 }

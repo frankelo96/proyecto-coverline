@@ -4,7 +4,6 @@ import type {
   AccountStatus,
   CashRegisterKind,
 
-  PaymentMethod,
   ProductionStage,
   ProductSourcing,
   PurchaseItemType,
@@ -17,7 +16,10 @@ import type {
 import { agingSummary, purchasableUoms, type AgingBucket } from "@/lib/purchasing/math";
 import { db } from "@/server/db";
 import { compareSizes } from "@/server/queries/production-orders.queries";
+import { chequeLabel } from "@/lib/treasury/cheques";
+import { PAYMENT_METHOD_LABELS } from "@/lib/validations/purchasing";
 import { invoiceLabel } from "@/server/services/purchasing.service";
+import { registerBalance } from "@/server/services/treasury.service";
 
 const OPEN: AccountStatus[] = ["PENDIENTE", "PARCIAL"];
 
@@ -323,7 +325,9 @@ export interface CreditorStatement {
   aging: Record<AgingBucket, number>;
   open: { id: string; description: string; issueDate: string; dueDate: string; amount: number; balance: number; status: AccountStatus; provisional: boolean }[];
   lines: StatementLine[];
-  registers: { id: string; name: string; kind: CashRegisterKind }[];
+  registers: { id: string; name: string; kind: CashRegisterKind; requiresSession: boolean; hasOpenSession: boolean; balance: number }[];
+  /** Cheques de terceros en cartera disponibles para endosar. */
+  cheques: { id: string; label: string; issuerName: string; amount: number; paymentDate: string }[];
 }
 
 export async function getCreditorStatement(type: CreditorType, id: string): Promise<CreditorStatement | null> {
@@ -336,8 +340,16 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
   const whereOwner = isSupplier ? { supplierId: id } : { workshopId: id };
   const [payables, orders, registers] = await Promise.all([
     db.accountPayable.findMany({ where: { ...whereOwner, status: { not: "ANULADO" } }, orderBy: { issueDate: "asc" } }),
-    db.paymentOrder.findMany({ where: whereOwner, orderBy: { date: "asc" }, include: { cashRegister: { select: { name: true } } } }),
-    db.cashRegister.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    db.paymentOrder.findMany({
+      where: whereOwner,
+      orderBy: { date: "asc" },
+      include: { cashRegister: { select: { name: true } }, items: { include: { cashRegister: { select: { name: true } } } } },
+    }),
+    db.cashRegister.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      include: { sessions: { where: { status: "ABIERTA" }, select: { id: true } } },
+    }),
   ]);
 
   // Extracto: documentos (debe) y órdenes de pago (haber) con saldo corrido.
@@ -355,7 +367,11 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
       key: `p-${o.id}`,
       at: o.date,
       kind: "PAGO" as const,
-      description: `Orden de pago #${o.number} — ${o.cashRegister.name}${o.reference ? ` (${o.reference})` : ""}`,
+      description: `Orden de pago #${o.number} — ${
+        o.items.length
+          ? o.items.map((i) => (i.chequeId ? (i.reference ?? "Cheque") : `${PAYMENT_METHOD_LABELS[i.method]} ${i.cashRegister?.name ?? ""}`.trim())).join(" + ")
+          : (o.cashRegister?.name ?? "")
+      }${o.reference ? ` (${o.reference})` : ""}`,
       debit: 0,
       credit: o.amount.toNumber(),
       href: `/compras/pagos/${o.id}`,
@@ -390,7 +406,19 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
         provisional: p.workshopRemitId !== null,
       })),
     lines,
-    registers: registers.map((r) => ({ id: r.id, name: r.name, kind: r.kind })),
+    registers: await Promise.all(
+      registers.map(async (r) => ({
+        id: r.id,
+        name: r.name,
+        kind: r.kind,
+        requiresSession: r.requiresSession,
+        hasOpenSession: r.sessions.length > 0,
+        balance: await registerBalance(db, r.id),
+      })),
+    ),
+    cheques: (
+      await db.cheque.findMany({ where: { kind: "TERCERO", status: "EN_CARTERA" }, orderBy: { paymentDate: "asc" } })
+    ).map((c) => ({ id: c.id, label: chequeLabel(c), issuerName: c.issuerName, amount: c.amount.toNumber(), paymentDate: c.paymentDate.toISOString() })),
   };
 }
 
@@ -402,21 +430,28 @@ export async function getPaymentOrderForPrint(id: string) {
       workshop: { select: { name: true, cuit: true } },
       cashRegister: { select: { name: true } },
       createdBy: { select: { name: true } },
+      items: { include: { cashRegister: { select: { name: true } }, cheque: true } },
       payments: { include: { accountPayable: { select: { description: true, dueDate: true } } } },
     },
   });
   if (!o) return null;
+  const instruments = o.items.length
+    ? o.items.map((i) => ({
+        label: i.cheque
+          ? `${i.cheque.kind === "PROPIO" ? "Cheque propio" : "Cheque de terceros"} ${chequeLabel(i.cheque)} — vto. ${i.cheque.paymentDate.toLocaleDateString("es-AR")}${i.cheque.kind === "TERCERO" ? ` — librador ${i.cheque.issuerName}` : ""}`
+          : `${PAYMENT_METHOD_LABELS[i.method]} — ${i.cashRegister?.name ?? ""}${i.reference ? ` (${i.reference})` : ""}`,
+        amount: i.amount.toNumber(),
+      }))
+    : [{ label: `${PAYMENT_METHOD_LABELS[o.method ?? "MIXTO"]} — ${o.cashRegister?.name ?? ""}${o.reference ? ` (${o.reference})` : ""}`, amount: o.amount.toNumber() }];
   return {
     number: o.number,
     date: o.date.toISOString(),
     creditorName: o.supplier?.businessName ?? o.workshop?.name ?? "",
     creditorCuit: o.supplier?.cuit ?? o.workshop?.cuit ?? null,
-    method: o.method as PaymentMethod,
-    registerName: o.cashRegister.name,
     amount: o.amount.toNumber(),
-    reference: o.reference,
     notes: o.notes,
     createdBy: o.createdBy.name,
+    instruments,
     lines: o.payments.map((p) => ({
       description: p.accountPayable?.description ?? "—",
       dueDate: p.accountPayable?.dueDate.toISOString() ?? null,
@@ -424,4 +459,3 @@ export async function getPaymentOrderForPrint(id: string) {
     })),
   };
 }
-

@@ -36,7 +36,7 @@ const ROLES = [
   {
     name: "VENDEDOR",
     description: "POS, clientes y presupuestos",
-    permissions: ["pos:sell", "pos:discount", "crm:read", "crm:write", "cash:session", "production:read"],
+    permissions: ["pos:sell", "pos:discount", "crm:read", "crm:write", "cash:session", "accounts:receivables:collect", "production:read"],
   },
   { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*"] },
 ];
@@ -185,15 +185,43 @@ async function main() {
     });
   }
 
-  // --- Cajas y cuentas -------------------------------------------------------
+  // --- Sucursales, cajas y cuentas ------------------------------------------------
+  const branches = [
+    { name: "Recta Martinolli", pointOfSale: 1 },
+    { name: "Villa Allende", pointOfSale: 2 },
+  ];
+  const branchIds = new Map<string, string>();
+  for (const b of branches) {
+    const branch = await prisma.branch.upsert({ where: { name: b.name }, update: {}, create: b });
+    branchIds.set(b.name, branch.id);
+  }
+
+  // Versiones anteriores del seed: la caja administrativa pasa a ser la caja negra y la de mostrador se retira.
+  const legacyAdmin = await prisma.cashRegister.findUnique({ where: { name: "Caja Administrativa" } });
+  if (legacyAdmin && !(await prisma.cashRegister.findUnique({ where: { name: "Caja Negra" } }))) {
+    await prisma.cashRegister.update({ where: { id: legacyAdmin.id }, data: { name: "Caja Negra", kind: "CAJA_RESGUARDO", requiresSession: false } });
+  }
+  await prisma.cashRegister.updateMany({ where: { name: "Caja Diaria Mostrador" }, data: { active: false } });
+
   const registers = [
-    { name: "Caja Diaria Mostrador", kind: "CAJA_DIARIA" as const, requiresSession: true },
-    { name: "Caja Administrativa", kind: "CAJA_ADMINISTRATIVA" as const, requiresSession: true },
-    { name: "Mercado Pago", kind: "BILLETERA_VIRTUAL" as const, requiresSession: false },
-    { name: "Banco Cuenta Corriente", kind: "BANCO" as const, requiresSession: false },
+    { name: "Caja diaria Recta Martinolli", kind: "CAJA_DIARIA" as const, requiresSession: true, branchId: branchIds.get("Recta Martinolli")!, defaultForMethods: [] },
+    { name: "Caja diaria Villa Allende", kind: "CAJA_DIARIA" as const, requiresSession: true, branchId: branchIds.get("Villa Allende")!, defaultForMethods: [] },
+    { name: "Caja Negra", kind: "CAJA_RESGUARDO" as const, requiresSession: false, branchId: null, defaultForMethods: [] },
+    { name: "Mercado Pago", kind: "BILLETERA_VIRTUAL" as const, requiresSession: false, branchId: null, defaultForMethods: ["MERCADO_PAGO" as const, "MODO" as const] },
+    {
+      name: "Banco Cuenta Corriente",
+      kind: "BANCO" as const,
+      requiresSession: false,
+      branchId: null,
+      defaultForMethods: ["TRANSFERENCIA" as const, "TARJETA_DEBITO" as const, "TARJETA_CREDITO" as const],
+    },
   ];
   for (const r of registers) {
-    await prisma.cashRegister.upsert({ where: { name: r.name }, update: {}, create: r });
+    await prisma.cashRegister.upsert({
+      where: { name: r.name },
+      update: { kind: r.kind, requiresSession: r.requiresSession, branchId: r.branchId, defaultForMethods: r.defaultForMethods, active: true },
+      create: r,
+    });
   }
 
   // --- Proveedores y materias primas ----------------------------------------
@@ -259,6 +287,21 @@ async function main() {
       taxCondition: "EXENTO",
       tags: ["colegio", "reposicion-anual"],
       purchaseMonths: [11, 12, 2],
+      creditLimit: D(10_000_000),
+      paymentTermDays: 30,
+    },
+  });
+  await prisma.client.upsert({
+    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-71555555-5" } },
+    update: {},
+    create: {
+      type: "GASTRONOMICO",
+      businessName: "Gastronómica del Centro S.A. (ejemplo)",
+      documentType: "CUIT",
+      documentNumber: "30-71555555-5",
+      taxCondition: "RESPONSABLE_INSCRIPTO",
+      creditLimit: D(3_000_000),
+      paymentTermDays: 30,
     },
   });
 

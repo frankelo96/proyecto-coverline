@@ -13,6 +13,14 @@ export const PERMISSIONS = {
   purchasesWrite: "purchases:write",
   payablesRead: "accounts:payables:read",
   payablesPay: "accounts:payables:pay",
+  posSell: "pos:sell",
+  posDiscount: "pos:discount",
+  cashSession: "cash:session",
+  cashRead: "cash:read",
+  cashManage: "cash:manage",
+  chequesManage: "cash:cheques",
+  receivablesRead: "accounts:receivables:read",
+  receivablesCollect: "accounts:receivables:collect",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

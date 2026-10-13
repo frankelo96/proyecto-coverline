@@ -16,13 +16,13 @@ export function useServerAction() {
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<ActionStatus>(null);
 
-  function execute<T>(action: () => Promise<ActionResult<T>>, onSuccess?: (data: T) => void) {
+  function execute<T>(action: () => Promise<ActionResult<T>>, onSuccess?: (data: T, message: string) => void) {
     setStatus(null);
     startTransition(async () => {
       const result = await action();
       if (result.ok) {
         setStatus({ kind: "success", text: result.message ?? "Listo" });
-        onSuccess?.(result.data);
+        onSuccess?.(result.data, result.message ?? "Listo");
         router.refresh();
       } else {
         setStatus({ kind: "error", text: result.error });

@@ -170,11 +170,18 @@ enum PaymentMethod {
   MODO
   TRANSFERENCIA
   CUENTA_CORRIENTE
+  /// Cheque físico (de terceros o propio según Cheque.kind)
+  CHEQUE
+  ECHEQ
+  /// Solo para imputaciones de una orden de pago con varios instrumentos
+  MIXTO
 }
 
 enum CashRegisterKind {
   CAJA_DIARIA
   CAJA_ADMINISTRATIVA
+  /// Caja negra / resguardo: recibe retiros de las cajas diarias y paga en efectivo
+  CAJA_RESGUARDO
   BILLETERA_VIRTUAL
   BANCO
 }
@@ -189,8 +196,34 @@ enum CashMovementType {
   INGRESO
   EGRESO
   AJUSTE
+  AJUSTE_SOBRANTE
+  AJUSTE_FALTANTE
   TRANSFERENCIA_ENTRADA
   TRANSFERENCIA_SALIDA
+}
+
+enum ChequeKind {
+  TERCERO
+  PROPIO
+}
+
+enum ChequeFormat {
+  FISICO
+  ECHEQ
+}
+
+enum ChequeStatus {
+  /// De terceros
+  EN_CARTERA
+  DEPOSITADO
+  COBRADO
+  ENDOSADO
+  /// Propios
+  EMITIDO
+  DEBITADO
+  /// Ambos
+  RECHAZADO
+  ANULADO
 }
 
 enum AccountStatus {
@@ -266,6 +299,8 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   authSessions         Session[]
+  chequesCreated       Cheque[]
+  receipts             Receipt[]
   purchasesCreated     Purchase[]
   paymentOrders        PaymentOrder[]
   remitsCreated        WorkshopRemit[]
@@ -355,6 +390,8 @@ model Client {
   sales            Sale[]
   productionOrders ProductionOrder[]
   receivables      AccountReceivable[]
+  cheques          Cheque[]
+  receipts         Receipt[]
 
   @@unique([documentType, documentNumber])
   @@index([type])
@@ -882,6 +919,10 @@ model Sale {
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   cashSessionId   String?
   cashSession     CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  branchId        String?
+  branch          Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  /// Vuelto entregado en efectivo
+  changeAmount    Decimal              @default(0) @db.Decimal(14, 2)
   // --- Comprobante fiscal (ARCA/AFIP) ---
   invoiceType     InvoiceType          @default(TICKET_INTERNO)
   pointOfSale     Int?
@@ -937,51 +978,79 @@ model SaleItem {
   @@map("sale_items")
 }
 
+/// Sucursal / local de venta.
+model Branch {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  address     String?
+  /// Punto de venta ARCA para los comprobantes del local
+  pointOfSale Int?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cashRegisters CashRegister[]
+  sales         Sale[]
+
+  @@map("branches")
+}
+
 /// Caja física, billetera virtual o cuenta bancaria.
 model CashRegister {
-  id              String           @id @default(cuid())
-  name            String           @unique
-  kind            CashRegisterKind
+  id                String           @id @default(cuid())
+  name              String           @unique
+  kind              CashRegisterKind
   /// Las cajas físicas requieren turnos (apertura/cierre ciego); bancos y billeteras no.
-  requiresSession Boolean          @default(true)
-  bankName        String?
-  cbu             String?
-  alias           String?
-  active          Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  requiresSession   Boolean          @default(true)
+  /// Sucursal a la que pertenece (cajas diarias de local)
+  branchId          String?
+  branch            Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  /// Medios de cobro que se acreditan acá por defecto (ej. banco: transferencias y tarjetas)
+  defaultForMethods PaymentMethod[]
+  bankName          String?
+  cbu               String?
+  alias             String?
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  paymentOrders PaymentOrder[]
-  sessions      CashRegisterSession[]
-  movements     CashMovement[]
-  payments      Payment[]
+  paymentOrders     PaymentOrder[]
+  paymentOrderItems PaymentOrderItem[]
+  chequesHeld       Cheque[]
+  sessions          CashRegisterSession[]
+  movements         CashMovement[]
+  payments          Payment[]
 
   @@map("cash_registers")
 }
 
 /// Turno de caja. Regla de negocio (servicio): una sola sesión ABIERTA por caja.
 model CashRegisterSession {
-  id             String            @id @default(cuid())
-  cashRegisterId String
-  cashRegister   CashRegister      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
-  status         CashSessionStatus @default(ABIERTA)
-  openedById     String
-  openedBy       User              @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
-  openedAt       DateTime          @default(now())
-  openingAmount  Decimal           @db.Decimal(14, 2)
-  closedById     String?
-  closedBy       User?             @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
-  closedAt       DateTime?
+  id              String            @id @default(cuid())
+  cashRegisterId  String
+  cashRegister    CashRegister      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  status          CashSessionStatus @default(ABIERTA)
+  openedById      String
+  openedBy        User              @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt        DateTime          @default(now())
+  /// Efectivo contado al abrir
+  openingAmount   Decimal           @db.Decimal(14, 2)
+  /// Saldo que el sistema esperaba al abrir (cierre anterior menos retiros)
+  openingExpected Decimal           @default(0) @db.Decimal(14, 2)
+  closedById      String?
+  closedBy        User?             @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closedAt        DateTime?
   /// Calculado por el sistema al cierre (apertura + ingresos - egresos en efectivo)
-  expectedAmount Decimal?          @db.Decimal(14, 2)
+  expectedAmount  Decimal?          @db.Decimal(14, 2)
   /// Declarado por el cajero a ciegas (sin ver el esperado)
-  declaredAmount Decimal?          @db.Decimal(14, 2)
+  declaredAmount  Decimal?          @db.Decimal(14, 2)
   /// declarado - esperado: >0 sobrante, <0 faltante
-  difference     Decimal?          @db.Decimal(14, 2)
-  notes          String?
+  difference      Decimal?          @db.Decimal(14, 2)
+  notes           String?
 
   movements CashMovement[]
   sales     Sale[]
+  receipts  Receipt[]
 
   @@index([cashRegisterId, status])
   @@map("cash_register_sessions")
@@ -1004,6 +1073,10 @@ model CashMovement {
   transferGroupId String?
   paymentOrderId  String?
   paymentOrder    PaymentOrder?        @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  receiptId       String?
+  receipt         Receipt?             @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  chequeId        String?
+  cheque          Cheque?              @relation(fields: [chequeId], references: [id], onDelete: SetNull)
   userId          String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt       DateTime             @default(now())
@@ -1017,29 +1090,130 @@ model CashMovement {
 
 /// Orden de pago a proveedor o taller. Imputa a uno o varios comprobantes (un Payment por cada uno).
 model PaymentOrder {
-  id             String        @id @default(cuid())
-  number         Int           @unique @default(autoincrement())
+  id             String         @id @default(cuid())
+  number         Int            @unique @default(autoincrement())
   supplierId     String?
-  supplier       Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier       Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   workshopId     String?
-  workshop       Workshop?     @relation(fields: [workshopId], references: [id], onDelete: Restrict)
-  date           DateTime      @default(now())
-  method         PaymentMethod
-  cashRegisterId String
-  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
-  amount         Decimal       @db.Decimal(14, 2)
+  workshop       Workshop?      @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  date           DateTime       @default(now())
+  /// Medio único (órdenes anteriores). Las nuevas detallan sus instrumentos en items.
+  method         PaymentMethod?
+  cashRegisterId String?
+  cashRegister   CashRegister?  @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  amount         Decimal        @db.Decimal(14, 2)
   reference      String?
   notes          String?
   createdById    String
-  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt      DateTime      @default(now())
+  createdBy      User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
 
   payments      Payment[]
+  items         PaymentOrderItem[]
+  cheques       Cheque[]
   cashMovements CashMovement[]
 
   @@index([supplierId, date])
   @@index([workshopId, date])
   @@map("payment_orders")
+}
+
+/// Instrumento con el que se paga una orden de pago: efectivo/transferencia desde una caja o cuenta, o un cheque.
+model PaymentOrderItem {
+  id             String        @id @default(cuid())
+  paymentOrderId String
+  paymentOrder   PaymentOrder  @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  method         PaymentMethod
+  amount         Decimal       @db.Decimal(14, 2)
+  cashRegisterId String?
+  cashRegister   CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  chequeId       String?
+  cheque         Cheque?       @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  reference      String?
+
+  @@index([paymentOrderId])
+  @@map("payment_order_items")
+}
+
+/// Cheque o eCheq. TERCERO: recibido de un cliente (cartera). PROPIO: emitido por Coverline.
+model Cheque {
+  id              String        @id @default(cuid())
+  kind            ChequeKind
+  format          ChequeFormat  @default(FISICO)
+  status          ChequeStatus
+  bank            String
+  number          String
+  /// Librador (quien lo firma)
+  issuerName      String
+  issuerCuit      String?
+  amount          Decimal       @db.Decimal(14, 2)
+  issueDate       DateTime
+  /// Fecha de cobro (diferido)
+  paymentDate     DateTime
+  /// Cliente que lo entregó (terceros)
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Cuenta bancaria propia (propios) o cuenta donde se depositó / caja donde se cobró (terceros)
+  cashRegisterId  String?
+  cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  /// Orden de pago con la que se endosó (terceros) o entregó (propios)
+  paymentOrderId  String?
+  paymentOrder    PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  deliveredTo     String?
+  depositedAt     DateTime?
+  clearedAt       DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  notes           String?
+  createdById     String
+  createdBy       User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  payment           Payment?
+  paymentOrderItems PaymentOrderItem[]
+  movements         CashMovement[]
+  receivables       AccountReceivable[]
+
+  @@index([kind, status, paymentDate])
+  @@index([clientId])
+  @@map("cheques")
+}
+
+/// Recibo de cobranza de cuenta corriente de un cliente.
+model Receipt {
+  id          String               @id @default(cuid())
+  number      Int                  @unique @default(autoincrement())
+  clientId    String
+  client      Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  date        DateTime             @default(now())
+  amount      Decimal              @db.Decimal(14, 2)
+  sessionId   String?
+  session     CashRegisterSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  notes       String?
+  createdById String
+  createdBy   User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime             @default(now())
+
+  payments      Payment[]
+  allocations   ReceiptAllocation[]
+  cashMovements CashMovement[]
+
+  @@index([clientId, date])
+  @@map("receipts")
+}
+
+/// Imputación de un recibo a una deuda del cliente.
+model ReceiptAllocation {
+  id                  String            @id @default(cuid())
+  receiptId           String
+  receipt             Receipt           @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  accountReceivableId String
+  accountReceivable   AccountReceivable @relation(fields: [accountReceivableId], references: [id], onDelete: Restrict)
+  amount              Decimal           @db.Decimal(14, 2)
+
+  @@index([accountReceivableId])
+  @@map("receipt_allocations")
 }
 
 model Payment {
@@ -1054,6 +1228,12 @@ model Payment {
   surchargePct        Decimal            @default(0) @db.Decimal(6, 2)
   saleId              String?
   sale                Sale?              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  /// Cobranza de cuenta corriente (recibo)
+  receiptId           String?
+  receipt             Receipt?           @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  /// Cheque / eCheq recibido con este cobro
+  chequeId            String?            @unique
+  cheque              Cheque?            @relation(fields: [chequeId], references: [id], onDelete: SetNull)
   accountReceivableId String?
   accountReceivable   AccountReceivable? @relation(fields: [accountReceivableId], references: [id], onDelete: SetNull)
   paymentOrderId      String?
@@ -1090,10 +1270,14 @@ model AccountReceivable {
   amount      Decimal       @db.Decimal(14, 2)
   balance     Decimal       @db.Decimal(14, 2)
   status      AccountStatus @default(PENDIENTE)
+  /// Deuda generada por un cheque rechazado
+  chequeId    String?
+  cheque      Cheque?       @relation(fields: [chequeId], references: [id], onDelete: SetNull)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  payments Payment[]
+  payments    Payment[]
+  allocations ReceiptAllocation[]
 
   @@index([clientId, status, dueDate])
   @@map("accounts_receivable")

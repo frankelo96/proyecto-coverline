@@ -68,23 +68,47 @@ export const workshopInvoiceSchema = z
 export type WorkshopInvoiceInput = z.infer<typeof workshopInvoiceSchema>;
 
 export const PAYMENT_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "MODO", "TARJETA_DEBITO", "TARJETA_CREDITO"] as const;
-export const PAYMENT_METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
   TRANSFERENCIA: "Transferencia",
   MERCADO_PAGO: "Mercado Pago",
   MODO: "MODO",
   TARJETA_DEBITO: "Tarjeta de débito",
   TARJETA_CREDITO: "Tarjeta de crédito",
+  CHEQUE: "Cheque",
+  ECHEQ: "eCheq",
+  MIXTO: "Varios medios",
+  CUENTA_CORRIENTE: "Cuenta corriente",
 };
+
+const instrumentSchema = z.discriminatedUnion("type", [
+  /** Efectivo o transferencia que sale de una caja / cuenta (ej. caja negra, banco). */
+  z.object({
+    type: z.literal("REGISTER"),
+    method: z.enum(PAYMENT_METHODS),
+    cashRegisterId: z.string().min(1, "Elegí la caja o cuenta"),
+    amount: z.number().finite().positive("El importe debe ser mayor a 0"),
+    reference: optText(100),
+  }),
+  /** Endoso de un cheque de terceros en cartera (por su importe completo). */
+  z.object({ type: z.literal("THIRD_CHEQUE"), chequeId: z.string().min(1) }),
+  /** Cheque propio o eCheq librado contra una cuenta bancaria. */
+  z.object({
+    type: z.literal("OWN_CHEQUE"),
+    format: z.enum(["FISICO", "ECHEQ"]),
+    bankRegisterId: z.string().min(1, "Elegí la cuenta bancaria"),
+    number: z.string().trim().min(1, "Indicá el número de cheque").max(30),
+    paymentDate: isoDate,
+    amount: z.number().finite().positive("El importe debe ser mayor a 0"),
+  }),
+]);
+export type PaymentInstrument = z.infer<typeof instrumentSchema>;
 
 export const paymentOrderSchema = z.object({
   creditorType: z.enum(["SUPPLIER", "WORKSHOP"]),
   creditorId: z.string().min(1),
   payableIds: z.array(z.string().min(1)).min(1, "Elegí al menos un comprobante").max(200),
-  amount: z.number().finite().positive("El importe debe ser mayor a 0").max(1_000_000_000),
-  method: z.enum(PAYMENT_METHODS),
-  cashRegisterId: z.string().min(1, "Elegí la caja o cuenta"),
-  reference: optText(100),
+  instruments: z.array(instrumentSchema).min(1, "Agregá al menos un medio de pago").max(30),
   notes: optText(500),
 });
 
