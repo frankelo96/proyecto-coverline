@@ -88,6 +88,8 @@ function buildRequest(strategy: Strategy, path: string, query: Record<string, st
 /** Pista de quién bloqueó el pedido, a partir de la respuesta. */
 function blockerHint(res: Response, text: string) {
   const body = text.toLowerCase();
+  if (body.includes("country") || body.includes("país") || body.includes("pais no"))
+    return "un bloqueo por país: el sitio solo acepta visitas desde ciertos países y el servidor del sistema (Render) está fuera de Argentina. Agregá las IP de salida de Render a la lista permitida del bloqueo por país (Render → coverline-erp → Connect → Outbound), o permití la ruta /wp-json/wc/";
   if (res.headers.get("cf-ray") || res.headers.get("server")?.toLowerCase().includes("cloudflare") || body.includes("cloudflare"))
     return "Cloudflare (en Cloudflare → Seguridad → WAF, creá una regla que permita la ruta /wp-json/wc/ o desactivá «Bot Fight Mode»)";
   if (body.includes("wordfence")) return "el plugin Wordfence (en Wordfence → Firewall, permití la ruta /wp-json/wc/ o poné el firewall en «Learning mode» un rato)";
