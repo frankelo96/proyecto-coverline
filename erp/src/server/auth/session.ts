@@ -5,7 +5,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { SESSION_COOKIE, SESSION_TTL_MS } from "@/lib/auth/constants";
+import { SESSION_COOKIE, SESSION_RENEW_AFTER_MS, SESSION_TTL_MS } from "@/lib/auth/constants";
 import { hasPermission } from "@/lib/auth/permissions";
 import { db } from "@/server/db";
 
@@ -65,6 +65,11 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     include: { user: { include: { role: true } } },
   });
   if (!session || session.expiresAt < new Date() || !session.user.active) return null;
+  // Vencimiento deslizante: quien usa el sistema todos los días no queda deslogueado a los 7 días.
+  const renewed = Date.now() + SESSION_TTL_MS;
+  if (renewed - session.expiresAt.getTime() > SESSION_RENEW_AFTER_MS) {
+    await db.session.update({ where: { id: session.id }, data: { expiresAt: new Date(renewed) } }).catch(() => undefined);
+  }
   const { user } = session;
   return { id: user.id, name: user.name, email: user.email, roleName: user.role.name, permissions: user.role.permissions };
 });
