@@ -7,7 +7,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { WooError, wooFetch } from "@/server/woo/client";
+import { wooAccessMode, WooError, wooFetch } from "@/server/woo/client";
 import { wooConfig } from "@/server/woo/config";
 import { importCatalog, runSync, type SyncSummary } from "@/server/woo/sync";
 
@@ -23,7 +23,12 @@ export async function testWooConnectionAction(): Promise<ActionResult<{ store: s
     await requireActionUser(PERMISSIONS.mastersWrite);
     const { data } = await wooFetch<{ id: number }[]>("products", { query: { per_page: 1 } });
     const { url } = wooConfig();
-    return { ok: true, data: { store: url }, message: `Conexión correcta con ${url} (${data.length ? "hay productos" : "la tienda no tiene productos"})` };
+    const mode = wooAccessMode();
+    return {
+      ok: true,
+      data: { store: url },
+      message: `Conexión correcta con ${url} (${data.length ? "hay productos" : "la tienda no tiene productos"}${mode && !mode.includes("básica") ? ` · acceso por ${mode}` : ""})`,
+    };
   } catch (e) {
     return fail(e, "test");
   }
