@@ -9,6 +9,8 @@ export default async function MastersLayout({ children }: Readonly<{ children: R
     { href: "/maestros/materiales", label: "Materias primas y avíos" },
     { href: "/maestros/proveedores", label: "Proveedores" },
     { href: "/maestros/talleres", label: "Talleres" },
+    { href: "/maestros/stock", label: "Stock por local" },
+    { href: "/maestros/tienda-web", label: "Tienda web" },
     ...(hasPermission(user.permissions, PERMISSIONS.usersManage) ? [{ href: "/maestros/usuarios", label: "Usuarios" }] : []),
   ];
   return (

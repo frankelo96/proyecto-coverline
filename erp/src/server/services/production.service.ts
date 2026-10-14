@@ -25,6 +25,7 @@ import {
 } from "@/lib/production/workflow";
 import { formatMoney } from "@/lib/format";
 import type { CreateOrderInput } from "@/lib/validations/production";
+import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -323,7 +324,8 @@ export async function closeQuality(
     const item = order.items.find((i) => i.variantId === a.variantId)!;
     await tx.productionOrderItem.update({ where: { id: item.id }, data: { quantityFinished: a.quantity } });
     if (a.quantity > 0) {
-      await tx.productVariant.update({ where: { id: a.variantId }, data: { stockQty: { increment: a.quantity } } });
+      // La producción terminada ingresa al local principal.
+      await adjustBranchStock(tx, a.variantId, await mainBranchId(tx), a.quantity);
     }
   }
   await tx.productionOrder.update({

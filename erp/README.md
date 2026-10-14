@@ -194,6 +194,29 @@ Cobros (POS, recibos) y pagos a proveedores y talleres usan los medios de Coverl
 
 `prisma/catalog/base-catalog.ts` define 49 prendas que confecciona Coverline (chombas, remeras, buzos, camperas, cardigans, sweaters, pantalones, bermudas, camisas, ambos, guardapolvos, náuticos, chaquetillas, sacos de chef, cofias y delantales) con ficha técnica estándar: materiales y avíos con consumo de referencia para talle M y merma, procesos de corte/confección/terminación, curva de talles, colores habituales, tela y ajuste de precio por talle (−20% talles 4–8, −10% 10–16, +10% extra grandes). El precio de lista inicial es el sugerido (costo × 2, redondeado). El seed solo crea lo que falta, así que las correcciones hechas desde la app no se pisan.
 
+## Stock por local
+
+Cada variante tiene stock por local (Recta Martinolli, Villa Allende); el total es la suma. Las ventas y devoluciones del POS mueven el stock del local de la caja; las compras de mercadería y la producción terminada entran al **local principal** (el de punto de venta más bajo, o el que indique `STOCK_MAIN_BRANCH`). En **Maestros → Stock por local** se ve el stock de cada local y se hacen transferencias entre locales (quedan en la auditoría). En la ficha de cada producto, la grilla de variantes tiene una columna de stock por local.
+
+## Tienda web (WooCommerce)
+
+Sincroniza **solo stock** con la tienda WooCommerce por la API REST (no toca precios ni descripciones). En **Maestros → Tienda web**:
+
+- **Vínculos**: cada producto/variación de la web se vincula sola cuando su SKU coincide con el SKU (o código de barras) de la variante del ERP, sin importar mayúsculas; las demás se vinculan a mano.
+- **Stock publicado** = stock total de los locales − `WOO_SAFETY_STOCK` (margen de seguridad, 2 por defecto), nunca menos de 0.
+- **Pedidos web**: los pedidos en *procesando*, *en espera* o *completado* descuentan stock del local `WOO_ORDERS_BRANCH` (por defecto el principal); si se cancelan o reembolsan, el stock vuelve. En la primera sincronización los pedidos ya completados solo se registran (se asume que ya estaban descontados).
+- La sincronización corre cada `WOO_SYNC_MINUTES` (5) mientras el servidor está levantado, y además se publica al instante después de cada venta o devolución del POS y de cada cambio de stock. Opcional: un cron externo puede llamar a `GET /api/tienda-web/sync?token=WOO_CRON_TOKEN`.
+
+| Variable | Uso |
+| --- | --- |
+| `WOO_URL` | URL de la tienda (https://www.uniformescoverline.com) |
+| `WOO_CONSUMER_KEY` / `WOO_CONSUMER_SECRET` | Clave REST de WooCommerce (Ajustes → Avanzado → REST API, permisos Lectura/Escritura) |
+| `WOO_SYNC_MODE` | `desactivado`, `solo-lectura` (prueba: lee y muestra qué cambiaría, no escribe) o `activo` |
+| `WOO_SAFETY_STOCK` | Margen de seguridad (por defecto 2) |
+| `WOO_SYNC_MINUTES` | Intervalo de sincronización automática (por defecto 5) |
+| `WOO_ORDERS_BRANCH` | Nombre del local que descuenta los pedidos web (opcional) |
+| `WOO_CRON_TOKEN` | Habilita el endpoint de cron externo (opcional) |
+
 ## Pendiente para los próximos módulos
 
 Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

@@ -26,7 +26,8 @@ export interface VariantRow {
   fabric: string;
   sku: string;
   barcode: string;
-  stockQty: string;
+  /** Stock por local (id del local → cantidad escrita) */
+  stocks: Record<string, string>;
   priceAdjustmentPct: string;
   active: boolean;
 }
@@ -42,11 +43,14 @@ export function VariantsEditor({
   initial,
   canWrite,
   fabricSuggestions,
+  branches,
 }: {
   productId: string;
   initial: VariantRow[];
   canWrite: boolean;
   fabricSuggestions: string[];
+  /** Locales; el primero es el principal (recibe el stock inicial al generar) */
+  branches: { id: string; name: string }[];
 }) {
   const uid = useId();
   const [rows, setRows] = useState<VariantRow[]>(initial);
@@ -62,7 +66,7 @@ export function VariantsEditor({
     fabric,
     sku: "",
     barcode: "",
-    stockQty: stock,
+    stocks: Object.fromEntries(branches.map((b, i) => [b.id, i === 0 ? stock : "0"])),
     priceAdjustmentPct: "0",
     active: true,
   });
@@ -71,7 +75,8 @@ export function VariantsEditor({
   const existing = new Set(rows.map((r) => variantKey(r)));
   const toAdd = planned.filter((v) => !existing.has(variantKey(v)));
   const options = variantOptions(rows.filter((r) => r.active && r.size));
-  const totalStock = rows.filter((r) => r.active).reduce((a, r) => a + (parseLocaleNumber(r.stockQty || "0") ?? 0), 0);
+  const rowTotal = (r: VariantRow) => branches.reduce((a, b) => a + (parseLocaleNumber(r.stocks[b.id] || "0") ?? 0), 0);
+  const totalStock = rows.filter((r) => r.active).reduce((a, r) => a + rowTotal(r), 0);
 
   function generate() {
     setRows((prev) => [...prev, ...toAdd.map((v) => blank(v.size, v.color ?? "", v.fabric ?? "", gen.stock || "0"))]);
@@ -82,9 +87,9 @@ export function VariantsEditor({
   function save() {
     const variants: SaveVariantsInput["variants"] = [];
     for (const r of rows) {
-      const stock = parseLocaleNumber(r.stockQty || "0");
+      const stocks = branches.map((b) => ({ branchId: b.id, quantity: parseLocaleNumber(r.stocks[b.id] || "0") }));
       const adj = parseLocaleNumber(r.priceAdjustmentPct || "0");
-      if (stock === null || adj === null) {
+      if (stocks.some((s) => s.quantity === null) || adj === null) {
         setStatus({ kind: "error", text: `Talle ${r.size || "(sin talle)"}: revisá stock y ajuste` });
         return;
       }
@@ -95,7 +100,7 @@ export function VariantsEditor({
         fabric: r.fabric.trim() || null,
         sku: r.sku.trim() || null,
         barcode: r.barcode.trim() || null,
-        stockQty: stock,
+        stocks: stocks.map((s) => ({ branchId: s.branchId, quantity: s.quantity! })),
         priceAdjustmentPct: adj,
         active: r.active,
       });
@@ -154,7 +159,7 @@ export function VariantsEditor({
                 </datalist>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`${uid}-stock`}>Stock inicial</Label>
+                <Label htmlFor={`${uid}-stock`}>Stock inicial ({branches[0]?.name ?? "local principal"})</Label>
                 <Input id={`${uid}-stock`} inputMode="decimal" value={gen.stock} onChange={(e) => setGen({ ...gen, stock: e.target.value })} className="text-right" />
               </div>
             </div>
@@ -176,7 +181,7 @@ export function VariantsEditor({
           </div>
         )}
         <div className="overflow-x-auto rounded-md border">
-          <Table className="min-w-[960px]">
+          <Table className="min-w-[1080px]">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="pl-3">Color</TableHead>
@@ -184,7 +189,12 @@ export function VariantsEditor({
                 <TableHead className="w-24">Talle</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Código de barras</TableHead>
-                <TableHead className="w-24 text-right">Stock</TableHead>
+                {branches.map((b) => (
+                  <TableHead key={b.id} className="w-24 text-right">
+                    Stock {b.name}
+                  </TableHead>
+                ))}
+                <TableHead className="w-16 text-right">Total</TableHead>
                 <TableHead className="w-24 text-right">Ajuste %</TableHead>
                 <TableHead className="w-16 pr-3 text-center">Activo</TableHead>
               </TableRow>
@@ -192,7 +202,7 @@ export function VariantsEditor({
             <TableBody>
               {rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7 + branches.length} className="py-8 text-center text-sm text-muted-foreground">
                     Sin variantes: cargá talles, colores y telas arriba y tocá Generar.
                   </TableCell>
                 </TableRow>
@@ -214,9 +224,19 @@ export function VariantsEditor({
                   <TableCell>
                     <Input aria-label="Código de barras" value={r.barcode} onChange={(e) => update(i, { barcode: e.target.value })} disabled={!canWrite} className="h-9 font-mono text-xs" />
                   </TableCell>
-                  <TableCell>
-                    <Input aria-label="Stock" inputMode="decimal" value={r.stockQty} onChange={(e) => update(i, { stockQty: e.target.value })} disabled={!canWrite} className="h-9 text-right" />
-                  </TableCell>
+                  {branches.map((b) => (
+                    <TableCell key={b.id}>
+                      <Input
+                        aria-label={`Stock ${b.name}`}
+                        inputMode="decimal"
+                        value={r.stocks[b.id] ?? "0"}
+                        onChange={(e) => update(i, { stocks: { ...r.stocks, [b.id]: e.target.value } })}
+                        disabled={!canWrite}
+                        className="h-9 text-right"
+                      />
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right font-mono tabular-nums">{formatNumber(rowTotal(r))}</TableCell>
                   <TableCell>
                     <Input aria-label="Ajuste de precio %" inputMode="decimal" value={r.priceAdjustmentPct} onChange={(e) => update(i, { priceAdjustmentPct: e.target.value })} disabled={!canWrite} className="h-9 text-right" />
                   </TableCell>

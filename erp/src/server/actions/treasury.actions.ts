@@ -28,6 +28,7 @@ import { createReceipt } from "@/server/services/receivables.service";
 import { createReturn } from "@/server/services/returns.service";
 import { returnSchema } from "@/lib/validations/returns";
 import { closeSession, manualMovement, openSession, transferBetween } from "@/server/services/treasury.service";
+import { scheduleWebStockPushForSale } from "@/server/woo/sync";
 
 const TX = { timeout: 20_000 };
 
@@ -136,6 +137,7 @@ export async function createSaleAction(
     );
     // El CAE se pide después de confirmar la venta: si ARCA no responde, la venta queda registrada y pendiente.
     const arca = r.fiscal ? await authorizeSale(r.id) : null;
+    await scheduleWebStockPushForSale(r.id).catch(() => undefined);
     revalidateTreasury();
     revalidatePath("/ventas", "layout");
     return {
@@ -180,6 +182,7 @@ export async function createReturnAction(raw: unknown): Promise<ActionResult<{ i
     const input = returnSchema.parse(raw);
     const r = await db.$transaction((tx) => createReturn(tx, input, { id: user.id }), TX);
     const arca = r.fiscal ? await authorizeSale(r.id) : null;
+    await scheduleWebStockPushForSale(r.id).catch(() => undefined);
     revalidateTreasury();
     revalidatePath("/ventas", "layout");
     return {

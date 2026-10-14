@@ -17,6 +17,7 @@ import { METHOD_LABELS } from "@/lib/treasury/cash";
 import type { ReturnInput } from "@/lib/validations/returns";
 import { nextInternalNumber } from "@/server/services/pos.service";
 import { addMovement, lockRegister, openSessionOf } from "@/server/services/treasury.service";
+import { adjustBranchStock } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
@@ -114,7 +115,8 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
   });
 
   for (const l of lines) {
-    if (l.restock) await tx.productVariant.update({ where: { id: l.item.variantId! }, data: { stockQty: { increment: D(l.quantity) } } });
+    // La prenda vuelve al stock del local donde se hace la devolución.
+    if (l.restock) await adjustBranchStock(tx, l.item.variantId!, branch.id, D(l.quantity));
   }
 
   // --- Reintegro

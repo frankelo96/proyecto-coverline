@@ -387,9 +387,10 @@ export const REPORTS: Record<string, ReportDef> = {
     description: "Existencias por variante (color, tela, talle) y de telas/avíos, valorizadas a costo.",
     permission: PERMISSIONS.mastersRead,
     async build() {
-      const [variants, materials] = await Promise.all([
-        db.productVariant.findMany({ where: { active: true }, include: { product: true }, orderBy: { sku: "asc" } }),
+      const [variants, materials, branches] = await Promise.all([
+        db.productVariant.findMany({ where: { active: true }, include: { product: true, branchStocks: true }, orderBy: { sku: "asc" } }),
         db.rawMaterial.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
+        db.branch.findMany({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }] }),
       ]);
       return {
         title: "Stock",
@@ -402,7 +403,8 @@ export const REPORTS: Record<string, ReportDef> = {
           { key: "variant", label: "Color · tela" },
           { key: "size", label: "Talle" },
           { key: "unit", label: "Unidad" },
-          { key: "stock", label: "Stock", type: "number" },
+          ...branches.map((b) => ({ key: `b_${b.id}`, label: `Stock ${b.name}`, type: "number" as const, total: true })),
+          { key: "stock", label: "Stock total", type: "number", total: true },
           { key: "cost", label: "Costo unitario", type: "money" },
           { key: "value", label: "Valorizado", type: "money", total: true },
         ],
@@ -415,6 +417,7 @@ export const REPORTS: Record<string, ReportDef> = {
             variant: variantAttrs(v) || null,
             size: v.size,
             unit: "u",
+            ...Object.fromEntries(branches.map((b) => [`b_${b.id}`, v.branchStocks.find((x) => x.branchId === b.id)?.quantity.toNumber() ?? 0])),
             stock: v.stockQty.toNumber(),
             cost: v.product.currentCost.toNumber(),
             value: Math.round(v.stockQty.toNumber() * v.product.currentCost.toNumber() * 100) / 100,

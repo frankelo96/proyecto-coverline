@@ -9,7 +9,8 @@ import { SESSION_COOKIE, SESSION_TTL_MS } from "@/lib/auth/constants";
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/login") return NextResponse.next();
+  // El cron externo de la tienda web se autentica con su propio token.
+  if (pathname === "/login" || pathname === "/api/tienda-web/sync") return NextResponse.next();
   if (!request.cookies.has(SESSION_COOKIE)) {
     const url = new URL("/login", request.url);
     if (pathname !== "/") url.searchParams.set("next", `${pathname}${search}`);

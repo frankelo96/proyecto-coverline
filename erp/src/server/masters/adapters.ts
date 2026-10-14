@@ -17,6 +17,7 @@ import type { EntityKey } from "@/lib/masters/definitions";
 import { formatCuit, isValidCuit, type RefOptions, type Values } from "@/lib/masters/fields";
 import { db } from "@/server/db";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
+import { mainBranchId, setBranchStock } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -316,16 +317,18 @@ const products: Adapter = {
         color,
         fabric,
         barcode: str(v.barcode),
-        ...(typeof v.stockQty === "number" ? { stockQty: new Prisma.Decimal(v.stockQty) } : {}),
         ...(typeof v.priceAdjustmentPct === "number" ? { priceAdjustmentPct: new Prisma.Decimal(v.priceAdjustmentPct) } : {}),
         active: true,
       };
+      let variantId: string;
       if (existing) {
         if (existing.productId !== saved.id) throw new MasterError(`El SKU de variante ${sku} pertenece a otro producto`, "variantSku");
-        await tx.productVariant.update({ where: { id: existing.id }, data: { ...variantData, sku } });
+        variantId = (await tx.productVariant.update({ where: { id: existing.id }, data: { ...variantData, sku }, select: { id: true } })).id;
       } else {
-        await tx.productVariant.create({ data: { ...variantData, sku, productId: saved.id } });
+        variantId = (await tx.productVariant.create({ data: { ...variantData, sku, productId: saved.id }, select: { id: true } })).id;
       }
+      // El stock de la planilla es el del local principal (los demás se cargan en la ficha o por transferencia).
+      if (typeof v.stockQty === "number") await setBranchStock(tx, variantId, await mainBranchId(tx), v.stockQty);
     }
     await audit(tx, userId, "Product", saved.id, id ? "UPDATE" : "CREATE", v);
     return saved.id;
@@ -334,7 +337,11 @@ const products: Adapter = {
     await db.product.update({ where: { id }, data: { active } });
   },
   async exportRows() {
-    const rows = await db.product.findMany({ orderBy: { sku: "asc" }, include: { variants: { orderBy: { sku: "asc" } } } });
+    const main = await mainBranchId(db as unknown as Prisma.TransactionClient);
+    const rows = await db.product.findMany({
+      orderBy: { sku: "asc" },
+      include: { variants: { orderBy: { sku: "asc" }, include: { branchStocks: { where: { branchId: main } } } } },
+    });
     return rows.flatMap((p) => {
       const base = productValues(p);
       if (p.variants.length === 0) return [base];
@@ -345,7 +352,7 @@ const products: Adapter = {
         fabric: x.fabric,
         variantSku: x.sku,
         barcode: x.barcode,
-        stockQty: x.stockQty.toNumber(),
+        stockQty: x.branchStocks[0]?.quantity.toNumber() ?? 0,
         priceAdjustmentPct: x.priceAdjustmentPct.toNumber(),
       }));
     });

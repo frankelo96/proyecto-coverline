@@ -505,6 +505,10 @@ async function seedVariantDemo() {
     })),
   );
   await prisma.productVariant.createMany({ data });
+  // El stock de ejemplo queda en el local principal (stock por local = total de la variante).
+  const main = await prisma.branch.findFirstOrThrow({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }] });
+  const created = await prisma.productVariant.findMany({ where: { productId: product.id }, select: { id: true, stockQty: true } });
+  await prisma.branchStock.createMany({ data: created.map((v) => ({ variantId: v.id, branchId: main.id, quantity: v.stockQty })) });
   console.log(`  ${sku.padEnd(12)} ${data.length} variantes (color × tela × talle)`);
 }
 

@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { autoVariantSku } from "@/lib/catalog/variants";
 import type { SaveVariantsInput } from "@/lib/validations/catalog";
+import { setBranchStock } from "@/server/services/stock.service";
 
 export class CatalogError extends Error {}
 
@@ -17,7 +18,7 @@ export async function saveVariants(tx: Prisma.TransactionClient, input: SaveVari
   const byId = new Map(product.variants.map((v) => [v.id, v]));
   let created = 0;
   let updated = 0;
-  const stockChanges: { sku: string; before: number; after: number }[] = [];
+  const stockChanges: { sku: string; branchId: string; before: number; after: number }[] = [];
 
   for (const row of input.variants) {
     const sku = (row.sku || autoVariantSku(product.sku, row)).toUpperCase();
@@ -27,21 +28,24 @@ export async function saveVariants(tx: Prisma.TransactionClient, input: SaveVari
       fabric: row.fabric || null,
       sku,
       barcode: row.barcode || null,
-      stockQty: new Prisma.Decimal(row.stockQty),
       priceAdjustmentPct: new Prisma.Decimal(row.priceAdjustmentPct),
       active: row.active,
     };
     try {
+      let variantId: string;
       if (row.id) {
-        const prev = byId.get(row.id);
-        if (!prev) throw new CatalogError("Una de las variantes no pertenece a este producto");
-        if (!prev.stockQty.equals(data.stockQty)) stockChanges.push({ sku, before: prev.stockQty.toNumber(), after: row.stockQty });
+        if (!byId.has(row.id)) throw new CatalogError("Una de las variantes no pertenece a este producto");
         await tx.productVariant.update({ where: { id: row.id }, data });
+        variantId = row.id;
         updated++;
       } else {
-        await tx.productVariant.create({ data: { ...data, productId: product.id } });
-        if (row.stockQty > 0) stockChanges.push({ sku, before: 0, after: row.stockQty });
+        variantId = (await tx.productVariant.create({ data: { ...data, productId: product.id }, select: { id: true } })).id;
         created++;
+      }
+      // El stock se fija por local; el total de la variante se recalcula solo.
+      for (const s of row.stocks) {
+        const r = await setBranchStock(tx, variantId, s.branchId, s.quantity);
+        if (r.changed) stockChanges.push({ sku, branchId: s.branchId, before: r.before, after: s.quantity });
       }
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

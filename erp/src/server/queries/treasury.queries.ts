@@ -68,7 +68,10 @@ export interface CatalogItem {
   color: string | null;
   fabric: string | null;
   price: number;
+  /** Stock en el local de la caja */
   stock: number;
+  /** Stock sumando todos los locales */
+  totalStock: number;
 }
 
 export interface PosClient {
@@ -95,7 +98,7 @@ export async function getTerminalData(registerId: string) {
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
       orderBy: { name: "asc" },
-      include: { variants: { where: { active: true } } },
+      include: { variants: { where: { active: true }, include: { branchStocks: { where: { branchId: register.branchId ?? "" }, select: { quantity: true } } } } },
     }),
     db.client.findMany({ where: { active: true }, orderBy: { businessName: "asc" } }),
     db.accountReceivable.groupBy({ by: ["clientId"], where: { status: { in: [...OPEN] } }, _sum: { balance: true } }),
@@ -117,7 +120,8 @@ export async function getTerminalData(registerId: string) {
         color: v.color,
         fabric: v.fabric,
         price: finalUnitPrice(p.listPrice.toNumber(), p.vatRate.toNumber(), v.priceAdjustmentPct.toNumber()),
-        stock: v.stockQty.toNumber(),
+        stock: v.branchStocks[0]?.quantity.toNumber() ?? 0,
+        totalStock: v.stockQty.toNumber(),
       })),
   );
   const balanceOf = new Map(balances.map((b) => [b.clientId, b._sum.balance?.toNumber() ?? 0]));

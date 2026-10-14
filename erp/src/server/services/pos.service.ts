@@ -18,6 +18,7 @@ import { TreasuryError } from "@/lib/treasury/cash";
 import type { SaleInput } from "@/lib/validations/treasury";
 import { registerCollections } from "@/server/services/collection.service";
 import { lockRegister, openSessionOf } from "@/server/services/treasury.service";
+import { adjustBranchStock } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
@@ -143,8 +144,9 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
   const warnings: string[] = [];
   for (const l of lines) {
     if (!l.variant) continue;
-    const updated = await tx.productVariant.update({ where: { id: l.variant.id }, data: { stockQty: { decrement: D(l.input.quantity) } }, select: { stockQty: true } });
-    if (updated.stockQty.lt(0)) warnings.push(`${l.description}: stock negativo (${updated.stockQty.toNumber()})`);
+    // Sale del stock del local de la caja.
+    const updated = await adjustBranchStock(tx, l.variant.id, branch.id, D(l.input.quantity).neg());
+    if (updated.branch.lt(0)) warnings.push(`${l.description}: stock negativo en ${branch.name} (${updated.branch.toNumber()})`);
   }
 
   // --- Cobros

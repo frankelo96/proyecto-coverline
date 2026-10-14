@@ -85,7 +85,7 @@ const PRODUCT_FIELDS: FieldDef[] = [
   { key: "fabric", label: "Tela", type: "text", max: 60, aliases: ["material", "tejido"], importOnly: true },
   { key: "variantSku", label: "SKU variante", type: "text", max: 60, upper: true, aliases: ["sku talle"], importOnly: true },
   { key: "barcode", label: "Código de barras", type: "text", max: 40, aliases: ["ean", "codigo barras"], importOnly: true },
-  { key: "stockQty", label: "Stock", type: "number", aliases: ["existencia", "cantidad"], importOnly: true },
+  { key: "stockQty", label: "Stock local principal", type: "number", aliases: ["stock", "existencia", "cantidad"], importOnly: true, help: "Stock del local principal; los otros locales se cargan en la ficha del producto o por transferencia." },
   { key: "priceAdjustmentPct", label: "Ajuste talle %", type: "number", minValue: -50, maxValue: 200, aliases: ["recargo talle"], importOnly: true },
 ];
 

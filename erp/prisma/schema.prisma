@@ -730,6 +730,8 @@ model ProductVariant {
   productionItems ProductionOrderItem[]
   purchaseItems   PurchaseItem[]
   saleItems       SaleItem[]
+  branchStocks    BranchStock[]
+  wooLinks        WooLink[]
 
   @@unique([productId, size, color, fabric])
   @@map("product_variants")
@@ -1055,6 +1057,7 @@ model Branch {
 
   cashRegisters CashRegister[]
   sales         Sale[]
+  stocks        BranchStock[]
 
   @@map("branches")
 }
@@ -1372,4 +1375,81 @@ model AccountPayable {
   @@index([supplierId, status, dueDate])
   @@index([workshopId, status, dueDate])
   @@map("accounts_payable")
+}
+
+/// Stock de cada variante en cada local. ProductVariant.stockQty es la suma (total).
+model BranchStock {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  quantity  Decimal        @default(0) @db.Decimal(12, 4)
+  updatedAt DateTime       @updatedAt
+
+  @@unique([variantId, branchId])
+  @@index([branchId])
+  @@map("branch_stocks")
+}
+
+// ─── Tienda web (WooCommerce) ─────────────────────────────────────────────
+
+/// Producto o variación de WooCommerce y la variante del ERP con la que se sincroniza.
+model WooLink {
+  id             String          @id @default(cuid())
+  wooProductId   Int
+  /// 0 = producto simple (sin variaciones)
+  wooVariationId Int             @default(0)
+  wooSku         String?
+  wooName        String
+  variantId      String?
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  /// Cómo se vinculó: SKU (automático) o MANUAL
+  linkedBy       String?
+  lastPushedQty  Int?
+  lastPushedAt   DateTime?
+  lastError      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([wooProductId, wooVariationId])
+  @@index([variantId])
+  @@map("woo_links")
+}
+
+/// Pedidos de la tienda ya descontados del stock (para no descontarlos dos veces).
+model WooOrder {
+  id         String   @id @default(cuid())
+  wooOrderId Int      @unique
+  number     String
+  status     String
+  /// true mientras el stock del pedido está descontado
+  deducted   Boolean  @default(false)
+  /// Pedido ya completado al activar la sincronización: se registra pero nunca mueve stock
+  baseline   Boolean  @default(false)
+  branchId   String?
+  /// [{ variantId, sku, name, quantity }]
+  lines      Json
+  total      Decimal  @default(0) @db.Decimal(14, 2)
+  customer   String?
+  orderDate  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("woo_orders")
+}
+
+/// Registro de cada sincronización con la tienda.
+model WooSyncRun {
+  id         String    @id @default(cuid())
+  trigger    String
+  mode       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  summary    Json?
+  error      String?
+
+  @@index([startedAt])
+  @@map("woo_sync_runs")
 }

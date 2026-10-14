@@ -90,7 +90,7 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
         <div>
           <p className="text-lg font-semibold leading-tight">{product.name}</p>
           <p className="font-mono text-xs text-muted-foreground">
-            {product.sku} · {product.variants.length} variantes · stock {formatNumber(product.stock)}
+            {product.sku} · {product.variants.length} variantes · stock en este local {formatNumber(product.stock)}
           </p>
         </div>
         <Button type="button" variant="ghost" size="icon" aria-label="Cerrar selección" onClick={onClose}>
@@ -123,7 +123,10 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
                   )}
                 >
                   <span className="text-base font-semibold">{v.size}</span>
-                  <span className={cn("text-xs", v.stock > 0 ? "text-muted-foreground" : "font-medium text-destructive")}>stock {formatNumber(v.stock)}</span>
+                  <span className={cn("text-xs", v.stock > 0 ? "text-muted-foreground" : "font-medium text-destructive")}>
+                    acá {formatNumber(v.stock)}
+                    {v.totalStock !== v.stock && <span className="text-muted-foreground"> · total {formatNumber(v.totalStock)}</span>}
+                  </span>
                   {!samePrice && <span className="font-mono text-xs">{formatMoney(v.price)}</span>}
                   {qty > 0 && (
                     <span className="absolute -top-2 -right-2 flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">

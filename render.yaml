@@ -32,3 +32,14 @@ services:
       # Los presupuestos siguen la numeración actual de Contagram.
       - key: QUOTE_NEXT_NUMBER
         value: "377"
+      # Tienda WooCommerce (solo stock). Las claves se cargan como secretas en Render.
+      - key: WOO_URL
+        value: https://www.uniformescoverline.com
+      - key: WOO_CONSUMER_KEY
+        sync: false
+      - key: WOO_CONSUMER_SECRET
+        sync: false
+      - key: WOO_SYNC_MODE
+        value: solo-lectura
+      - key: WOO_SAFETY_STOCK
+        value: "2"

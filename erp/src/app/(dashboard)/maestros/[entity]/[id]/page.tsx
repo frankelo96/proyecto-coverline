@@ -42,9 +42,14 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
 
   const variants =
     entity === "productos"
-      ? (await db.productVariant.findMany({ where: { productId: id } })).sort(
+      ? (await db.productVariant.findMany({ where: { productId: id }, include: { branchStocks: true } })).sort(
           (a, b) => (a.color ?? "").localeCompare(b.color ?? "", "es") || (a.fabric ?? "").localeCompare(b.fabric ?? "", "es") || compareSizes(a.size, b.size),
         )
+      : [];
+  // Locales con stock propio; el principal primero (es el que recibe compras y producción).
+  const branches =
+    entity === "productos"
+      ? await db.branch.findMany({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }], select: { id: true, name: true } })
       : [];
   // Sugerencias de tela: las telas del maestro de materias primas y las ya usadas en otros productos.
   const fabricSuggestions =
@@ -99,10 +104,11 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
       <EntityForm entity={entity} id={id} fields={formFields(def)} initial={values} refs={refs} basePath={def.basePath} after="stay" readOnly={!canWrite} />
       {entity === "productos" && (
         <VariantsEditor
-          key={variants.map((v) => `${v.id}${v.updatedAt.getTime()}`).join("|")}
+          key={variants.map((v) => `${v.id}${v.updatedAt.getTime()}${v.branchStocks.map((x) => x.quantity.toString()).join(",")}`).join("|")}
           productId={id}
           canWrite={canWrite}
           fabricSuggestions={fabricSuggestions}
+          branches={branches}
           initial={variants.map((v) => ({
             id: v.id,
             size: v.size,
@@ -110,7 +116,7 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
             fabric: v.fabric ?? "",
             sku: v.sku,
             barcode: v.barcode ?? "",
-            stockQty: String(v.stockQty.toNumber()).replace(".", ","),
+            stocks: Object.fromEntries(branches.map((b) => [b.id, String(v.branchStocks.find((x) => x.branchId === b.id)?.quantity.toNumber() ?? 0).replace(".", ",")])),
             priceAdjustmentPct: String(v.priceAdjustmentPct.toNumber()).replace(".", ","),
             active: v.active,
           }))}

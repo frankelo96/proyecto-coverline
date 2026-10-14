@@ -32,6 +32,7 @@ import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validation
 import type { MerchandisePurchaseInput, PaymentInstrument, PaymentOrderInput, WorkshopInvoiceInput } from "@/lib/validations/purchasing";
 import { priceFromCost } from "@/lib/costing/escandallo";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
+import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
@@ -207,7 +208,8 @@ export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurcha
         }
       }
     } else if (r.variant) {
-      await tx.productVariant.update({ where: { id: r.variant.id }, data: { stockQty: { increment: D(r.stockQuantity) } } });
+      // La mercadería comprada ingresa al local principal (después se puede transferir).
+      await adjustBranchStock(tx, r.variant.id, await mainBranchId(tx), D(r.stockQuantity));
       const product = r.variant.product;
       if (r.item.updateCost && product.sourcing === "REVENTA" && r.stockUnitCost !== r.previous) {
         const change = costChange(r.previous, r.stockUnitCost);
@@ -384,7 +386,7 @@ export async function annulPurchase(tx: Tx, input: { purchaseId: string; reason:
     for (const it of purchase.items) {
       const qty = it.stockQuantity ?? it.quantity;
       if (it.rawMaterialId) await tx.rawMaterial.update({ where: { id: it.rawMaterialId }, data: { stockQty: { decrement: qty } } });
-      if (it.productVariantId) await tx.productVariant.update({ where: { id: it.productVariantId }, data: { stockQty: { decrement: qty } } });
+      if (it.productVariantId) await adjustBranchStock(tx, it.productVariantId, await mainBranchId(tx), qty.neg());
     }
   } else {
     const remitIds = purchase.invoicedRemits.map((r) => r.id);
