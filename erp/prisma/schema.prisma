@@ -1460,3 +1460,21 @@ model WooSyncRun {
   @@index([startedAt])
   @@map("woo_sync_runs")
 }
+
+/// Conexión con la tienda por el plugin de WordPress (el plugin llama al ERP;
+/// sirve cuando el hosting bloquea las conexiones entrantes).
+model WooBridge {
+  id               String    @id @default("default")
+  /// Clave que el plugin manda en cada llamada
+  token            String
+  lastSeenAt       DateTime?
+  pluginVersion    String?
+  siteUrl          String?
+  /// Pedirle al plugin la lista de productos en la próxima llamada
+  catalogRequested Boolean   @default(true)
+  lastCatalogAt    DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("woo_bridge")
+}

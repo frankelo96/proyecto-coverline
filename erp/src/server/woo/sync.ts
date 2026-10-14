@@ -25,7 +25,7 @@ export interface SyncSummary {
  */
 export async function importCatalog() {
   const products = await wooFetchAll<WooProduct>("products");
-  const items: { productId: number; variationId: number; sku: string; name: string }[] = [];
+  const items: CatalogItem[] = [];
   for (const p of products) {
     if (p.type === "variable" && p.variations.length) {
       const variations = await wooFetchAll<WooVariation>(`products/${p.id}/variations`);
@@ -35,7 +35,20 @@ export async function importCatalog() {
       }
     } else items.push({ productId: p.id, variationId: 0, sku: p.sku, name: p.name });
   }
+  return linkCatalog(items);
+}
 
+export interface CatalogItem {
+  productId: number;
+  variationId: number;
+  sku: string;
+  name: string;
+  /** Stock que tiene hoy la tienda (null si no lo controla); lo informa el plugin */
+  stock?: number | null;
+}
+
+/** Guarda los artículos de la tienda y los vincula por SKU (los vínculos manuales se respetan). */
+export async function linkCatalog(items: CatalogItem[]) {
   const variants = await db.productVariant.findMany({ select: { id: true, sku: true, barcode: true } });
   const bySku = new Map<string, string>();
   for (const v of variants) {
@@ -54,8 +67,22 @@ export async function importCatalog() {
     if (!existing?.variantId && variantId) newlyLinked++;
     await db.wooLink.upsert({
       where: { wooProductId_wooVariationId: { wooProductId: it.productId, wooVariationId: it.variationId } },
-      update: { wooSku: it.sku || null, wooName: it.name, variantId, linkedBy: keepManual ? "MANUAL" : variantId ? "SKU" : null },
-      create: { wooProductId: it.productId, wooVariationId: it.variationId, wooSku: it.sku || null, wooName: it.name, variantId, linkedBy: variantId ? "SKU" : null },
+      update: {
+        wooSku: it.sku || null,
+        wooName: it.name,
+        variantId,
+        linkedBy: keepManual ? "MANUAL" : variantId ? "SKU" : null,
+        ...(it.stock !== undefined ? { lastPushedQty: it.stock } : {}),
+      },
+      create: {
+        wooProductId: it.productId,
+        wooVariationId: it.variationId,
+        wooSku: it.sku || null,
+        wooName: it.name,
+        variantId,
+        linkedBy: variantId ? "SKU" : null,
+        ...(it.stock !== undefined ? { lastPushedQty: it.stock } : {}),
+      },
     });
   }
   // Productos borrados de la tienda.
@@ -131,6 +158,12 @@ export async function pullOrders(mode: WooMode, since: Date | null, summary: Syn
   const baseline = (await db.wooOrder.count()) === 0;
   const from = baseline ? new Date(Date.now() - 30 * 86_400_000) : (since ?? new Date(Date.now() - 2 * 86_400_000));
   const orders = await wooFetchAll<WooOrderData>("orders", { modified_after: from.toISOString().slice(0, 19), orderby: "modified", order: "asc" });
+  await processOrders(mode, orders, summary);
+}
+
+/** Aplica al stock del ERP los pedidos leídos de la tienda (por la API o enviados por el plugin). */
+export async function processOrders(mode: WooMode, orders: WooOrderData[], summary: SyncSummary) {
+  const baseline = (await db.wooOrder.count()) === 0;
   summary.orders.seen = orders.length;
 
   for (const o of orders) {
@@ -242,12 +275,25 @@ export async function pushStock(mode: WooMode, summary: SyncSummary, opts: { var
 
 let running: Promise<SyncSummary> | null = null;
 
+let bridgeCache: { at: number; active: boolean } | null = null;
+/** Si la tienda está conectada por el plugin, la conexión directa por API no se usa. */
+export async function bridgeActive() {
+  if (bridgeCache && Date.now() - bridgeCache.at < 30_000) return bridgeCache.active;
+  const active = (await db.wooBridge.count()) > 0;
+  bridgeCache = { at: Date.now(), active };
+  return active;
+}
+export const forgetBridgeCache = () => {
+  bridgeCache = null;
+};
+
 /**
  * Sincronización completa: pedidos nuevos → stock del ERP → stock publicado.
  * Una sola corrida a la vez (si ya hay una en curso, se espera esa).
  */
 export function runSync(trigger: "manual" | "automatico" | "cron", opts: { importCatalog?: boolean; force?: boolean } = {}): Promise<SyncSummary> {
   running ??= (async () => {
+    if (await bridgeActive()) throw new WooError("La tienda está conectada por el plugin de WordPress: se sincroniza sola desde la tienda cada 5 minutos.");
     const { mode } = wooConfig();
     const summary: SyncSummary = { mode, orders: { seen: 0, deducted: 0, restocked: 0, baseline: 0, unmatchedLines: [] }, push: { pending: 0, sent: 0, errors: [], preview: [] } };
     const run = await db.wooSyncRun.create({ data: { trigger, mode } });
@@ -283,24 +329,28 @@ let timer: ReturnType<typeof setTimeout> | null = null;
  * sincronización periódica lo corrige.
  */
 export function scheduleWebStockPush(variantIds: string[]) {
-  if (wooConfig().mode !== "activo" || variantIds.length === 0) return;
+  if (wooConfig().mode !== "activo" || !wooConfig().configured || variantIds.length === 0) return;
   for (const id of variantIds) queued.add(id);
   timer ??= setTimeout(() => {
     const ids = [...queued];
     queued.clear();
     timer = null;
     const summary: SyncSummary = { mode: "activo", orders: { seen: 0, deducted: 0, restocked: 0, baseline: 0, unmatchedLines: [] }, push: { pending: 0, sent: 0, errors: [], preview: [] } };
-    pushStock("activo", summary, { variantIds: ids }).catch((e) => console.error("[woo] envío inmediato", e));
+    // Con el plugin no hay envío inmediato: el plugin lo levanta en su próxima llamada.
+    bridgeActive()
+      .then((viaPlugin) => (viaPlugin ? undefined : pushStock("activo", summary, { variantIds: ids })))
+      .catch((e) => console.error("[woo] envío inmediato", e));
   }, 3000);
 }
 
 /** Sincronización automática periódica (se inicia una vez al arrancar el servidor). */
 export function startWooScheduler() {
   const cfg = wooConfig();
-  if (cfg.mode === "desactivado") return;
+  if (cfg.mode === "desactivado" || !cfg.configured) return;
   const g = globalThis as unknown as { __wooScheduler?: ReturnType<typeof setInterval> };
   if (g.__wooScheduler) return;
-  g.__wooScheduler = setInterval(() => {
+  g.__wooScheduler = setInterval(async () => {
+    if (await bridgeActive().catch(() => false)) return;
     runSync("automatico").catch((e) => console.error("[woo] sincronización automática:", e instanceof Error ? e.message : e));
   }, cfg.intervalMinutes * 60_000);
   console.log(`[woo] sincronización automática cada ${cfg.intervalMinutes} min (modo ${cfg.mode})`);
@@ -308,7 +358,7 @@ export function startWooScheduler() {
 
 /** Publica el stock de los artículos de una venta o devolución recién registrada. */
 export async function scheduleWebStockPushForSale(saleId: string) {
-  if (wooConfig().mode !== "activo") return;
+  if (wooConfig().mode !== "activo" || !wooConfig().configured) return;
   const items = await db.saleItem.findMany({ where: { saleId, variantId: { not: null } }, select: { variantId: true } });
   scheduleWebStockPush(items.map((i) => i.variantId!));
 }

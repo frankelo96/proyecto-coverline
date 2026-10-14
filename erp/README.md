@@ -206,7 +206,12 @@ Las compras de mercadería y la producción para stock (sin cliente) entran al *
 
 ## Tienda web (WooCommerce)
 
-Sincroniza **solo stock** con la tienda WooCommerce por la API REST (no toca precios ni descripciones). En **Maestros → Tienda web**:
+Sincroniza **solo stock** con la tienda WooCommerce (no toca precios ni descripciones). Hay dos formas de conectarla, en **Maestros → Tienda web**:
+
+- **Plugin de WordPress (recomendada)**: se descarga desde esa pantalla con la dirección del ERP y una clave ya cargadas; se sube en WordPress (Plugins → Añadir nuevo → Subir plugin) y se activa. El plugin llama al ERP cada 5 minutos (WP-Cron) y al cambiar el estado de un pedido: manda los pedidos y, cada hora, la lista de productos, y graba el stock que le devuelve el ERP (`POST /api/tienda-web/puente`). Como la conexión sale de la tienda, funciona aunque el hosting bloquee conexiones de otros países. En WordPress queda la pantalla Ajustes → Coverline ERP con el último resultado y un botón «Sincronizar ahora».
+- **Directa por API REST**: el ERP llama a la tienda con una clave de WooCommerce (`WOO_URL`, `WOO_CONSUMER_KEY`, `WOO_CONSUMER_SECRET`). Si el plugin está conectado, esta forma no se usa.
+
+En ambos casos:
 
 - **Vínculos**: cada producto/variación de la web se vincula sola cuando su SKU coincide con el SKU (o código de barras) de la variante del ERP, sin importar mayúsculas; las demás se vinculan a mano.
 - **Stock publicado** = stock de los locales (sin el mayorista) − `WOO_SAFETY_STOCK` (margen de seguridad, 2 por defecto), nunca menos de 0.

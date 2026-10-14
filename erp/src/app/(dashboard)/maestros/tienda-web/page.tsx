@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { BridgeControls } from "@/components/woo/bridge-controls";
 import { LinkCell } from "@/components/woo/link-cell";
 import { WooControls } from "@/components/woo/woo-controls";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,9 @@ const FILTERS = [
 
 type Props = { searchParams: Promise<{ ver?: string }> };
 
+/** El plugin se conecta cada 5 minutos: más de media hora sin contacto es para revisar. */
+const isStale = (d: Date | null) => !!d && Date.now() - d.getTime() > 30 * 60_000;
+
 const dt = (d: Date | null) => (d ? d.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—");
 
 export default async function WebStorePage({ searchParams }: Props) {
@@ -35,7 +39,7 @@ export default async function WebStorePage({ searchParams }: Props) {
   const { ver } = await searchParams;
   const filter = FILTERS.find((f) => f.key === ver) ?? FILTERS[0];
 
-  const [links, counts, runs, orders, skus, branch, localStock] = await Promise.all([
+  const [links, counts, runs, orders, skus, branch, localStock, bridge] = await Promise.all([
     db.wooLink.findMany({
       where: filter.key === "sin-vincular" ? { variantId: null } : filter.key === "errores" ? { lastError: { not: null } } : {},
       orderBy: [{ variantId: { sort: "asc", nulls: "first" } }, { wooName: "asc" }],
@@ -48,7 +52,11 @@ export default async function WebStorePage({ searchParams }: Props) {
     db.productVariant.findMany({ where: { active: true }, select: { sku: true }, orderBy: { sku: "asc" } }),
     Promise.resolve(cfg.ordersBranch),
     webStockByVariant(db),
+    db.wooBridge.findUnique({ where: { id: "default" } }),
   ]);
+  const stale = isStale(bridge?.lastSeenAt ?? null);
+  const modeLabel = cfg.mode === "activo" ? "Activa" : cfg.mode === "solo-lectura" ? "Modo prueba (solo lectura)" : "Desactivada";
+  const modeBadge = cfg.mode === "activo" ? ("success" as const) : cfg.mode === "solo-lectura" ? ("accent" as const) : ("outline" as const);
   const stockOf = (variantId: string | null) => (variantId ? (localStock.get(variantId) ?? 0) : 0);
   const total = counts.reduce((a, c) => a + c._count, 0);
   const unlinked = counts.find((c) => c.linkedBy === null)?._count ?? 0;
@@ -75,42 +83,61 @@ export default async function WebStorePage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
-            Conexión
-            <Badge variant={cfg.mode === "activo" ? "success" : cfg.mode === "solo-lectura" ? "accent" : "outline"}>
-              {cfg.mode === "activo" ? "Activa" : cfg.mode === "solo-lectura" ? "Solo lectura (prueba)" : "Desactivada"}
-            </Badge>
+            Conexión {bridge ? "por plugin de WordPress" : cfg.configured ? "directa (API)" : ""}
+            <Badge variant={modeBadge}>{modeLabel}</Badge>
           </CardTitle>
           <CardDescription>
-            {cfg.configured ? (
+            {bridge ? (
+              bridge.lastSeenAt ? (
+                <>
+                  Último contacto del plugin: <strong className={stale ? "text-destructive" : "text-foreground"}>{dt(bridge.lastSeenAt)}</strong>
+                  {bridge.siteUrl && <> · {bridge.siteUrl}</>}
+                  {bridge.pluginVersion && <> · plugin v{bridge.pluginVersion}</>}
+                  {stale && " · hace más de media hora que no se conecta: revisá que el plugin esté activo y que el sitio tenga visitas (WordPress ejecuta las tareas automáticas cuando alguien entra)."}
+                </>
+              ) : (
+                "Esperando la primera conexión del plugin: instalalo y activalo en WordPress (pasos abajo)."
+              )
+            ) : cfg.configured ? (
               <>
                 {cfg.url} · sincronización automática cada {cfg.intervalMinutes} min
-                {cfg.mode === "solo-lectura" && " · en este modo no se escribe nada en la tienda ni se descuenta stock: sirve para revisar los vínculos antes de activarla."}
               </>
             ) : (
-              "Falta configurar la tienda. En Render → servicio coverline-erp → Environment, cargá WOO_URL, WOO_CONSUMER_KEY y WOO_CONSUMER_SECRET (ver instrucciones abajo)."
+              "La tienda todavía no está conectada."
             )}
+            {cfg.mode === "solo-lectura" && " En modo prueba no se escribe nada en la tienda ni se descuenta stock: sirve para revisar los vínculos antes de activarla."}
           </CardDescription>
         </CardHeader>
-        {cfg.configured && canWrite && (
-          <CardContent>
-            <WooControls mode={cfg.mode} />
-          </CardContent>
-        )}
-        {!cfg.configured && (
-          <CardContent className="text-sm">
+        <CardContent className="flex flex-col gap-5 text-sm">
+          {canWrite && <BridgeControls connected={!!bridge} />}
+          {(!bridge || !bridge.lastSeenAt) && (
             <ol className="list-inside list-decimal space-y-1.5">
+              <li>Tocá «Descargar plugin para WordPress» (ya trae la dirección del ERP y la clave; no lo compartas).</li>
               <li>
-                En WordPress: <strong>WooCommerce → Ajustes → Avanzado → REST API → Añadir clave</strong>. Descripción “Coverline ERP”, permisos <strong>Lectura/Escritura</strong>.
+                En WordPress: <strong>Plugins → Añadir nuevo → Subir plugin</strong>, elegí el archivo <code>coverline-erp-stock.zip</code>, <strong>Instalar ahora</strong> y{" "}
+                <strong>Activar</strong>.
               </li>
-              <li>Copiá la “Clave de cliente” (ck_…) y la “Clave secreta” (cs_…): se muestran una sola vez.</li>
               <li>
-                En Render, variables de entorno: <code>WOO_URL</code> = https://www.uniformescoverline.com, <code>WOO_CONSUMER_KEY</code>, <code>WOO_CONSUMER_SECRET</code>,{" "}
-                <code>WOO_SYNC_MODE</code> = solo-lectura (para probar) y <code>WOO_SAFETY_STOCK</code> = 2.
+                En WordPress: <strong>Ajustes → Coverline ERP → Sincronizar ahora</strong>. En unos segundos aparece acá la lista de productos para revisar los vínculos.
               </li>
-              <li>Volvé a esta pantalla, probá la conexión, traé los productos y revisá los vínculos. Cuando esté bien, cambiá WOO_SYNC_MODE a “activo”.</li>
+              <li>
+                Cuando esté todo bien, en Render cambiá <code>WOO_SYNC_MODE</code> a <code>activo</code>. Desde ahí el plugin publica el stock y el ERP descuenta los pedidos web.
+              </li>
             </ol>
-          </CardContent>
-        )}
+          )}
+          {!bridge && (
+            <p className="text-muted-foreground">
+              El plugin se conecta desde la tienda hacia el ERP, así que funciona aunque el hosting bloquee las conexiones de otros países. No hace falta cargar claves de
+              WooCommerce.
+            </p>
+          )}
+          {!bridge && cfg.configured && canWrite && (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <p className="font-medium">Conexión directa por API (alternativa)</p>
+              <WooControls mode={cfg.mode} />
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {total > 0 && (
@@ -242,7 +269,7 @@ export default async function WebStorePage({ searchParams }: Props) {
                     <TableRow key={r.id}>
                       <TableCell className="pl-5">{dt(r.startedAt)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {r.trigger} · {r.mode}
+                        {r.trigger === "puente" ? "plugin" : r.trigger} · {r.mode}
                       </TableCell>
                       <TableCell className="pr-5 text-sm">
                         {r.ok ? (

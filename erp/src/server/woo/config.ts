@@ -14,8 +14,10 @@ export function wooConfig() {
   const key = (process.env.WOO_CONSUMER_KEY ?? "").trim();
   const secret = (process.env.WOO_CONSUMER_SECRET ?? "").trim();
   const rawMode = (process.env.WOO_SYNC_MODE ?? "solo-lectura").toLowerCase();
+  /** Conexión directa por la API REST (el ERP llama a la tienda) */
   const configured = !!(url && key && secret);
-  const mode: WooMode = !configured ? "desactivado" : rawMode === "activo" ? "activo" : rawMode === "desactivado" ? "desactivado" : "solo-lectura";
+  // El modo vale también para la conexión por plugin, que no necesita las claves.
+  const mode: WooMode = rawMode === "activo" ? "activo" : rawMode === "desactivado" ? "desactivado" : "solo-lectura";
   const safety = Number(process.env.WOO_SAFETY_STOCK ?? "2");
   const minutes = Number(process.env.WOO_SYNC_MINUTES ?? "5");
   return {

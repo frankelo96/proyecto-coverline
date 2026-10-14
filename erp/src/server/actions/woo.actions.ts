@@ -7,6 +7,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { disconnectBridge, regenerateBridgeToken, requestCatalog } from "@/server/woo/bridge";
 import { wooAccessMode, WooError, wooFetch } from "@/server/woo/client";
 import { wooConfig } from "@/server/woo/config";
 import { importCatalog, runSync, type SyncSummary } from "@/server/woo/sync";
@@ -84,5 +85,42 @@ export async function linkWooItemAction(raw: unknown): Promise<ActionResult> {
     return { ok: true, data: undefined, message: variantId ? "Vinculado" : "Desvinculado" };
   } catch (e) {
     return fail(e, "link");
+  }
+}
+
+// ─── Conexión por plugin de WordPress ─────────────────────────────────────
+
+/** Pide al plugin la lista de productos en su próxima llamada (en hasta 5 minutos). */
+export async function requestWooCatalogAction(): Promise<ActionResult> {
+  try {
+    await requireActionUser(PERMISSIONS.mastersWrite);
+    await requestCatalog();
+    return { ok: true, data: undefined, message: "Listo: el plugin manda la lista de productos en su próxima sincronización (hasta 5 minutos, o al tocar «Sincronizar ahora» en WordPress)." };
+  } catch (e) {
+    return fail(e, "catalog");
+  }
+}
+
+/** Cambia la clave del plugin: el plugin instalado deja de funcionar hasta subir el nuevo. */
+export async function regenerateBridgeTokenAction(): Promise<ActionResult> {
+  try {
+    await requireActionUser(PERMISSIONS.mastersWrite);
+    await regenerateBridgeToken();
+    revalidatePath("/maestros/tienda-web");
+    return { ok: true, data: undefined, message: "Clave cambiada. Descargá el plugin de nuevo y reemplazá el instalado en WordPress." };
+  } catch (e) {
+    return fail(e, "token");
+  }
+}
+
+/** Deja de usar el plugin (vuelve a la conexión directa por API, si está configurada). */
+export async function disconnectBridgeAction(): Promise<ActionResult> {
+  try {
+    await requireActionUser(PERMISSIONS.mastersWrite);
+    await disconnectBridge();
+    revalidatePath("/maestros/tienda-web");
+    return { ok: true, data: undefined, message: "Plugin desconectado. Desactivalo también en WordPress." };
+  } catch (e) {
+    return fail(e, "disconnect");
   }
 }
