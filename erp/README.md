@@ -196,15 +196,21 @@ Cobros (POS, recibos) y pagos a proveedores y talleres usan los medios de Coverl
 
 ## Stock por local
 
-Cada variante tiene stock por local (Recta Martinolli, Villa Allende); el total es la suma. Las ventas y devoluciones del POS mueven el stock del local de la caja; las compras de mercadería y la producción terminada entran al **local principal** (el de punto de venta más bajo, o el que indique `STOCK_MAIN_BRANCH`). En **Maestros → Stock por local** se ve el stock de cada local y se hacen transferencias entre locales (quedan en la auditoría). En la ficha de cada producto, la grilla de variantes tiene una columna de stock por local.
+Cada variante tiene cuatro stocks:
+
+- **Recta Martinolli** y **Villa Allende**: cada local vende de su propio stock (ventas y devoluciones del POS mueven el del local de la caja).
+- **Mayorista**: pedidos personalizados de clientes que se producen directo. La producción con cliente asignado ingresa acá; no se vende por POS ni se publica en la web.
+- **Web** (calculado): stock de los dos locales menos el margen de seguridad. En escolar cada colegio está en el local de su zona, así que la web muestra lo de ese local; en los demás rubros es el stock general de los dos.
+
+Las compras de mercadería y la producción para stock (sin cliente) entran al **local principal** (el de punto de venta más bajo, o `STOCK_MAIN_BRANCH`). En **Maestros → Stock por local** se ven los cuatro stocks y se transfiere entre locales y el mayorista (queda en la auditoría). La ficha de cada producto muestra lo mismo en la grilla de variantes.
 
 ## Tienda web (WooCommerce)
 
 Sincroniza **solo stock** con la tienda WooCommerce por la API REST (no toca precios ni descripciones). En **Maestros → Tienda web**:
 
 - **Vínculos**: cada producto/variación de la web se vincula sola cuando su SKU coincide con el SKU (o código de barras) de la variante del ERP, sin importar mayúsculas; las demás se vinculan a mano.
-- **Stock publicado** = stock total de los locales − `WOO_SAFETY_STOCK` (margen de seguridad, 2 por defecto), nunca menos de 0.
-- **Pedidos web**: los pedidos en *procesando*, *en espera* o *completado* descuentan stock del local `WOO_ORDERS_BRANCH` (por defecto el principal); si se cancelan o reembolsan, el stock vuelve. En la primera sincronización los pedidos ya completados solo se registran (se asume que ya estaban descontados).
+- **Stock publicado** = stock de los locales (sin el mayorista) − `WOO_SAFETY_STOCK` (margen de seguridad, 2 por defecto), nunca menos de 0.
+- **Pedidos web**: los pedidos en *procesando*, *en espera* o *completado* descuentan stock del local que tiene el artículo (el de más stock; así un escolar sale del local de ese colegio) o del local fijo `WOO_ORDERS_BRANCH` si se configura; si se cancelan o reembolsan, el stock vuelve. En la primera sincronización los pedidos ya completados solo se registran (se asume que ya estaban descontados).
 - La sincronización corre cada `WOO_SYNC_MINUTES` (5) mientras el servidor está levantado, y además se publica al instante después de cada venta o devolución del POS y de cada cambio de stock. Opcional: un cron externo puede llamar a `GET /api/tienda-web/sync?token=WOO_CRON_TOKEN`.
 
 | Variable | Uso |
@@ -214,7 +220,7 @@ Sincroniza **solo stock** con la tienda WooCommerce por la API REST (no toca pre
 | `WOO_SYNC_MODE` | `desactivado`, `solo-lectura` (prueba: lee y muestra qué cambiaría, no escribe) o `activo` |
 | `WOO_SAFETY_STOCK` | Margen de seguridad (por defecto 2) |
 | `WOO_SYNC_MINUTES` | Intervalo de sincronización automática (por defecto 5) |
-| `WOO_ORDERS_BRANCH` | Nombre del local que descuenta los pedidos web (opcional) |
+| `WOO_ORDERS_BRANCH` | Nombre de un local fijo que descuente los pedidos web (opcional; por defecto, el que tiene el artículo) |
 | `WOO_CRON_TOKEN` | Habilita el endpoint de cron externo (opcional) |
 
 ## Pendiente para los próximos módulos

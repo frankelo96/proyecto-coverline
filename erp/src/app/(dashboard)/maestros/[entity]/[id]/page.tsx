@@ -16,6 +16,8 @@ import { formatMoney } from "@/lib/format";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { ADAPTERS } from "@/server/masters/adapters";
+import { BRANCH_ORDER } from "@/server/services/stock.service";
+import { wooConfig } from "@/server/woo/config";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,7 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
   // Locales con stock propio; el principal primero (es el que recibe compras y producción).
   const branches =
     entity === "productos"
-      ? await db.branch.findMany({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }], select: { id: true, name: true } })
+      ? await db.branch.findMany({ where: { active: true }, orderBy: BRANCH_ORDER, select: { id: true, name: true, kind: true } })
       : [];
   // Sugerencias de tela: las telas del maestro de materias primas y las ya usadas en otros productos.
   const fabricSuggestions =
@@ -109,6 +111,7 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
           canWrite={canWrite}
           fabricSuggestions={fabricSuggestions}
           branches={branches}
+          webSafety={wooConfig().safetyStock}
           initial={variants.map((v) => ({
             id: v.id,
             size: v.size,

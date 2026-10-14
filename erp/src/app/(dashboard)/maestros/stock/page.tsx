@@ -8,6 +8,8 @@ import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { compareSizes, variantAttrs } from "@/lib/catalog/variants";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { BRANCH_ORDER } from "@/server/services/stock.service";
+import { wooConfig } from "@/server/woo/config";
 
 export const metadata: Metadata = { title: "Stock por local" };
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ export default async function StockByBranchPage({ searchParams }: Props) {
   const user = await requirePageUser(PERMISSIONS.mastersRead);
   const { producto } = await searchParams;
   const [branches, products] = await Promise.all([
-    db.branch.findMany({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }], select: { id: true, name: true } }),
+    db.branch.findMany({ where: { active: true }, orderBy: BRANCH_ORDER, select: { id: true, name: true, kind: true } }),
     db.product.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, sku: true } }),
   ]);
   const selected = products.find((p) => p.id === producto) ?? null;
@@ -33,7 +35,8 @@ export default async function StockByBranchPage({ searchParams }: Props) {
       <div className="flex flex-col gap-1.5">
         <h1 className="text-3xl font-bold tracking-tight">Stock por local</h1>
         <p className="text-sm text-muted-foreground">
-          Cada local vende de su propio stock. Las compras y la producción terminada ingresan a {branches[0]?.name ?? "el local principal"}; desde acá se reparte a los demás.
+          Cada local vende de su propio stock. Las compras y la producción para stock ingresan a {branches[0]?.name ?? "el local principal"}; la producción de pedidos personalizados
+          de clientes ingresa a Mayorista. La columna Web es lo que se publica en la tienda: el stock de los locales (sin el mayorista) menos el margen de seguridad.
         </p>
       </div>
       <Card>
@@ -70,6 +73,7 @@ export default async function StockByBranchPage({ searchParams }: Props) {
             <StockTransfer
               key={selected.id + variants.map((v) => v.branchStocks.map((s) => s.quantity.toString()).join(",")).join("|")}
               branches={branches}
+              webSafety={wooConfig().safetyStock}
               canWrite={hasPermission(user.permissions, PERMISSIONS.mastersWrite)}
               variants={variants.map((v) => ({
                 id: v.id,

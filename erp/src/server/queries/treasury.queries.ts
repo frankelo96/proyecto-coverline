@@ -70,7 +70,7 @@ export interface CatalogItem {
   price: number;
   /** Stock en el local de la caja */
   stock: number;
-  /** Stock sumando todos los locales */
+  /** Stock sumando los locales (sin el mayorista) */
   totalStock: number;
 }
 
@@ -98,7 +98,7 @@ export async function getTerminalData(registerId: string) {
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
       orderBy: { name: "asc" },
-      include: { variants: { where: { active: true }, include: { branchStocks: { where: { branchId: register.branchId ?? "" }, select: { quantity: true } } } } },
+      include: { variants: { where: { active: true }, include: { branchStocks: { where: { branch: { kind: "LOCAL" } }, select: { branchId: true, quantity: true } } } } },
     }),
     db.client.findMany({ where: { active: true }, orderBy: { businessName: "asc" } }),
     db.accountReceivable.groupBy({ by: ["clientId"], where: { status: { in: [...OPEN] } }, _sum: { balance: true } }),
@@ -120,8 +120,9 @@ export async function getTerminalData(registerId: string) {
         color: v.color,
         fabric: v.fabric,
         price: finalUnitPrice(p.listPrice.toNumber(), p.vatRate.toNumber(), v.priceAdjustmentPct.toNumber()),
-        stock: v.branchStocks[0]?.quantity.toNumber() ?? 0,
-        totalStock: v.stockQty.toNumber(),
+        stock: v.branchStocks.find((s) => s.branchId === register.branchId)?.quantity.toNumber() ?? 0,
+        // Suma de los locales: el stock mayorista está reservado para pedidos de clientes.
+        totalStock: v.branchStocks.reduce((a, s) => a + s.quantity.toNumber(), 0),
       })),
   );
   const balanceOf = new Map(balances.map((b) => [b.clientId, b._sum.balance?.toNumber() ?? 0]));

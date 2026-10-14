@@ -1045,15 +1045,22 @@ model SaleItem {
 }
 
 /// Sucursal / local de venta.
+enum BranchKind {
+  LOCAL
+  MAYORISTA
+}
+
 model Branch {
-  id          String   @id @default(cuid())
-  name        String   @unique
+  id          String     @id @default(cuid())
+  name        String     @unique
   address     String?
   /// Punto de venta ARCA para los comprobantes del local
   pointOfSale Int?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  /// LOCAL: punto de venta, su stock se publica en la web. MAYORISTA: pedidos personalizados (no se publica).
+  kind        BranchKind @default(LOCAL)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   cashRegisters CashRegister[]
   sales         Sale[]

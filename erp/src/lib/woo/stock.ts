@@ -2,7 +2,7 @@
  * Reglas de sincronización con WooCommerce — puras y testeadas.
  */
 
-/** Stock a publicar en la web: total de todos los locales menos el margen de seguridad, nunca negativo. */
+/** Stock a publicar en la web: stock de los locales (sin el mayorista) menos el margen de seguridad, nunca negativo. */
 export function webQuantity(totalStock: number, safetyMargin: number): number {
   if (!Number.isFinite(totalStock)) return 0;
   return Math.max(0, Math.floor(totalStock) - Math.max(0, Math.floor(safetyMargin)));

@@ -9,10 +9,13 @@ import { ITEM_TYPE_LABELS, PURCHASE_KIND_LABELS, TAX_CONDITION_LABELS } from "@/
 import { METHOD_LABELS, MOVEMENT_LABELS, MOVEMENT_SIGN, REGISTER_KIND_LABELS } from "@/lib/treasury/cash";
 import { CHEQUE_FORMAT_LABELS, CHEQUE_STATUS_LABELS } from "@/lib/treasury/cheques";
 import { PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
+import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
 import { getCreditorStatement, listCreditors } from "@/server/queries/purchasing.queries";
 import { voucherLabel } from "@/server/queries/sales.queries";
 import { getClientAccount, listClientBalances } from "@/server/queries/treasury.queries";
+import { BRANCH_ORDER } from "@/server/services/stock.service";
+import { wooConfig } from "@/server/woo/config";
 
 export type CellValue = string | number | Date | null;
 
@@ -390,7 +393,7 @@ export const REPORTS: Record<string, ReportDef> = {
       const [variants, materials, branches] = await Promise.all([
         db.productVariant.findMany({ where: { active: true }, include: { product: true, branchStocks: true }, orderBy: { sku: "asc" } }),
         db.rawMaterial.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
-        db.branch.findMany({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }] }),
+        db.branch.findMany({ where: { active: true }, orderBy: BRANCH_ORDER }),
       ]);
       return {
         title: "Stock",
@@ -405,6 +408,7 @@ export const REPORTS: Record<string, ReportDef> = {
           { key: "unit", label: "Unidad" },
           ...branches.map((b) => ({ key: `b_${b.id}`, label: `Stock ${b.name}`, type: "number" as const, total: true })),
           { key: "stock", label: "Stock total", type: "number", total: true },
+          { key: "web", label: "Stock web", type: "number", total: true },
           { key: "cost", label: "Costo unitario", type: "money" },
           { key: "value", label: "Valorizado", type: "money", total: true },
         ],
@@ -419,6 +423,10 @@ export const REPORTS: Record<string, ReportDef> = {
             unit: "u",
             ...Object.fromEntries(branches.map((b) => [`b_${b.id}`, v.branchStocks.find((x) => x.branchId === b.id)?.quantity.toNumber() ?? 0])),
             stock: v.stockQty.toNumber(),
+            web: webQuantity(
+              v.branchStocks.filter((x) => branches.some((b) => b.id === x.branchId && b.kind === "LOCAL")).reduce((a, x) => a + x.quantity.toNumber(), 0),
+              wooConfig().safetyStock,
+            ),
             cost: v.product.currentCost.toNumber(),
             value: Math.round(v.stockQty.toNumber() * v.product.currentCost.toNumber() * 100) / 100,
           })),

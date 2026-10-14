@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { chunk, groupStockUpdates, normalizeSku, orderDeductsStock, webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
-import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
+import { adjustBranchStock, mainBranchId, webOrderBranchId, webStockByVariant } from "@/server/services/stock.service";
 
 import { type WooOrderData, type WooProduct, type WooVariation, WooError, wooFetch, wooFetchAll } from "./client";
 import { wooConfig, type WooMode } from "./config";
@@ -69,10 +69,11 @@ export async function importCatalog() {
 
 // ─── Pedidos web → stock del ERP ──────────────────────────────────────────
 
-async function ordersBranchId(tx: Tx) {
+/** Local fijo para los pedidos web (WOO_ORDERS_BRANCH) o null para elegirlo por artículo. */
+async function fixedOrdersBranchId(tx: Tx) {
   const name = wooConfig().ordersBranch;
   const b = name ? await tx.branch.findFirst({ where: { name, active: true }, select: { id: true } }) : null;
-  return b?.id ?? mainBranchId(tx);
+  return b?.id ?? null;
 }
 
 interface StoredLine {
@@ -80,6 +81,8 @@ interface StoredLine {
   sku: string;
   name: string;
   quantity: number;
+  /** Local del que se descontó (para devolverlo ahí si se cancela). */
+  branchId?: string;
 }
 
 async function resolveLines(order: WooOrderData): Promise<StoredLine[]> {
@@ -96,8 +99,23 @@ async function resolveLines(order: WooOrderData): Promise<StoredLine[]> {
   return out;
 }
 
-async function applyLines(tx: Tx, lines: StoredLine[], branchId: string, sign: 1 | -1) {
-  for (const l of lines) if (l.variantId && l.quantity > 0) await adjustBranchStock(tx, l.variantId, branchId, sign * l.quantity);
+/** Descuenta cada artículo del local fijo o del local que más stock tiene de esa variante. */
+async function deductLines(tx: Tx, lines: StoredLine[], fixedBranchId: string | null): Promise<StoredLine[]> {
+  const out: StoredLine[] = [];
+  for (const l of lines) {
+    if (!l.variantId || l.quantity <= 0) {
+      out.push(l);
+      continue;
+    }
+    const branchId = fixedBranchId ?? (await webOrderBranchId(tx, l.variantId));
+    await adjustBranchStock(tx, l.variantId, branchId, -l.quantity);
+    out.push({ ...l, branchId });
+  }
+  return out;
+}
+
+async function restockLines(tx: Tx, lines: StoredLine[], fallbackBranchId: string) {
+  for (const l of lines) if (l.variantId && l.quantity > 0) await adjustBranchStock(tx, l.variantId, l.branchId ?? fallbackBranchId, l.quantity);
 }
 
 /**
@@ -123,19 +141,20 @@ export async function pullOrders(mode: WooMode, since: Date | null, summary: Syn
     const shouldDeduct = orderDeductsStock(o.status);
     const existing = await db.wooOrder.findUnique({ where: { wooOrderId: o.id } });
     await db.$transaction(async (tx) => {
-      const branchId = existing?.branchId ?? (await ordersBranchId(tx));
+      const fixed = await fixedOrdersBranchId(tx);
+      let branchId = existing?.branchId ?? fixed ?? (await mainBranchId(tx));
       let deducted = existing?.deducted ?? false;
       let storedLines = (existing?.lines as unknown as StoredLine[] | undefined) ?? lines;
       const isBaseline = existing?.baseline ?? (baseline && o.status === "completed");
       if (isBaseline) {
         if (!existing) summary.orders.baseline++;
       } else if (shouldDeduct && !deducted) {
-        storedLines = lines;
-        await applyLines(tx, storedLines, branchId, -1);
+        storedLines = await deductLines(tx, lines, fixed);
+        branchId = storedLines.find((l) => l.branchId)?.branchId ?? branchId;
         deducted = true;
         summary.orders.deducted++;
       } else if (!shouldDeduct && deducted) {
-        await applyLines(tx, storedLines, branchId, 1);
+        await restockLines(tx, storedLines, branchId);
         deducted = false;
         summary.orders.restocked++;
       }
@@ -159,25 +178,26 @@ export async function pullOrders(mode: WooMode, since: Date | null, summary: Syn
 // ─── Stock del ERP → tienda ───────────────────────────────────────────────
 
 /**
- * Publica en la tienda el stock total (todos los locales) menos el margen de
- * seguridad. Sin `variantIds` revisa todo; con `force` reenvía aunque no haya
+ * Publica en la tienda el stock de los locales (sin el mayorista) menos el
+ * margen de seguridad. Sin `variantIds` revisa todo; con `force` reenvía aunque no haya
  * cambiado (corrige ediciones hechas a mano en WooCommerce).
  */
 export async function pushStock(mode: WooMode, summary: SyncSummary, opts: { variantIds?: string[]; force?: boolean } = {}) {
   const { safetyStock } = wooConfig();
   const links = await db.wooLink.findMany({
     where: { variantId: opts.variantIds ? { in: opts.variantIds } : { not: null } },
-    include: { variant: { select: { sku: true, stockQty: true } } },
+    include: { variant: { select: { sku: true } } },
   });
+  const stock = await webStockByVariant(db, opts.variantIds);
   const dayAgo = Date.now() - 86_400_000;
   const pending = links
-    .map((l) => ({ link: l, quantity: webQuantity(l.variant!.stockQty.toNumber(), safetyStock) }))
+    .map((l) => ({ link: l, total: stock.get(l.variantId!) ?? 0, quantity: webQuantity(stock.get(l.variantId!) ?? 0, safetyStock) }))
     .filter((x) => opts.force || x.link.lastPushedQty !== x.quantity || !x.link.lastPushedAt || x.link.lastPushedAt.getTime() < dayAgo);
   summary.push.pending = pending.length;
   summary.push.preview = pending.slice(0, 300).map((x) => ({
     sku: x.link.variant!.sku,
     name: x.link.wooName,
-    total: x.link.variant!.stockQty.toNumber(),
+    total: x.total,
     web: x.quantity,
     before: x.link.lastPushedQty,
   }));

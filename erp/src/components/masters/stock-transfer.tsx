@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatNumber } from "@/lib/format";
 import { parseLocaleNumber } from "@/lib/masters/fields";
+import { webQuantity } from "@/lib/woo/stock";
 import { transferStockAction } from "@/server/actions/catalog.actions";
 
 export interface TransferVariant {
@@ -22,7 +23,17 @@ export interface TransferVariant {
 }
 
 /** Stock de cada variante por local y transferencia de un local a otro. */
-export function StockTransfer({ branches, variants, canWrite }: { branches: { id: string; name: string }[]; variants: TransferVariant[]; canWrite: boolean }) {
+export function StockTransfer({
+  branches,
+  variants,
+  canWrite,
+  webSafety,
+}: {
+  branches: { id: string; name: string; kind: "LOCAL" | "MAYORISTA" }[];
+  variants: TransferVariant[];
+  canWrite: boolean;
+  webSafety: number;
+}) {
   const uid = useId();
   const [from, setFrom] = useState(branches[0]?.id ?? "");
   const [to, setTo] = useState(branches[1]?.id ?? "");
@@ -73,6 +84,9 @@ export function StockTransfer({ branches, variants, canWrite }: { branches: { id
                 </TableHead>
               ))}
               <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right" title={`Stock de los locales (sin mayorista) menos ${webSafety} de margen`}>
+                Web
+              </TableHead>
               {canWrite && <TableHead className="w-28 pr-3 text-right">A transferir</TableHead>}
             </TableRow>
           </TableHeader>
@@ -89,6 +103,9 @@ export function StockTransfer({ branches, variants, canWrite }: { branches: { id
                   </TableCell>
                 ))}
                 <TableCell className="text-right font-mono font-semibold tabular-nums">{formatNumber(branches.reduce((a, b) => a + (v.stocks[b.id] ?? 0), 0))}</TableCell>
+                <TableCell className="text-right font-mono text-muted-foreground tabular-nums">
+                  {formatNumber(webQuantity(branches.filter((b) => b.kind === "LOCAL").reduce((a, b) => a + (v.stocks[b.id] ?? 0), 0), webSafety))}
+                </TableCell>
                 {canWrite && (
                   <TableCell className="pr-3">
                     <Input

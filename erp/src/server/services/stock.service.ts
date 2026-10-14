@@ -7,9 +7,11 @@ const D = (v: number | Prisma.Decimal) => new Prisma.Decimal(v);
 
 export class StockError extends Error {}
 
+/** Orden de los locales en pantallas e informes: locales por punto de venta y al final el mayorista. */
+export const BRANCH_ORDER: Prisma.BranchOrderByWithRelationInput[] = [{ kind: "asc" }, { pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }];
+
 /**
- * Local principal: recibe compras y producción terminada, y es el que
- * descuenta los pedidos de la web (salvo que se configure otro).
+ * Local principal: recibe compras y producción para stock.
  * STOCK_MAIN_BRANCH puede indicar el nombre; si no, el de punto de venta más bajo.
  */
 export async function mainBranchId(tx: Tx): Promise<string> {
@@ -17,9 +19,41 @@ export async function mainBranchId(tx: Tx): Promise<string> {
     ? await tx.branch.findFirst({ where: { name: process.env.STOCK_MAIN_BRANCH, active: true }, select: { id: true } })
     : null;
   if (byName) return byName.id;
-  const first = await tx.branch.findFirst({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }], select: { id: true } });
+  const first = await tx.branch.findFirst({ where: { active: true, kind: "LOCAL" }, orderBy: BRANCH_ORDER, select: { id: true } });
   if (!first) throw new StockError("No hay locales cargados");
   return first.id;
+}
+
+/** Stock mayorista: recibe la producción de pedidos personalizados de clientes. */
+export async function wholesaleBranchId(tx: Tx): Promise<string> {
+  const b = await tx.branch.findFirst({ where: { active: true, kind: "MAYORISTA" }, orderBy: { name: "asc" }, select: { id: true } });
+  return b?.id ?? mainBranchId(tx);
+}
+
+/**
+ * Stock que alimenta la tienda web: suma de los locales (sin el mayorista).
+ * En escolar cada colegio está en un solo local, así que es el stock de ese local;
+ * en los demás rubros es el stock general de los dos locales.
+ */
+export async function webStockByVariant(tx: Pick<Tx, "branchStock">, variantIds?: string[]): Promise<Map<string, number>> {
+  const rows = await tx.branchStock.groupBy({
+    by: ["variantId"],
+    where: { branch: { kind: "LOCAL", active: true }, ...(variantIds ? { variantId: { in: variantIds } } : {}) },
+    _sum: { quantity: true },
+  });
+  return new Map(rows.map((r) => [r.variantId, r._sum.quantity?.toNumber() ?? 0]));
+}
+
+/**
+ * Local del que sale un pedido web: el local con más stock de esa variante
+ * (así un escolar se descuenta del local que vende ese colegio); a igualdad, el principal.
+ */
+export async function webOrderBranchId(tx: Tx, variantId: string): Promise<string> {
+  const main = await mainBranchId(tx);
+  const rows = await tx.branchStock.findMany({ where: { variantId, branch: { kind: "LOCAL", active: true } }, select: { branchId: true, quantity: true } });
+  let best = { id: main, qty: rows.find((r) => r.branchId === main)?.quantity.toNumber() ?? 0 };
+  for (const r of rows) if (r.quantity.toNumber() > best.qty) best = { id: r.branchId, qty: r.quantity.toNumber() };
+  return best.id;
 }
 
 /**

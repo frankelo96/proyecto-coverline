@@ -191,6 +191,7 @@ async function main() {
   const branches = [
     { name: "Recta Martinolli", pointOfSale: 1 },
     { name: "Villa Allende", pointOfSale: 2 },
+    { name: "Mayorista", kind: "MAYORISTA" as const },
   ];
   const branchIds = new Map<string, string>();
   for (const b of branches) {

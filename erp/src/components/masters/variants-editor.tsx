@@ -15,6 +15,7 @@ import { useServerAction } from "@/hooks/use-server-action";
 import { combineVariants, splitValues, variantKey, variantOptions } from "@/lib/catalog/variants";
 import { formatNumber } from "@/lib/format";
 import { parseLocaleNumber } from "@/lib/masters/fields";
+import { webQuantity } from "@/lib/woo/stock";
 import type { SaveVariantsInput } from "@/lib/validations/catalog";
 import { cn } from "@/lib/utils";
 import { saveVariantsAction } from "@/server/actions/catalog.actions";
@@ -44,13 +45,16 @@ export function VariantsEditor({
   canWrite,
   fabricSuggestions,
   branches,
+  webSafety,
 }: {
   productId: string;
   initial: VariantRow[];
   canWrite: boolean;
   fabricSuggestions: string[];
-  /** Locales; el primero es el principal (recibe el stock inicial al generar) */
-  branches: { id: string; name: string }[];
+  /** Locales; el primero es el principal (recibe el stock inicial al generar). El mayorista no se publica en la web. */
+  branches: { id: string; name: string; kind: "LOCAL" | "MAYORISTA" }[];
+  /** Margen de seguridad de la tienda web */
+  webSafety: number;
 }) {
   const uid = useId();
   const [rows, setRows] = useState<VariantRow[]>(initial);
@@ -76,6 +80,11 @@ export function VariantsEditor({
   const toAdd = planned.filter((v) => !existing.has(variantKey(v)));
   const options = variantOptions(rows.filter((r) => r.active && r.size));
   const rowTotal = (r: VariantRow) => branches.reduce((a, b) => a + (parseLocaleNumber(r.stocks[b.id] || "0") ?? 0), 0);
+  const rowWeb = (r: VariantRow) =>
+    webQuantity(
+      branches.filter((b) => b.kind === "LOCAL").reduce((a, b) => a + (parseLocaleNumber(r.stocks[b.id] || "0") ?? 0), 0),
+      webSafety,
+    );
   const totalStock = rows.filter((r) => r.active).reduce((a, r) => a + rowTotal(r), 0);
 
   function generate() {
@@ -195,6 +204,9 @@ export function VariantsEditor({
                   </TableHead>
                 ))}
                 <TableHead className="w-16 text-right">Total</TableHead>
+                <TableHead className="w-16 text-right" title={`Stock de los locales (sin mayorista) menos ${webSafety} de margen`}>
+                  Web
+                </TableHead>
                 <TableHead className="w-24 text-right">Ajuste %</TableHead>
                 <TableHead className="w-16 pr-3 text-center">Activo</TableHead>
               </TableRow>
@@ -202,7 +214,7 @@ export function VariantsEditor({
             <TableBody>
               {rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7 + branches.length} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9 + branches.length} className="py-8 text-center text-sm text-muted-foreground">
                     Sin variantes: cargá talles, colores y telas arriba y tocá Generar.
                   </TableCell>
                 </TableRow>
@@ -237,6 +249,7 @@ export function VariantsEditor({
                     </TableCell>
                   ))}
                   <TableCell className="text-right font-mono tabular-nums">{formatNumber(rowTotal(r))}</TableCell>
+                  <TableCell className="text-right font-mono text-muted-foreground tabular-nums">{r.active ? formatNumber(rowWeb(r)) : "—"}</TableCell>
                   <TableCell>
                     <Input aria-label="Ajuste de precio %" inputMode="decimal" value={r.priceAdjustmentPct} onChange={(e) => update(i, { priceAdjustmentPct: e.target.value })} disabled={!canWrite} className="h-9 text-right" />
                   </TableCell>

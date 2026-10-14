@@ -12,6 +12,7 @@ import { ORDER_STATUS_LABELS, webQuantity } from "@/lib/woo/stock";
 import { cn } from "@/lib/utils";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { webStockByVariant } from "@/server/services/stock.service";
 import { wooConfig } from "@/server/woo/config";
 
 export const metadata: Metadata = { title: "Tienda web" };
@@ -34,19 +35,21 @@ export default async function WebStorePage({ searchParams }: Props) {
   const { ver } = await searchParams;
   const filter = FILTERS.find((f) => f.key === ver) ?? FILTERS[0];
 
-  const [links, counts, runs, orders, skus, branch] = await Promise.all([
+  const [links, counts, runs, orders, skus, branch, localStock] = await Promise.all([
     db.wooLink.findMany({
       where: filter.key === "sin-vincular" ? { variantId: null } : filter.key === "errores" ? { lastError: { not: null } } : {},
       orderBy: [{ variantId: { sort: "asc", nulls: "first" } }, { wooName: "asc" }],
       take: 500,
-      include: { variant: { select: { sku: true, stockQty: true } } },
+      include: { variant: { select: { sku: true } } },
     }),
     db.wooLink.groupBy({ by: ["linkedBy"], _count: true }),
     db.wooSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 6 }),
     db.wooOrder.findMany({ orderBy: { orderDate: "desc" }, take: 10 }),
     db.productVariant.findMany({ where: { active: true }, select: { sku: true }, orderBy: { sku: "asc" } }),
-    cfg.ordersBranch ? Promise.resolve(cfg.ordersBranch) : db.branch.findFirst({ where: { active: true }, orderBy: [{ pointOfSale: { sort: "asc", nulls: "last" } }, { name: "asc" }] }).then((b) => b?.name ?? "—"),
+    Promise.resolve(cfg.ordersBranch),
+    webStockByVariant(db),
   ]);
+  const stockOf = (variantId: string | null) => (variantId ? (localStock.get(variantId) ?? 0) : 0);
   const total = counts.reduce((a, c) => a + c._count, 0);
   const unlinked = counts.find((c) => c.linkedBy === null)?._count ?? 0;
 
@@ -55,8 +58,17 @@ export default async function WebStorePage({ searchParams }: Props) {
       <div className="flex flex-col gap-1.5">
         <h1 className="text-3xl font-bold tracking-tight">Tienda web (WooCommerce)</h1>
         <p className="text-sm text-muted-foreground">
-          La web publica el <strong className="text-foreground">stock total de los locales menos {cfg.safetyStock} unidades</strong> de margen de seguridad. Los pedidos pagados
-          en la web descuentan stock de <strong className="text-foreground">{branch}</strong>; si se cancelan, vuelve. Los precios no se tocan.
+          La web publica el <strong className="text-foreground">stock de los locales (Recta Martinolli + Villa Allende, sin el mayorista) menos {cfg.safetyStock} unidades</strong> de
+          margen de seguridad. En escolar cada colegio está en su local, así que la web muestra lo que hay en ese local; en los demás rubros, el stock general de los dos. Los
+          pedidos pagados en la web descuentan{" "}
+          {branch ? (
+            <>
+              de <strong className="text-foreground">{branch}</strong>
+            </>
+          ) : (
+            "del local que tiene el artículo (el de más stock)"
+          )}
+          ; si se cancelan, vuelve. Los precios no se tocan.
         </p>
       </div>
 
@@ -137,7 +149,7 @@ export default async function WebStorePage({ searchParams }: Props) {
                   <TableHead className="pl-5">Artículo en la web</TableHead>
                   <TableHead>SKU web</TableHead>
                   <TableHead>Variante del ERP</TableHead>
-                  <TableHead className="text-right">Stock total</TableHead>
+                  <TableHead className="text-right">Stock locales</TableHead>
                   <TableHead className="text-right">En la web</TableHead>
                   <TableHead className="pr-5">Última publicación</TableHead>
                 </TableRow>
@@ -157,13 +169,13 @@ export default async function WebStorePage({ searchParams }: Props) {
                     <TableCell>
                       <LinkCell linkId={l.id} current={l.variant?.sku ?? null} datalistId="erp-skus" canWrite={canWrite} />
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{l.variant ? formatNumber(l.variant.stockQty.toNumber()) : "—"}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{l.variant ? formatNumber(stockOf(l.variantId)) : "—"}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {l.variant ? (
                         <>
                           {l.lastPushedQty ?? "—"}
-                          {l.lastPushedQty !== webQuantity(l.variant.stockQty.toNumber(), cfg.safetyStock) && (
-                            <span className="block text-xs text-muted-foreground">→ {webQuantity(l.variant.stockQty.toNumber(), cfg.safetyStock)}</span>
+                          {l.lastPushedQty !== webQuantity(stockOf(l.variantId), cfg.safetyStock) && (
+                            <span className="block text-xs text-muted-foreground">→ {webQuantity(stockOf(l.variantId), cfg.safetyStock)}</span>
                           )}
                         </>
                       ) : (
