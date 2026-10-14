@@ -196,6 +196,8 @@ function rowLabel(entity: EntityKey, v: Values): string {
       return [v.businessName, v.cuit].filter(Boolean).join(" · ");
     case "talleres":
       return String(v.name);
+    case "personal":
+      return [v.name, v.position].filter(Boolean).join(" · ");
     case "saldos-clientes":
     case "saldos-proveedores":
       return `${v.description} · $ ${Number(v.amount).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;

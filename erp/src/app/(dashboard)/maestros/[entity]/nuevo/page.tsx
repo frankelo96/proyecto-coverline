@@ -15,7 +15,7 @@ type Props = { params: Promise<{ entity: string }> };
 
 export default async function NewMasterPage({ params }: Props) {
   const { entity } = await params;
-  if (!isMasterKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes" || entity === "personal") notFound();
   const def = ENTITIES[entity];
   await requirePageUser(def.writePermission);
   const refs = await ADAPTERS[entity].refs();

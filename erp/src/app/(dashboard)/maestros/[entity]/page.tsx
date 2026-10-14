@@ -18,6 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function MasterListPage({ params, searchParams }: Props) {
   const { entity } = await params;
   if (entity === "clientes") redirect("/crm/clientes");
+  if (entity === "personal") redirect("/personal/empleados");
   if (!isMasterKey(entity)) notFound();
   const def = ENTITIES[entity];
   const user = await requirePageUser(def.readPermission);

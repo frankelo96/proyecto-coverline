@@ -228,6 +228,14 @@ En ambos casos:
 | `WOO_ORDERS_BRANCH` | Nombre de un local fijo que descuente los pedidos web (opcional; por defecto, el que tiene el artículo) |
 | `WOO_CRON_TOKEN` | Habilita el endpoint de cron externo (opcional) |
 
+## Personal y sueldos
+
+Menú **Personal** (permiso `payroll:read` / `payroll:write`; lo tienen Admin y Administración). Es para el personal propio —atención al público, logística, ventas mayoristas, etc.—, no para talleres.
+
+- **Empleados**: alta, edición, baja, importación y exportación en Excel. El puesto es texto libre con sugerencias (los ya usados más una lista inicial), así que se crean puestos nuevos a medida que se necesitan. Cada empleado tiene local/sector, sueldo mensual y CBU/alias.
+- **Sueldos del mes**: por empleado, sueldo, lo pagado (sueldo + adelantos), lo que falta y los extras (aguinaldo, vacaciones, premios, horas extra, otros). Navegación por mes y exportación a Excel (también en Informes → Sueldos pagados).
+- **Registrar pago**: mismo circuito que una orden de pago (efectivo de caja, Banco Macro, Mercado Pago, cheque propio o de terceros): genera el egreso en tesorería y un comprobante imprimible con el logo. Es un comprobante interno, no reemplaza el recibo de sueldo legal.
+
 ## Pendiente para los próximos módulos
 
 Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

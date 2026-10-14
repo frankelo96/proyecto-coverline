@@ -90,7 +90,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CUENTA_CORRIENTE: "Cuenta corriente",
 };
 
-const instrumentSchema = z.discriminatedUnion("type", [
+export const instrumentSchema = z.discriminatedUnion("type", [
   /** Efectivo o transferencia que sale de una caja / cuenta (ej. caja negra, banco). */
   z.object({
     type: z.literal("REGISTER"),

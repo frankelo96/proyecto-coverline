@@ -8,6 +8,8 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 import { CostingError } from "@/lib/costing/escandallo";
 import { formatMoney } from "@/lib/format";
 import { PurchasingError } from "@/lib/purchasing/math";
+import { TreasuryError } from "@/lib/treasury/cash";
+import { ChequeError } from "@/lib/treasury/cheques";
 import {
   annulPurchaseSchema,
   merchandisePurchaseSchema,
@@ -31,7 +33,9 @@ function toError(error: unknown): ActionResult<never> {
     error instanceof PurchasingError ||
     error instanceof AuthorizationError ||
     error instanceof CostingServiceError ||
-    error instanceof CostingError
+    error instanceof CostingError ||
+    error instanceof TreasuryError ||
+    error instanceof ChequeError
   ) {
     return { ok: false, error: error.message };
   }

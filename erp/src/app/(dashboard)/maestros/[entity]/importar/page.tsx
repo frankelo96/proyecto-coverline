@@ -13,7 +13,7 @@ type Props = { params: Promise<{ entity: string }> };
 
 export default async function ImportMasterPage({ params }: Props) {
   const { entity } = await params;
-  if (!isMasterKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes" || entity === "personal") notFound();
   const def = ENTITIES[entity];
   await requirePageUser(def.writePermission);
   return (

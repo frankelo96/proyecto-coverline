@@ -18,6 +18,7 @@ import { agingSummary, purchasableUoms, type AgingBucket } from "@/lib/purchasin
 import { db } from "@/server/db";
 import { compareSizes } from "@/server/queries/production-orders.queries";
 import { chequeLabel } from "@/lib/treasury/cheques";
+import { periodLabel, SALARY_CONCEPT_LABELS } from "@/lib/validations/payroll";
 import { PAYMENT_METHOD_LABELS } from "@/lib/validations/purchasing";
 import { invoiceLabel } from "@/server/services/purchasing.service";
 import { registerBalance } from "@/server/services/treasury.service";
@@ -339,18 +340,14 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
   if (!creditor) return null;
 
   const whereOwner = isSupplier ? { supplierId: id } : { workshopId: id };
-  const [payables, orders, registers] = await Promise.all([
+  const [payables, orders, sources] = await Promise.all([
     db.accountPayable.findMany({ where: { ...whereOwner, status: { not: "ANULADO" } }, orderBy: { issueDate: "asc" } }),
     db.paymentOrder.findMany({
       where: whereOwner,
       orderBy: { date: "asc" },
       include: { cashRegister: { select: { name: true } }, items: { include: { cashRegister: { select: { name: true } } } } },
     }),
-    db.cashRegister.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-      include: { sessions: { where: { status: "ABIERTA" }, select: { id: true } } },
-    }),
+    getPaymentSources(),
   ]);
 
   // Extracto: documentos (debe) y órdenes de pago (haber) con saldo corrido.
@@ -407,6 +404,23 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
         provisional: p.workshopRemitId !== null,
       })),
     lines,
+    ...sources,
+  };
+}
+
+export type PaymentSources = Pick<CreditorStatement, "registers" | "cheques">;
+
+/** Cajas y cuentas con su saldo, y cheques de terceros en cartera: de dónde puede salir un pago. */
+export async function getPaymentSources(): Promise<PaymentSources> {
+  const [registers, cheques] = await Promise.all([
+    db.cashRegister.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      include: { sessions: { where: { status: "ABIERTA" }, select: { id: true } } },
+    }),
+    db.cheque.findMany({ where: { kind: "TERCERO", status: "EN_CARTERA" }, orderBy: { paymentDate: "asc" } }),
+  ]);
+  return {
     registers: await Promise.all(
       registers.map(async (r) => ({
         id: r.id,
@@ -417,9 +431,7 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
         balance: await registerBalance(db, r.id),
       })),
     ),
-    cheques: (
-      await db.cheque.findMany({ where: { kind: "TERCERO", status: "EN_CARTERA" }, orderBy: { paymentDate: "asc" } })
-    ).map((c) => ({ id: c.id, label: chequeLabel(c), issuerName: c.issuerName, amount: c.amount.toNumber(), paymentDate: c.paymentDate.toISOString() })),
+    cheques: cheques.map((c) => ({ id: c.id, label: chequeLabel(c), issuerName: c.issuerName, amount: c.amount.toNumber(), paymentDate: c.paymentDate.toISOString() })),
   };
 }
 
@@ -429,6 +441,7 @@ export async function getPaymentOrderForPrint(id: string) {
     include: {
       supplier: { select: { businessName: true, cuit: true } },
       workshop: { select: { name: true, cuit: true } },
+      employee: { select: { name: true, cuil: true, position: true } },
       cashRegister: { select: { name: true } },
       createdBy: { select: { name: true } },
       items: { include: { cashRegister: { select: { name: true } }, cheque: true } },
@@ -447,8 +460,16 @@ export async function getPaymentOrderForPrint(id: string) {
   return {
     number: o.number,
     date: o.date.toISOString(),
-    creditorName: o.supplier?.businessName ?? o.workshop?.name ?? "",
+    creditorName: o.supplier?.businessName ?? o.workshop?.name ?? o.employee?.name ?? "",
     creditorCuit: o.supplier?.cuit ?? o.workshop?.cuit ?? null,
+    /** Pago de sueldo: empleado, puesto y concepto del mes */
+    salary: o.employee
+      ? {
+          cuil: o.employee.cuil,
+          position: o.employee.position,
+          concept: `${SALARY_CONCEPT_LABELS[o.salaryConcept ?? "SUELDO"]} ${periodLabel(o.salaryPeriod ?? "")}`,
+        }
+      : null,
     amount: o.amount.toNumber(),
     notes: o.notes,
     createdBy: o.createdBy.name,

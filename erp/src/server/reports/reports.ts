@@ -8,7 +8,8 @@ import { AGING_BUCKETS, AGING_LABELS } from "@/lib/purchasing/math";
 import { ITEM_TYPE_LABELS, PURCHASE_KIND_LABELS, TAX_CONDITION_LABELS } from "@/lib/purchasing/labels";
 import { METHOD_LABELS, MOVEMENT_LABELS, MOVEMENT_SIGN, REGISTER_KIND_LABELS } from "@/lib/treasury/cash";
 import { CHEQUE_FORMAT_LABELS, CHEQUE_STATUS_LABELS } from "@/lib/treasury/cheques";
-import { PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
+import { periodLabel, periodOf, SALARY_CONCEPT_LABELS } from "@/lib/validations/payroll";
+import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
 import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
 import { getCreditorStatement, listCreditors } from "@/server/queries/purchasing.queries";
@@ -293,6 +294,52 @@ export const REPORTS: Record<string, ReportDef> = {
             status: s.status === "ANULADA" ? "Anulada" : null,
           };
         }),
+      };
+    },
+  },
+  sueldos: {
+    label: "Sueldos pagados",
+    description: "Pagos al personal (sueldos, adelantos, aguinaldo, extras) de los meses del período, con medio de pago.",
+    permission: PERMISSIONS.payrollRead,
+    params: ["rango"],
+    async build(p) {
+      const r = range(p);
+      const from = periodOf(new Date(r.from.getTime() + 12 * 3_600_000));
+      const to = periodOf(new Date(r.toEnd.getTime() - 12 * 3_600_000));
+      const orders = await db.paymentOrder.findMany({
+        where: { employeeId: { not: null }, salaryPeriod: { gte: from, lte: to } },
+        orderBy: [{ salaryPeriod: "asc" }, { date: "asc" }],
+        include: { employee: { include: { branch: { select: { name: true } } } }, items: { include: { cashRegister: { select: { name: true } } } } },
+      });
+      return {
+        title: "Sueldos pagados",
+        filename: `sueldos-${from}-a-${to}`,
+        columns: [
+          { key: "period", label: "Mes" },
+          { key: "date", label: "Fecha de pago", type: "date" },
+          { key: "number", label: "N° de pago", type: "number" },
+          { key: "employee", label: "Empleado" },
+          { key: "cuil", label: "CUIL" },
+          { key: "position", label: "Puesto" },
+          { key: "branch", label: "Local / sector" },
+          { key: "concept", label: "Concepto" },
+          { key: "method", label: "Medio de pago" },
+          { key: "amount", label: "Importe", type: "money", total: true },
+          { key: "notes", label: "Observaciones" },
+        ],
+        rows: orders.map((o) => ({
+          period: o.salaryPeriod ? periodLabel(o.salaryPeriod) : null,
+          date: o.date,
+          number: o.number,
+          employee: o.employee?.name ?? null,
+          cuil: o.employee?.cuil ?? null,
+          position: o.employee?.position ?? null,
+          branch: o.employee?.branch?.name ?? null,
+          concept: SALARY_CONCEPT_LABELS[o.salaryConcept ?? "SUELDO"],
+          method: o.items.map((i) => `${PAYMENT_METHOD_LABELS[i.method]}${i.cashRegister ? ` (${i.cashRegister.name})` : ""}`).join(" + ") || (o.method ? PAYMENT_METHOD_LABELS[o.method] : null),
+          amount: o.amount.toNumber(),
+          notes: o.notes,
+        })),
       };
     },
   },

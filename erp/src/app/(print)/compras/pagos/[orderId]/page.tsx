@@ -19,9 +19,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function PaymentOrderPrintPage({ params }: Props) {
-  await requirePageUser(PERMISSIONS.payablesRead);
   const { orderId } = await params;
   const o = await getPaymentOrderForPrint(orderId);
+  // Los pagos de sueldo los ve quien maneja sueldos; el resto, quien ve cuentas a pagar.
+  await requirePageUser(o?.salary ? PERMISSIONS.payrollRead : PERMISSIONS.payablesRead);
   if (!o) notFound();
 
   return (
@@ -29,40 +30,63 @@ export default async function PaymentOrderPrintPage({ params }: Props) {
       <div className="flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <DocumentHeader title="Orden de pago" number={String(o.number).padStart(8, "0")} date={o.date} letter="X" letterNote="No válido como factura" />
+      <DocumentHeader title={o.salary ? "Comprobante de pago al personal" : "Orden de pago"} number={String(o.number).padStart(8, "0")} date={o.date} letter="X" letterNote="No válido como factura" />
 
       <section>
-        <p className="text-xs font-semibold uppercase">Beneficiario</p>
+        <p className="text-xs font-semibold uppercase">{o.salary ? "Empleado" : "Beneficiario"}</p>
         <p className="font-semibold">{o.creditorName}</p>
         {o.creditorCuit && <p>CUIT {o.creditorCuit}</p>}
+        {o.salary && (
+          <p>
+            {o.salary.position}
+            {o.salary.cuil && <> · CUIL {o.salary.cuil}</>}
+          </p>
+        )}
       </section>
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-y border-black text-left">
-            <th className="py-2">Comprobante cancelado</th>
-            <th className="py-2">Vencimiento</th>
-            <th className="py-2 text-right">Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {o.lines.map((l, i) => (
-            <tr key={i} className="border-b border-black/30">
-              <td className="py-2">{l.description}</td>
-              <td className="py-2">{l.dueDate ? new Date(l.dueDate).toLocaleDateString("es-AR") : "—"}</td>
-              <td className="py-2 text-right font-mono">{formatMoney(l.amount)}</td>
+      {o.salary ? (
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-y border-black text-left">
+              <th className="py-2">Concepto</th>
+              <th className="py-2 text-right">Importe</th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={2} className="py-2 text-right font-semibold">
-              Total pagado
-            </td>
-            <td className="py-2 text-right font-mono text-base font-bold">{formatMoney(o.amount)}</td>
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody>
+            <tr className="border-b border-black/30">
+              <td className="py-2 first-letter:uppercase">{o.salary.concept}</td>
+              <td className="py-2 text-right font-mono text-base font-bold">{formatMoney(o.amount)}</td>
+            </tr>
+          </tbody>
+        </table>
+      ) : (
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-y border-black text-left">
+              <th className="py-2">Comprobante cancelado</th>
+              <th className="py-2">Vencimiento</th>
+              <th className="py-2 text-right">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {o.lines.map((l, i) => (
+              <tr key={i} className="border-b border-black/30">
+                <td className="py-2">{l.description}</td>
+                <td className="py-2">{l.dueDate ? new Date(l.dueDate).toLocaleDateString("es-AR") : "—"}</td>
+                <td className="py-2 text-right font-mono">{formatMoney(l.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={2} className="py-2 text-right font-semibold">
+                Total pagado
+              </td>
+              <td className="py-2 text-right font-mono text-base font-bold">{formatMoney(o.amount)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      )}
 
       <section>
         <p className="mb-1 text-xs font-semibold uppercase">Forma de pago</p>

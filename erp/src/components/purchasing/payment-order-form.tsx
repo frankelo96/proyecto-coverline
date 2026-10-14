@@ -1,34 +1,21 @@
 "use client";
 
-import { Banknote, FileText, Loader2, Printer, Trash2, Wallet } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 
+import { type InstrumentRow, instrumentsTotal as sumInstruments, PaymentInstruments, toInstrument } from "@/components/purchasing/payment-instruments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { StatusMessage } from "@/components/ui/status-message";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatMoney } from "@/lib/format";
 import { agingBucket, AGING_LABELS, allocatePayment, PurchasingError } from "@/lib/purchasing/math";
-import { todayIso } from "@/lib/purchasing/labels";
-import { METHOD_REGISTER_KINDS } from "@/lib/treasury/cash";
-import { type PaymentInstrument, UI_PAYMENT_OPTION_LABELS, UI_PAYMENT_OPTIONS } from "@/lib/validations/purchasing";
 import { createPaymentOrderAction } from "@/server/actions/purchasing.actions";
 import type { CreditorStatement } from "@/server/queries/purchasing.queries";
-
-type RegisterMethod = "EFECTIVO" | "TRANSFERENCIA" | "MERCADO_PAGO";
-type UiPaymentOption = (typeof UI_PAYMENT_OPTIONS)[number];
-
-type Row =
-  | { key: number; type: "REGISTER"; cashRegisterId: string; method: RegisterMethod; amount: string; reference: string }
-  | { key: number; type: "THIRD_CHEQUE"; chequeId: string }
-  | { key: number; type: "OWN_CHEQUE"; format: "FISICO" | "ECHEQ"; bankRegisterId: string; number: string; paymentDate: string; amount: string };
-
-const num = (v: string) => (v.trim() === "" ? 0 : Number(v));
 
 function computeAllocation(total: number, open: { id: string; balance: number; dueDate: string }[]): { lines: Map<string, number>; error: string | null } {
   if (total <= 0) return { lines: new Map(), error: null };
@@ -44,43 +31,12 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
   const id = useId();
   const { pending, status, execute } = useServerAction();
   const [selected, setSelected] = useState<Set<string>>(() => new Set(statement.open.map((p) => p.id)));
-  const [rows, setRows] = useState<Row[]>([]);
-  const [nextKey, setNextKey] = useState(1);
+  const [rows, setRows] = useState<InstrumentRow[]>([]);
   const [notes, setNotes] = useState("");
   const [lastOrder, setLastOrder] = useState<string | null>(null);
 
-  const usable = statement.registers.filter((r) => !r.requiresSession || r.hasOpenSession);
-  const banks = statement.registers.filter((r) => r.kind === "BANCO");
   const selectedTotal = statement.open.filter((p) => selected.has(p.id)).reduce((a, p) => a + p.balance, 0);
-  const pendingToAssign = () => Math.max(0, Math.round((selectedTotal - instrumentsTotal) * 100) / 100);
-
-  const chequeById = useMemo(() => new Map(statement.cheques.map((c) => [c.id, c])), [statement.cheques]);
-  const rowAmount = (r: Row) => (r.type === "THIRD_CHEQUE" ? (chequeById.get(r.chequeId)?.amount ?? 0) : num(r.amount));
-  const instrumentsTotal = rows.reduce((a, r) => a + rowAmount(r), 0);
-
-  /** Cajas o cuentas de donde puede salir cada medio (efectivo: caja negra primero). */
-  const registersFor = (method: RegisterMethod) =>
-    usable
-      .filter((r) => METHOD_REGISTER_KINDS[method]?.includes(r.kind))
-      .sort((a, b) => Number(b.kind === "CAJA_RESGUARDO") - Number(a.kind === "CAJA_RESGUARDO"));
-
-  function add(option: UiPaymentOption) {
-    const key = nextKey;
-    setNextKey(key + 1);
-    const rest = String(pendingToAssign() || "");
-    if (option === "EFECTIVO" || option === "TRANSFERENCIA" || option === "MERCADO_PAGO") {
-      const reg = registersFor(option)[0];
-      setRows((r) => [...r, { key, type: "REGISTER", cashRegisterId: reg?.id ?? "", method: option, amount: rest, reference: "" }]);
-    } else if (option === "THIRD_CHEQUE") {
-      const used = new Set(rows.flatMap((r) => (r.type === "THIRD_CHEQUE" ? [r.chequeId] : [])));
-      const first = statement.cheques.find((c) => !used.has(c.id));
-      setRows((r) => [...r, { key, type: "THIRD_CHEQUE", chequeId: first?.id ?? "" }]);
-    } else {
-      setRows((r) => [...r, { key, type: "OWN_CHEQUE", format: "ECHEQ", bankRegisterId: banks[0]?.id ?? "", number: "", paymentDate: todayIso(), amount: rest }]);
-    }
-  }
-
-  const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? ({ ...r, ...patch } as Row) : r)));
+  const instrumentsTotal = sumInstruments(rows, statement);
 
   function toggle(pid: string) {
     const next = new Set(selected);
@@ -90,12 +46,6 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
   }
 
   const allocation = computeAllocation(instrumentsTotal, statement.open.filter((p) => selected.has(p.id)));
-
-  function toInstrument(r: Row): PaymentInstrument {
-    if (r.type === "REGISTER") return { type: "REGISTER", method: r.method, cashRegisterId: r.cashRegisterId, amount: num(r.amount), reference: r.reference.trim() || null };
-    if (r.type === "THIRD_CHEQUE") return { type: "THIRD_CHEQUE", chequeId: r.chequeId };
-    return { type: "OWN_CHEQUE", format: r.format, bankRegisterId: r.bankRegisterId, number: r.number.trim(), paymentDate: r.paymentDate, amount: num(r.amount) };
-  }
 
   const printLink = lastOrder && status?.kind === "success" && (
     <Button asChild variant="outline">
@@ -181,113 +131,7 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
 
       {canPay && (
         <div className="flex flex-col gap-4 px-5 pb-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">Con qué se paga</h3>
-            <div className="flex flex-wrap gap-2">
-              {UI_PAYMENT_OPTIONS.map((o) => {
-                const disabled =
-                  o === "THIRD_CHEQUE" ? statement.cheques.length === 0 : o === "OWN_CHEQUE" ? banks.length === 0 : registersFor(o).length === 0;
-                const Icon = o === "EFECTIVO" ? Banknote : o === "THIRD_CHEQUE" || o === "OWN_CHEQUE" ? FileText : Wallet;
-                return (
-                  <Button key={o} type="button" size="sm" variant="outline" onClick={() => add(o)} disabled={disabled}>
-                    <Icon /> {UI_PAYMENT_OPTION_LABELS[o]}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          {rows.length === 0 && (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Agregá uno o más medios: Efectivo (sale de caja negra; las cajas diarias solo si tienen el turno abierto), Banco Macro, Mercado Pago, Cheque propio o Cheque de terceros.
-            </p>
-          )}
-
-          {rows.map((r) => (
-            <div key={r.key} className="grid items-end gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-              {r.type === "REGISTER" && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium">Medio</span>
-                    <span className="flex h-10 items-center font-medium">{UI_PAYMENT_OPTION_LABELS[r.method]}</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-reg`}>Sale de</Label>
-                    <NativeSelect id={`${id}-${r.key}-reg`} value={r.cashRegisterId} onChange={(e) => update(r.key, { cashRegisterId: e.target.value })}>
-                      {registersFor(r.method).map((reg) => (
-                        <option key={reg.id} value={reg.id}>
-                          {reg.name} — saldo {formatMoney(reg.balance, { round: true })}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-a`}>Importe</Label>
-                    <Input id={`${id}-${r.key}-a`} type="number" inputMode="decimal" step="0.01" min={0} className="text-right" value={r.amount} onChange={(e) => update(r.key, { amount: e.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-ref`}>Referencia</Label>
-                    <Input id={`${id}-${r.key}-ref`} maxLength={100} placeholder="N° de operación" value={r.reference} onChange={(e) => update(r.key, { reference: e.target.value })} />
-                  </div>
-                </>
-              )}
-              {r.type === "THIRD_CHEQUE" && (
-                <>
-                  <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
-                    <Label htmlFor={`${id}-${r.key}-ch`}>Cheque de terceros en cartera (se endosa)</Label>
-                    <NativeSelect id={`${id}-${r.key}-ch`} value={r.chequeId} onChange={(e) => update(r.key, { chequeId: e.target.value })}>
-                      {statement.cheques
-                        .filter((c) => c.id === r.chequeId || !rows.some((x) => x.type === "THIRD_CHEQUE" && x.chequeId === c.id))
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.label} · {c.issuerName} · vto. {new Date(c.paymentDate).toLocaleDateString("es-AR")} · {formatMoney(c.amount)}
-                          </option>
-                        ))}
-                    </NativeSelect>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium">Importe</span>
-                    <span className="flex h-10 items-center justify-end font-mono tabular-nums">{formatMoney(rowAmount(r))}</span>
-                  </div>
-                </>
-              )}
-              {r.type === "OWN_CHEQUE" && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-b`}>Cheque propio de</Label>
-                    <div className="flex gap-2">
-                      <NativeSelect id={`${id}-${r.key}-f`} aria-label="Formato" value={r.format} onChange={(e) => update(r.key, { format: e.target.value as "FISICO" | "ECHEQ" })}>
-                        <option value="ECHEQ">eCheq</option>
-                        <option value="FISICO">Cheque</option>
-                      </NativeSelect>
-                      <NativeSelect id={`${id}-${r.key}-b`} value={r.bankRegisterId} onChange={(e) => update(r.key, { bankRegisterId: e.target.value })}>
-                        {banks.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-n`}>N° de cheque</Label>
-                    <Input id={`${id}-${r.key}-n`} inputMode="numeric" maxLength={30} value={r.number} onChange={(e) => update(r.key, { number: e.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-d`}>Fecha de pago</Label>
-                    <Input id={`${id}-${r.key}-d`} type="date" value={r.paymentDate} onChange={(e) => update(r.key, { paymentDate: e.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-a`}>Importe</Label>
-                    <Input id={`${id}-${r.key}-a`} type="number" inputMode="decimal" step="0.01" min={0} className="text-right" value={r.amount} onChange={(e) => update(r.key, { amount: e.target.value })} />
-                  </div>
-                </>
-              )}
-              <Button type="button" variant="ghost" size="icon" aria-label="Quitar medio" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}>
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
+          <PaymentInstruments sources={statement} rows={rows} onChange={setRows} suggested={selectedTotal} />
 
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
             <span>

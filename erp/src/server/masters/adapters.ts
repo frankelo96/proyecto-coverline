@@ -13,11 +13,11 @@ import type {
   WorkshopType,
 } from "@/generated/prisma/enums";
 import { autoVariantSku, variantKey } from "@/lib/catalog/variants";
-import type { EntityKey } from "@/lib/masters/definitions";
+import { DEFAULT_POSITIONS, type EntityKey } from "@/lib/masters/definitions";
 import { formatCuit, isValidCuit, type RefOptions, type Values } from "@/lib/masters/fields";
 import { db } from "@/server/db";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
-import { mainBranchId, setBranchStock } from "@/server/services/stock.service";
+import { BRANCH_ORDER, mainBranchId, setBranchStock } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -590,6 +590,80 @@ const workshops: Adapter = {
   },
 };
 
+// ─── Personal propio ──────────────────────────────────────────────────────
+
+const employeeValues = (e: Prisma.EmployeeGetPayload<object>): Values => ({
+  name: e.name,
+  cuil: e.cuil,
+  phone: e.phone,
+  email: e.email,
+  position: e.position,
+  branchId: e.branchId,
+  startDate: e.startDate ? e.startDate.toISOString().slice(0, 10) : null,
+  baseSalary: e.baseSalary.toNumber(),
+  bankAccount: e.bankAccount,
+  notes: e.notes,
+  active: e.active,
+});
+
+const employees: Adapter = {
+  async refs() {
+    const [branches, used] = await Promise.all([
+      db.branch.findMany({ where: { active: true }, orderBy: BRANCH_ORDER, select: { id: true, name: true } }),
+      db.employee.findMany({ distinct: ["position"], select: { position: true } }),
+    ]);
+    const positions = [...new Set([...DEFAULT_POSITIONS, ...used.map((u) => u.position)])].sort((a, b) => a.localeCompare(b, "es"));
+    return {
+      branches: branches.map((b) => ({ value: b.id, label: b.name, keys: [b.name] })),
+      positions: positions.map((p) => ({ value: p, label: p })),
+    };
+  },
+  async list(q, includeInactive) {
+    const rows = await db.employee.findMany({
+      where: { ...(includeInactive ? {} : { active: true }), ...textSearch(q, ["name", "cuil", "position", "phone"]) },
+      orderBy: { name: "asc" },
+    });
+    return rows.map((e) => ({ id: e.id, active: e.active, values: employeeValues(e) }));
+  },
+  async get(id) {
+    const e = await db.employee.findUnique({ where: { id } });
+    return e ? employeeValues(e) : null;
+  },
+  batchKey: (v) => (str(v.cuil) ? `cuil:${digits(String(v.cuil))}` : `name:${String(v.name).toLowerCase()}`),
+  async findExisting(tx, v) {
+    const cuil = str(v.cuil);
+    const found = cuil
+      ? await tx.employee.findFirst({ where: { cuil: { in: [cuil, formatCuit(cuil)] } }, select: { id: true } })
+      : await tx.employee.findFirst({ where: { name: { equals: String(v.name), mode: "insensitive" } }, select: { id: true } });
+    return found?.id ?? null;
+  },
+  normalize: (v) => ({ ...v, cuil: normalizeCuit(v.cuil, "cuil"), position: String(v.position ?? "").trim() }),
+  async save(tx, id, v, userId) {
+    const data = {
+      name: String(v.name),
+      cuil: str(v.cuil),
+      phone: str(v.phone),
+      email: str(v.email),
+      position: String(v.position),
+      branchId: str(v.branchId),
+      startDate: str(v.startDate) ? new Date(`${v.startDate}T12:00:00`) : null,
+      baseSalary: dec(v.baseSalary),
+      bankAccount: str(v.bankAccount),
+      notes: str(v.notes),
+      active: v.active !== false,
+    };
+    const saved = id ? await tx.employee.update({ where: { id }, data }) : await tx.employee.create({ data });
+    await audit(tx, userId, "Employee", saved.id, id ? "UPDATE" : "CREATE", v);
+    return saved.id;
+  },
+  async setActive(id, active) {
+    await db.employee.update({ where: { id }, data: { active } });
+  },
+  async exportRows() {
+    return (await db.employee.findMany({ orderBy: { name: "asc" } })).map(employeeValues);
+  },
+};
+
 // ─── Saldos iniciales de cuentas corrientes (solo importación) ────────────
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -736,6 +810,7 @@ export const ADAPTERS: Record<EntityKey, Adapter> = {
   materiales: materials,
   proveedores: suppliers,
   talleres: workshops,
+  personal: employees,
   "saldos-clientes": openingReceivables,
   "saldos-proveedores": openingPayables,
 };
@@ -746,6 +821,7 @@ export const UNIQUE_LABELS: Record<EntityKey, Record<string, string>> = {
   materiales: { code: "código" },
   proveedores: { cuit: "CUIT" },
   talleres: { cuit: "CUIT" },
+  personal: { cuil: "CUIL" },
   "saldos-clientes": {},
   "saldos-proveedores": {},
 };

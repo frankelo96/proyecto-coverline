@@ -28,6 +28,9 @@ export const PERMISSIONS = {
   mastersRead: "masters:read",
   mastersWrite: "masters:write",
   usersManage: "admin:users",
+  /** Personal propio y pago de sueldos (información sensible) */
+  payrollRead: "payroll:read",
+  payrollWrite: "payroll:write",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

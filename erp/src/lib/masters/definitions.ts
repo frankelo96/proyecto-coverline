@@ -13,7 +13,7 @@ import {
   WORKSHOP_TYPE_LABELS,
 } from "./labels";
 
-export const ENTITY_KEYS = ["clientes", "productos", "materiales", "proveedores", "talleres", "saldos-clientes", "saldos-proveedores"] as const;
+export const ENTITY_KEYS = ["clientes", "productos", "materiales", "proveedores", "talleres", "personal", "saldos-clientes", "saldos-proveedores"] as const;
 export type EntityKey = (typeof ENTITY_KEYS)[number];
 
 export interface EntityDef {
@@ -131,6 +131,33 @@ const WORKSHOP_FIELDS: FieldDef[] = [
   active,
 ];
 
+/** Puestos que se sugieren de entrada (se puede escribir cualquier otro). */
+export const DEFAULT_POSITIONS = ["Atención al público", "Encargado/a de local", "Encargado/a de logística", "Vendedor/a mayorista", "Cajero/a", "Administración", "Repartidor/a"];
+
+const EMPLOYEE_FIELDS: FieldDef[] = [
+  { key: "name", label: "Apellido y nombre", type: "text", required: true, max: 120, aliases: ["nombre", "empleado", "apellido y nombre"], section: "Datos personales", wide: true },
+  { key: "cuil", label: "CUIL", type: "text", max: 20, aliases: ["cuit", "cuil/cuit", "documento"], section: "Datos personales", help: "Con o sin guiones; se valida el dígito verificador." },
+  { key: "phone", label: "Teléfono", type: "phone", max: 40, aliases: ["tel", "telefono", "celular"], section: "Datos personales" },
+  { key: "email", label: "Email", type: "email", aliases: ["correo", "mail"], section: "Datos personales" },
+  {
+    key: "position",
+    label: "Puesto",
+    type: "text",
+    required: true,
+    max: 80,
+    suggest: "positions",
+    aliases: ["cargo", "funcion", "puesto de trabajo"],
+    section: "Trabajo",
+    help: "Elegí uno de la lista o escribí uno nuevo.",
+  },
+  { key: "branchId", label: "Local / sector", type: "ref", ref: "branches", aliases: ["local", "sucursal", "sector"], section: "Trabajo" },
+  { key: "startDate", label: "Fecha de ingreso", type: "date", aliases: ["ingreso", "fecha ingreso", "alta"], section: "Trabajo" },
+  { key: "baseSalary", label: "Sueldo mensual", type: "number", minValue: 0, defaultValue: 0, aliases: ["sueldo", "sueldo base", "salario"], section: "Pago", help: "Lo que se le paga por mes. Los adelantos se descuentan de este importe." },
+  { key: "bankAccount", label: "CBU / alias para transferir", type: "text", max: 80, aliases: ["cbu", "alias", "cuenta"], section: "Pago" },
+  { key: "notes", label: "Observaciones", type: "textarea", max: 2000, aliases: ["notas"], section: "Pago", wide: true },
+  { ...active, section: "Pago" },
+];
+
 const OPENING_FIELDS = (party: FieldDef): FieldDef[] => [
   party,
   { key: "description", label: "Comprobante / concepto", type: "text", required: true, max: 200, aliases: ["comprobante", "concepto", "detalle", "factura"] },
@@ -200,6 +227,18 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     readPermission: PERMISSIONS.mastersRead,
     writePermission: PERMISSIONS.mastersWrite,
     matchHelp: "Se reconoce por CUIT o, si no tiene, por el nombre exacto.",
+  },
+  personal: {
+    key: "personal",
+    title: "Personal",
+    singular: "empleado",
+    newLabel: "Nuevo empleado",
+    basePath: "/personal/empleados",
+    fields: EMPLOYEE_FIELDS,
+    listColumns: ["name", "position", "branchId", "baseSalary", "phone"],
+    readPermission: PERMISSIONS.payrollRead,
+    writePermission: PERMISSIONS.payrollWrite,
+    matchHelp: "Se reconoce por CUIL o, si no tiene, por el apellido y nombre exacto.",
   },
   "saldos-clientes": {
     key: "saldos-clientes",

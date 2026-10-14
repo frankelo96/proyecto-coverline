@@ -12,6 +12,7 @@ const NAV: (NavItem & { permission: string | null; hideIf?: string })[] = [
   { href: "/produccion", label: "Producción", permission: PERMISSIONS.productionRead },
   { href: "/compras", label: "Compras", permission: PERMISSIONS.purchasesRead },
   { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead, hideIf: PERMISSIONS.purchasesRead },
+  { href: "/personal", label: "Personal", permission: PERMISSIONS.payrollRead },
   { href: "/maestros", label: "Maestros", permission: PERMISSIONS.mastersRead },
   // Cada informe filtra por su propio permiso.
   { href: "/informes", label: "Informes", permission: null },

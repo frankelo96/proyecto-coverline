@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function EditMasterPage({ params, searchParams }: Props) {
   const { entity, id } = await params;
-  if (!isMasterKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes" || entity === "personal") notFound();
   const def = ENTITIES[entity];
   const user = await requirePageUser(def.readPermission);
   const adapter = ADAPTERS[entity];

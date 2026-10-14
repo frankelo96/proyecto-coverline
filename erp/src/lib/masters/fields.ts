@@ -43,6 +43,8 @@ export interface FieldDef {
   options?: readonly Option[];
   /** Para type "ref": nombre de la lista de opciones que provee el servidor. */
   ref?: string;
+  /** Para texto libre: lista de sugerencias que provee el servidor (se puede escribir otro valor). */
+  suggest?: string;
   help?: string;
   placeholder?: string;
   /** Ocupa todo el ancho del formulario */

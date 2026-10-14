@@ -30,6 +30,7 @@ import {
 } from "@/lib/purchasing/math";
 import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
 import type { MerchandisePurchaseInput, PaymentInstrument, PaymentOrderInput, WorkshopInvoiceInput } from "@/lib/validations/purchasing";
+import { periodLabel, SALARY_CONCEPT_LABELS, type SalaryPaymentInput } from "@/lib/validations/payroll";
 import { priceFromCost } from "@/lib/costing/escandallo";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
 import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
@@ -430,23 +431,12 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     if (p.status !== "PENDIENTE" && p.status !== "PARCIAL") throw new PurchasingError(`"${p.description}" no tiene saldo pendiente`);
   }
 
-  // Cheques de terceros a endosar: se toman por su importe completo.
-  const chequeIds = input.instruments.flatMap((i) => (i.type === "THIRD_CHEQUE" ? [i.chequeId] : []));
-  if (new Set(chequeIds).size !== chequeIds.length) throw new PurchasingError("Hay cheques repetidos");
-  const cheques = chequeIds.length ? await tx.cheque.findMany({ where: { id: { in: chequeIds } } }) : [];
-  const amountOf = (i: PaymentInstrument) =>
-    i.type === "THIRD_CHEQUE" ? new Decimal(cheques.find((c) => c.id === i.chequeId)?.amount.toString() ?? "0") : new Decimal(i.amount);
-  const total = input.instruments.reduce((a, i) => a.plus(amountOf(i)), new Decimal(0)).toDecimalPlaces(2);
+  const { total, summaryMethod, cheques } = await instrumentsTotal(tx, input.instruments);
 
   const allocations = allocatePayment(
     total.toNumber(),
     payables.map((p) => ({ id: p.id, balance: p.balance.toNumber(), dueDate: p.dueDate })),
   );
-
-  const methods = new Set(
-    input.instruments.map((i) => (i.type === "REGISTER" ? i.method : i.type === "OWN_CHEQUE" ? (i.format === "ECHEQ" ? "ECHEQ" : "CHEQUE") : "CHEQUE")),
-  );
-  const summaryMethod = (methods.size === 1 ? [...methods][0] : "MIXTO") as PaymentMethod;
 
   const order = await tx.paymentOrder.create({
     data: {
@@ -459,51 +449,7 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     },
     select: { id: true, number: true },
   });
-  const concept = `Orden de pago #${order.number} — ${creditorName}`;
-
-  for (const inst of input.instruments) {
-    if (inst.type === "REGISTER") {
-      const register = await lockRegister(tx, inst.cashRegisterId);
-      if (!registerAcceptsMethod(register.kind, inst.method)) {
-        throw new PurchasingError(`${PAYMENT_METHOD_LABELS[inst.method]} no puede salir de ${register.name}`);
-      }
-      await addMovement(tx, {
-        register,
-        type: "EGRESO",
-        method: inst.method,
-        amount: inst.amount,
-        concept: `${concept} (${PAYMENT_METHOD_LABELS[inst.method]}${inst.reference ? ` ${inst.reference}` : ""})`,
-        userId,
-        paymentOrderId: order.id,
-      });
-      await tx.paymentOrderItem.create({
-        data: { paymentOrderId: order.id, method: inst.method, amount: D(inst.amount), cashRegisterId: register.id, reference: inst.reference },
-      });
-    } else if (inst.type === "THIRD_CHEQUE") {
-      const cheque = await endorseCheque(tx, inst.chequeId, order.id, creditorName);
-      await tx.paymentOrderItem.create({
-        data: { paymentOrderId: order.id, method: cheque.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: cheque.amount, chequeId: cheque.id, reference: chequeLabel(cheque) },
-      });
-    } else {
-      const cheque = await issueOwnCheque(
-        tx,
-        {
-          format: inst.format,
-          bankRegisterId: inst.bankRegisterId,
-          number: inst.number,
-          amount: inst.amount,
-          issueDate: new Date(),
-          paymentDate: new Date(inst.paymentDate),
-          deliveredTo: creditorName,
-          paymentOrderId: order.id,
-        },
-        userId,
-      );
-      await tx.paymentOrderItem.create({
-        data: { paymentOrderId: order.id, method: inst.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: D(inst.amount), cashRegisterId: inst.bankRegisterId, chequeId: cheque.id, reference: chequeLabel(cheque) },
-      });
-    }
-  }
+  await applyInstruments(tx, { orderId: order.id, concept: `Orden de pago #${order.number} — ${creditorName}`, payee: creditorName, instruments: input.instruments, cheques }, userId);
 
   for (const a of allocations) {
     const p = payables.find((x) => x.id === a.payableId)!;
@@ -518,4 +464,98 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
   }
 
   return { ...order, allocated: allocations.length, message: `Orden de pago #${order.number} por ${formatMoney(total.toNumber())} registrada` };
+}
+
+// ─── Medios de pago de una orden (proveedores, talleres y sueldos) ────────
+
+/** Total de los instrumentos (los cheques de terceros se toman por su importe completo). */
+async function instrumentsTotal(tx: Tx, instruments: PaymentInstrument[]) {
+  const chequeIds = instruments.flatMap((i) => (i.type === "THIRD_CHEQUE" ? [i.chequeId] : []));
+  if (new Set(chequeIds).size !== chequeIds.length) throw new PurchasingError("Hay cheques repetidos");
+  const cheques = chequeIds.length ? await tx.cheque.findMany({ where: { id: { in: chequeIds } } }) : [];
+  const amountOf = (i: PaymentInstrument) =>
+    i.type === "THIRD_CHEQUE" ? new Decimal(cheques.find((c) => c.id === i.chequeId)?.amount.toString() ?? "0") : new Decimal(i.amount);
+  const total = instruments.reduce((a, i) => a.plus(amountOf(i)), new Decimal(0)).toDecimalPlaces(2);
+  const methods = new Set(instruments.map((i) => (i.type === "REGISTER" ? i.method : i.type === "OWN_CHEQUE" ? (i.format === "ECHEQ" ? "ECHEQ" : "CHEQUE") : "CHEQUE")));
+  const summaryMethod = (methods.size === 1 ? [...methods][0] : "MIXTO") as PaymentMethod;
+  return { total, summaryMethod, cheques };
+}
+
+/** Registra cada instrumento: egreso de caja/cuenta, endoso de cheque de terceros o emisión de cheque propio. */
+async function applyInstruments(
+  tx: Tx,
+  o: { orderId: string; concept: string; payee: string; instruments: PaymentInstrument[]; cheques: { id: string }[] },
+  userId: string,
+) {
+  for (const inst of o.instruments) {
+    if (inst.type === "REGISTER") {
+      const register = await lockRegister(tx, inst.cashRegisterId);
+      if (!registerAcceptsMethod(register.kind, inst.method)) {
+        throw new PurchasingError(`${PAYMENT_METHOD_LABELS[inst.method]} no puede salir de ${register.name}`);
+      }
+      await addMovement(tx, {
+        register,
+        type: "EGRESO",
+        method: inst.method,
+        amount: inst.amount,
+        concept: `${o.concept} (${PAYMENT_METHOD_LABELS[inst.method]}${inst.reference ? ` ${inst.reference}` : ""})`,
+        userId,
+        paymentOrderId: o.orderId,
+      });
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: o.orderId, method: inst.method, amount: D(inst.amount), cashRegisterId: register.id, reference: inst.reference },
+      });
+    } else if (inst.type === "THIRD_CHEQUE") {
+      const cheque = await endorseCheque(tx, inst.chequeId, o.orderId, o.payee);
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: o.orderId, method: cheque.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: cheque.amount, chequeId: cheque.id, reference: chequeLabel(cheque) },
+      });
+    } else {
+      const cheque = await issueOwnCheque(
+        tx,
+        {
+          format: inst.format,
+          bankRegisterId: inst.bankRegisterId,
+          number: inst.number,
+          amount: inst.amount,
+          issueDate: new Date(),
+          paymentDate: new Date(inst.paymentDate),
+          deliveredTo: o.payee,
+          paymentOrderId: o.orderId,
+        },
+        userId,
+      );
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: o.orderId, method: inst.format === "ECHEQ" ? "ECHEQ" : "CHEQUE", amount: D(inst.amount), cashRegisterId: inst.bankRegisterId, chequeId: cheque.id, reference: chequeLabel(cheque) },
+      });
+    }
+  }
+}
+
+/** Pago de sueldo (o adelanto, aguinaldo, etc.) a un empleado, con los mismos medios que una orden de pago. */
+export async function createSalaryPayment(tx: Tx, input: SalaryPaymentInput, userId: string) {
+  const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
+  if (!employee) throw new PurchasingError("Empleado inexistente");
+  if (!employee.active) throw new PurchasingError(`${employee.name} está dado de baja`);
+  const { total, summaryMethod, cheques } = await instrumentsTotal(tx, input.instruments);
+  if (total.lte(0)) throw new PurchasingError("El importe debe ser mayor a 0");
+
+  const order = await tx.paymentOrder.create({
+    data: {
+      employeeId: employee.id,
+      salaryPeriod: input.period,
+      salaryConcept: input.concept,
+      method: summaryMethod,
+      amount: D(total),
+      notes: input.notes,
+      createdById: userId,
+    },
+    select: { id: true, number: true },
+  });
+  const concept = `${SALARY_CONCEPT_LABELS[input.concept]} ${periodLabel(input.period)} — ${employee.name} (pago #${order.number})`;
+  await applyInstruments(tx, { orderId: order.id, concept, payee: employee.name, instruments: input.instruments, cheques }, userId);
+  await tx.auditLog.create({
+    data: { userId, entity: "Employee", entityId: employee.id, action: "SALARY_PAYMENT", data: { order: order.number, period: input.period, concept: input.concept, amount: total.toNumber() } },
+  });
+  return { ...order, message: `${SALARY_CONCEPT_LABELS[input.concept]} de ${employee.name} por ${formatMoney(total.toNumber())} registrado` };
 }

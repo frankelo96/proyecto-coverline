@@ -135,18 +135,30 @@ export function EntityForm({ entity, id, fields, initial, refs, basePath, after 
       return <Textarea value={v as string} onChange={(e) => set(f.key, e.target.value)} maxLength={f.max} rows={3} {...common} />;
     }
     const inputMode = f.type === "number" ? "decimal" : f.type === "int" ? "numeric" : f.type === "phone" ? "tel" : undefined;
+    const suggestions = f.suggest ? (refs[f.suggest] ?? []) : [];
+    const listId = suggestions.length > 0 ? `${uid}-${f.key}-list` : undefined;
     return (
-      <Input
-        type={f.type === "email" ? "email" : f.type === "phone" ? "tel" : "text"}
-        inputMode={inputMode}
-        autoComplete="off"
-        value={v as string}
-        maxLength={f.max}
-        placeholder={f.placeholder ?? (f.type === "tags" ? "colegio, reposicion-anual" : undefined)}
-        onChange={(e) => set(f.key, e.target.value)}
-        className={cn(f.upper && "uppercase", (f.type === "number" || f.type === "int") && "text-right")}
-        {...common}
-      />
+      <>
+        <Input
+          type={f.type === "email" ? "email" : f.type === "phone" ? "tel" : "text"}
+          inputMode={inputMode}
+          autoComplete="off"
+          list={listId}
+          value={v as string}
+          maxLength={f.max}
+          placeholder={f.placeholder ?? (f.type === "tags" ? "colegio, reposicion-anual" : undefined)}
+          onChange={(e) => set(f.key, e.target.value)}
+          className={cn(f.upper && "uppercase", (f.type === "number" || f.type === "int") && "text-right")}
+          {...common}
+        />
+        {listId && (
+          <datalist id={listId}>
+            {suggestions.map((o) => (
+              <option key={o.value} value={o.value} />
+            ))}
+          </datalist>
+        )}
+      </>
     );
   }
 

@@ -1065,6 +1065,7 @@ model Branch {
   cashRegisters CashRegister[]
   sales         Sale[]
   stocks        BranchStock[]
+  employees     Employee[]
 
   @@map("branches")
 }
@@ -1170,6 +1171,12 @@ model PaymentOrder {
   supplier       Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   workshopId     String?
   workshop       Workshop?      @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  /// Pago de sueldo a personal propio (no es proveedor ni taller)
+  employeeId     String?
+  employee       Employee?      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  /// Mes al que corresponde el pago de sueldo (AAAA-MM)
+  salaryPeriod   String?
+  salaryConcept  SalaryConcept?
   date           DateTime       @default(now())
   /// Medio único (órdenes anteriores). Las nuevas detallan sus instrumentos en items.
   method         PaymentMethod?
@@ -1189,6 +1196,7 @@ model PaymentOrder {
 
   @@index([supplierId, date])
   @@index([workshopId, date])
+  @@index([employeeId, salaryPeriod])
   @@map("payment_orders")
 }
 
@@ -1477,4 +1485,40 @@ model WooBridge {
   updatedAt        DateTime  @updatedAt
 
   @@map("woo_bridge")
+}
+
+enum SalaryConcept {
+  SUELDO
+  ADELANTO
+  AGUINALDO
+  VACACIONES
+  PREMIO
+  HORAS_EXTRA
+  OTRO
+}
+
+/// Personal de Coverline (atención al público, logística, ventas mayoristas…). Los talleres van aparte.
+model Employee {
+  id          String    @id @default(cuid())
+  name        String
+  cuil        String?   @unique
+  /// Puesto: texto libre (se sugieren los ya usados)
+  position    String
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  startDate   DateTime?
+  /// Sueldo mensual acordado (neto a pagar)
+  baseSalary  Decimal   @default(0) @db.Decimal(14, 2)
+  phone       String?
+  email       String?
+  /// CBU o alias para transferirle
+  bankAccount String?
+  notes       String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  paymentOrders PaymentOrder[]
+
+  @@map("employees")
 }

@@ -40,7 +40,7 @@ const ROLES = [
     description: "POS, clientes y presupuestos",
     permissions: ["pos:sell", "pos:discount", "pos:return", "crm:*", "masters:read", "cash:session", "accounts:receivables:collect", "production:read"],
   },
-  { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*", "masters:*", "crm:read"] },
+  { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*", "masters:*", "crm:read", "payroll:*"] },
 ];
 
 const SUPPLIERS = [
