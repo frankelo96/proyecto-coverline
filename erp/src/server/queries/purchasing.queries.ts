@@ -13,6 +13,7 @@ import type {
   TaxCondition,
   UnitOfMeasure,
 } from "@/generated/prisma/enums";
+import { variantLabel } from "@/lib/catalog/variants";
 import { agingSummary, purchasableUoms, type AgingBucket } from "@/lib/purchasing/math";
 import { db } from "@/server/db";
 import { compareSizes } from "@/server/queries/production-orders.queries";
@@ -203,7 +204,7 @@ export async function getMerchandiseFormData(): Promise<MerchandiseFormData> {
         .sort((a, b) => compareSizes(a.size, b.size))
         .map((v) => ({
           id: v.id,
-          label: `${v.sku} · ${p.name} T.${v.size}${v.color ? ` ${v.color}` : ""}`,
+          label: `${v.sku} · ${variantLabel(p.name, v)}`,
           productName: p.name,
           size: v.size,
           sourcing: p.sourcing,

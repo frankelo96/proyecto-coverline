@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ImportPanel } from "@/components/masters/import-panel";
-import { ENTITIES, isEntityKey } from "@/lib/masters/definitions";
+import { ENTITIES, isMasterKey } from "@/lib/masters/definitions";
 import { requirePageUser } from "@/server/auth/session";
 
 export const metadata: Metadata = { title: "Importar" };
@@ -13,7 +13,7 @@ type Props = { params: Promise<{ entity: string }> };
 
 export default async function ImportMasterPage({ params }: Props) {
   const { entity } = await params;
-  if (!isEntityKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes") notFound();
   const def = ENTITIES[entity];
   await requirePageUser(def.writePermission);
   return (

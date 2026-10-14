@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { PaymentOrderForm } from "@/components/purchasing/payment-order-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,6 +41,7 @@ export default async function CreditorStatementPage({ params }: Props) {
         <ChevronLeft aria-hidden="true" className="size-4" /> Cuentas a pagar
       </Link>
 
+      <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-1.5">
         <p className="text-sm text-muted-foreground">
           {tipo === "taller" ? "Taller" : "Proveedor"}
@@ -47,6 +49,8 @@ export default async function CreditorStatementPage({ params }: Props) {
           {s.phone && ` · ${s.phone}`} · pago a {s.paymentTermDays} días
         </p>
         <h1 className="text-3xl font-bold tracking-tight">{s.name}</h1>
+      </div>
+      <ExportButtons report="acreedor-extracto" params={{ tipo, id: s.id }} label="Exportar extracto" />
       </div>
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">

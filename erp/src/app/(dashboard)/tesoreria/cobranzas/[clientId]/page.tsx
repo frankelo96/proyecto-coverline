@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { ReceiptForm } from "@/components/treasury/receipt-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,12 +37,15 @@ export default async function ClientAccountPage({ params }: Props) {
       <Link href="/tesoreria/cobranzas" className="inline-flex min-h-10 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft aria-hidden="true" className="size-4" /> Cobranzas
       </Link>
+      <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-1">
         <p className="text-sm text-muted-foreground">
           {a.client.document ?? "Sin documento"}
           {a.client.phone && ` · ${a.client.phone}`} · límite {formatMoney(a.client.creditLimit, { round: true })} · plazo {a.client.paymentTermDays} días
         </p>
         <h2 className="text-2xl font-bold">{a.client.name}</h2>
+      </div>
+      <ExportButtons report="cliente-extracto" params={{ id: a.client.id }} label="Exportar extracto" />
       </div>
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

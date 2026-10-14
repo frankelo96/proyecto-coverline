@@ -2,6 +2,7 @@ import { Package, Plus, Scissors } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,20 +43,23 @@ export default async function PurchasesPage({ searchParams }: Props) {
             {formatMoney(active.reduce((a, r) => a + r.balance, 0), { round: true })}
           </p>
         </div>
-        {canWrite && (
-          <div className="flex flex-wrap gap-2">
-            <Button asChild>
-              <Link href="/compras/mercaderia/nueva">
-                <Package /> Compra de mercadería
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/compras/talleres/nueva">
-                <Scissors /> Factura de taller
-              </Link>
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <ExportButtons report="compras" params={{ desde: `${new Date().getFullYear()}-01-01` }} label="Compras del año" />
+          {canWrite && (
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href="/compras/mercaderia/nueva">
+                  <Package /> Compra de mercadería
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/compras/talleres/nueva">
+                  <Scissors /> Factura de taller
+                </Link>
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <nav aria-label="Tipo de compra" className="flex flex-wrap gap-1.5">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { ChequeActions } from "@/components/treasury/cheque-actions";
 import { FlashNotice } from "@/components/ui/flash-notice";
 import { Badge } from "@/components/ui/badge";
@@ -48,19 +49,22 @@ export default async function ChequesPage({ searchParams }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <nav aria-label="Vista" className="flex flex-wrap gap-1.5">
-        {VIEWS.map((v) => (
-          <Link
-            key={v.key}
-            href={`/tesoreria/cheques?tipo=${v.key}`}
-            scroll={false}
-            aria-current={v === view ? "page" : undefined}
-            className={cn("flex h-9 items-center rounded-md border px-3 text-sm", v === view ? "border-foreground bg-secondary font-medium" : "border-input bg-card hover:bg-muted")}
-          >
-            {v.label}
-          </Link>
-        ))}
-      </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Vista" className="flex flex-wrap gap-1.5">
+          {VIEWS.map((v) => (
+            <Link
+              key={v.key}
+              href={`/tesoreria/cheques?tipo=${v.key}`}
+              scroll={false}
+              aria-current={v === view ? "page" : undefined}
+              className={cn("flex h-9 items-center rounded-md border px-3 text-sm", v === view ? "border-foreground bg-secondary font-medium" : "border-input bg-card hover:bg-muted")}
+            >
+              {v.label}
+            </Link>
+          ))}
+        </nav>
+        <ExportButtons report="cheques" label="Exportar cheques" />
+      </div>
       <FlashNotice message={aviso} />
       <p className="text-sm text-muted-foreground">
         {cheques.length} cheques · {formatMoney(total)}

@@ -20,6 +20,7 @@ export type FieldType =
   | "bool"
   | "tags"
   | "months"
+  | "date"
   | "ref";
 
 export interface Option {
@@ -184,10 +185,16 @@ export function parseField(field: FieldDef, raw: unknown, refs: RefOptions = {})
       if (field.maxValue !== undefined && n > field.maxValue) return { ok: false, error: `${label}: máximo ${field.maxValue}` };
       return { ok: true, value: n };
     }
+    case "date": {
+      const iso = parseDateValue(raw);
+      if (!iso) return { ok: false, error: `${label}: "${String(raw)}" no es una fecha (usá DD/MM/AAAA)` };
+      return { ok: true, value: iso };
+    }
     case "select":
     case "ref": {
       const options = field.type === "ref" ? (refs[field.ref ?? ""] ?? []) : (field.options ?? []);
       const o = matchOption(options, String(raw).trim());
+      if (!o && field.type === "ref") return { ok: false, error: `${label}: "${String(raw)}" no está cargado (dalo de alta primero o revisá el nombre/CUIT)` };
       if (!o) return { ok: false, error: `${label}: "${String(raw)}" no es una opción válida` };
       return { ok: true, value: o.value };
     }
@@ -216,6 +223,29 @@ export function parseField(field: FieldDef, raw: unknown, refs: RefOptions = {})
       return { ok: true, value: months.sort((a, b) => a - b) };
     }
   }
+}
+
+/** "31/12/2025", "31-12-25", "2025-12-31" o número de serie de Excel → "2025-12-31". */
+export function parseDateValue(raw: unknown): string | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const valid = (y: number, m: number, d: number) => {
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d ? `${y}-${pad(m)}-${pad(d)}` : null;
+  };
+  if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw.toISOString().slice(0, 10);
+  if (typeof raw === "number" && raw > 20000 && raw < 80000) {
+    // Fecha de Excel guardada como número (días desde 1899-12-30).
+    return new Date(Date.UTC(1899, 11, 30) + raw * 86_400_000).toISOString().slice(0, 10);
+  }
+  const s = String(raw ?? "").trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return valid(Number(m[1]), Number(m[2]), Number(m[3]));
+  m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s);
+  if (m) {
+    const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+    return valid(y, Number(m[2]), Number(m[1]));
+  }
+  return null;
 }
 
 /** Valida todos los campos (del formulario o de una fila importada). */
@@ -249,6 +279,10 @@ export function formatField(field: FieldDef, value: FieldValue, refs: RefOptions
       return (value as string[]).map((v) => field.options?.find((o) => o.value === v)?.label ?? v).join(", ");
     case "tags":
       return (value as string[]).join(", ");
+    case "date": {
+      const [y, m, d] = String(value).split("-");
+      return d ? `${d}/${m}/${y}` : String(value);
+    }
     case "months":
       return (value as number[]).map((m) => MONTH_OPTIONS[m - 1]?.label ?? m).join(", ");
     default:

@@ -8,14 +8,15 @@ import type {
   ChequeStatus,
   InvoiceType,
   PaymentMethod,
+  ProductCategory,
   TaxCondition,
 } from "@/generated/prisma/enums";
+import { compareSizes, variantLabel } from "@/lib/catalog/variants";
 import { finalUnitPrice } from "@/lib/pos/sale-math";
 import { agingSummary, type AgingBucket } from "@/lib/purchasing/math";
 import { MOVEMENT_SIGN } from "@/lib/treasury/cash";
 import { chequeLabel } from "@/lib/treasury/cheques";
 import { db } from "@/server/db";
-import { compareSizes } from "@/server/queries/production-orders.queries";
 import { registerBalance } from "@/server/services/treasury.service";
 
 const OPEN = ["PENDIENTE", "PARCIAL"] as const;
@@ -56,10 +57,16 @@ export async function getPosHome() {
 
 export interface CatalogItem {
   variantId: string;
+  productId: string;
+  productSku: string;
   sku: string;
+  barcode: string | null;
   label: string;
   productName: string;
+  category: ProductCategory;
   size: string;
+  color: string | null;
+  fabric: string | null;
   price: number;
   stock: number;
 }
@@ -99,10 +106,16 @@ export async function getTerminalData(registerId: string) {
       .sort((a, b) => compareSizes(a.size, b.size))
       .map((v) => ({
         variantId: v.id,
+        productId: p.id,
+        productSku: p.sku,
         sku: v.sku,
-        label: `${p.name} T.${v.size}${v.color ? ` ${v.color}` : ""}`,
+        barcode: v.barcode,
+        label: variantLabel(p.name, v),
         productName: p.name,
+        category: p.category,
         size: v.size,
+        color: v.color,
+        fabric: v.fabric,
         price: finalUnitPrice(p.listPrice.toNumber(), p.vatRate.toNumber(), v.priceAdjustmentPct.toNumber()),
         stock: v.stockQty.toNumber(),
       })),

@@ -7,6 +7,7 @@ import { OrderActions } from "@/components/production/order-actions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { variantAttrs } from "@/lib/catalog/variants";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
 import { STAGE_LABELS, STAGE_ORDER, STATUS_LABELS } from "@/lib/production/workflow";
@@ -129,7 +130,7 @@ export default async function OrderDetailPage({ params }: Props) {
                 {order.items.map((i) => (
                   <TableRow key={i.variantId}>
                     <TableCell className="pl-5 font-medium">{i.size}</TableCell>
-                    <TableCell className="text-muted-foreground">{i.color ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{variantAttrs(i) || "—"}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{i.quantity}</TableCell>
                     <TableCell className="pr-5 text-right font-mono tabular-nums">{i.quantityFinished}</TableCell>
                   </TableRow>

@@ -1,9 +1,12 @@
+import { Upload } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
 import { AGING_BUCKETS, AGING_LABELS } from "@/lib/purchasing/math";
 import { cn } from "@/lib/utils";
@@ -22,7 +25,7 @@ const TABS: { key: string; label: string; type: CreditorType | null }[] = [
 type Props = { searchParams: Promise<{ tipo?: string; saldo?: string }> };
 
 export default async function PayablesPage({ searchParams }: Props) {
-  await requirePageUser(PERMISSIONS.payablesRead);
+  const user = await requirePageUser(PERMISSIONS.payablesRead);
   const { tipo, saldo } = await searchParams;
   const tab = TABS.find((t) => t.key === tipo) ?? TABS[0];
   const onlyWithBalance = saldo !== "todos";
@@ -34,12 +37,24 @@ export default async function PayablesPage({ searchParams }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-bold tracking-tight">Cuentas a pagar</h1>
-        <p className="text-sm text-muted-foreground">
-          Saldo total <strong className="text-foreground">{formatMoney(total)}</strong> · vencido{" "}
-          <strong className={total - sum("A_VENCER") > 0 ? "text-destructive" : "text-foreground"}>{formatMoney(total - sum("A_VENCER"))}</strong>
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Cuentas a pagar</h1>
+          <p className="text-sm text-muted-foreground">
+            Saldo total <strong className="text-foreground">{formatMoney(total)}</strong> · vencido{" "}
+            <strong className={total - sum("A_VENCER") > 0 ? "text-destructive" : "text-foreground"}>{formatMoney(total - sum("A_VENCER"))}</strong>
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ExportButtons report="acreedores-saldos" label="Exportar saldos" />
+          {hasPermission(user.permissions, PERMISSIONS.payablesPay) && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/compras/cuentas/importar">
+                <Upload /> Importar saldos iniciales
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

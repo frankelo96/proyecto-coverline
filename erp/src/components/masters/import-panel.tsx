@@ -78,7 +78,7 @@ export function ImportPanel({ entity, title, basePath, matchHelp }: { entity: En
           </Button>
           <Button asChild variant="outline">
             <a href={`/api/exportar/${entity}`}>
-              <FileSpreadsheet /> Exportar {title.toLowerCase()} actuales
+              <FileSpreadsheet /> Exportar lo cargado actualmente
             </a>
           </Button>
         </CardContent>

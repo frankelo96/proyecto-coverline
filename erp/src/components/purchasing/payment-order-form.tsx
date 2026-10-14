@@ -11,26 +11,20 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { StatusMessage } from "@/components/ui/status-message";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { CashRegisterKind } from "@/generated/prisma/enums";
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatMoney } from "@/lib/format";
 import { agingBucket, AGING_LABELS, allocatePayment, PurchasingError } from "@/lib/purchasing/math";
 import { todayIso } from "@/lib/purchasing/labels";
-import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type PaymentInstrument } from "@/lib/validations/purchasing";
+import { METHOD_REGISTER_KINDS } from "@/lib/treasury/cash";
+import { type PaymentInstrument, UI_PAYMENT_OPTION_LABELS, UI_PAYMENT_OPTIONS } from "@/lib/validations/purchasing";
 import { createPaymentOrderAction } from "@/server/actions/purchasing.actions";
 import type { CreditorStatement } from "@/server/queries/purchasing.queries";
 
-/** Medio sugerido según el tipo de caja/cuenta. */
-const DEFAULT_METHOD: Record<CashRegisterKind, (typeof PAYMENT_METHODS)[number]> = {
-  CAJA_DIARIA: "EFECTIVO",
-  CAJA_ADMINISTRATIVA: "EFECTIVO",
-  CAJA_RESGUARDO: "EFECTIVO",
-  BILLETERA_VIRTUAL: "MERCADO_PAGO",
-  BANCO: "TRANSFERENCIA",
-};
+type RegisterMethod = "EFECTIVO" | "TRANSFERENCIA" | "MERCADO_PAGO";
+type UiPaymentOption = (typeof UI_PAYMENT_OPTIONS)[number];
 
 type Row =
-  | { key: number; type: "REGISTER"; cashRegisterId: string; method: (typeof PAYMENT_METHODS)[number]; amount: string; reference: string }
+  | { key: number; type: "REGISTER"; cashRegisterId: string; method: RegisterMethod; amount: string; reference: string }
   | { key: number; type: "THIRD_CHEQUE"; chequeId: string }
   | { key: number; type: "OWN_CHEQUE"; format: "FISICO" | "ECHEQ"; bankRegisterId: string; number: string; paymentDate: string; amount: string };
 
@@ -57,7 +51,6 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
 
   const usable = statement.registers.filter((r) => !r.requiresSession || r.hasOpenSession);
   const banks = statement.registers.filter((r) => r.kind === "BANCO");
-  const blackBox = statement.registers.find((r) => r.kind === "CAJA_RESGUARDO");
   const selectedTotal = statement.open.filter((p) => selected.has(p.id)).reduce((a, p) => a + p.balance, 0);
   const pendingToAssign = () => Math.max(0, Math.round((selectedTotal - instrumentsTotal) * 100) / 100);
 
@@ -65,19 +58,25 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
   const rowAmount = (r: Row) => (r.type === "THIRD_CHEQUE" ? (chequeById.get(r.chequeId)?.amount ?? 0) : num(r.amount));
   const instrumentsTotal = rows.reduce((a, r) => a + rowAmount(r), 0);
 
-  function add(type: Row["type"]) {
+  /** Cajas o cuentas de donde puede salir cada medio (efectivo: caja negra primero). */
+  const registersFor = (method: RegisterMethod) =>
+    usable
+      .filter((r) => METHOD_REGISTER_KINDS[method]?.includes(r.kind))
+      .sort((a, b) => Number(b.kind === "CAJA_RESGUARDO") - Number(a.kind === "CAJA_RESGUARDO"));
+
+  function add(option: UiPaymentOption) {
     const key = nextKey;
     setNextKey(key + 1);
     const rest = String(pendingToAssign() || "");
-    if (type === "REGISTER") {
-      const reg = blackBox ?? usable[0];
-      setRows((r) => [...r, { key, type, cashRegisterId: reg?.id ?? "", method: reg ? DEFAULT_METHOD[reg.kind] : "EFECTIVO", amount: rest, reference: "" }]);
-    } else if (type === "THIRD_CHEQUE") {
+    if (option === "EFECTIVO" || option === "TRANSFERENCIA" || option === "MERCADO_PAGO") {
+      const reg = registersFor(option)[0];
+      setRows((r) => [...r, { key, type: "REGISTER", cashRegisterId: reg?.id ?? "", method: option, amount: rest, reference: "" }]);
+    } else if (option === "THIRD_CHEQUE") {
       const used = new Set(rows.flatMap((r) => (r.type === "THIRD_CHEQUE" ? [r.chequeId] : [])));
       const first = statement.cheques.find((c) => !used.has(c.id));
-      setRows((r) => [...r, { key, type, chequeId: first?.id ?? "" }]);
+      setRows((r) => [...r, { key, type: "THIRD_CHEQUE", chequeId: first?.id ?? "" }]);
     } else {
-      setRows((r) => [...r, { key, type, format: "ECHEQ", bankRegisterId: banks[0]?.id ?? "", number: "", paymentDate: todayIso(), amount: rest }]);
+      setRows((r) => [...r, { key, type: "OWN_CHEQUE", format: "ECHEQ", bankRegisterId: banks[0]?.id ?? "", number: "", paymentDate: todayIso(), amount: rest }]);
     }
   }
 
@@ -185,21 +184,22 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold">Con qué se paga</h3>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => add("REGISTER")}>
-                <Banknote /> Efectivo / transferencia
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => add("THIRD_CHEQUE")} disabled={statement.cheques.length === 0}>
-                <FileText /> Endosar cheque de terceros
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => add("OWN_CHEQUE")} disabled={banks.length === 0}>
-                <Wallet /> Cheque propio / eCheq
-              </Button>
+              {UI_PAYMENT_OPTIONS.map((o) => {
+                const disabled =
+                  o === "THIRD_CHEQUE" ? statement.cheques.length === 0 : o === "OWN_CHEQUE" ? banks.length === 0 : registersFor(o).length === 0;
+                const Icon = o === "EFECTIVO" ? Banknote : o === "THIRD_CHEQUE" || o === "OWN_CHEQUE" ? FileText : Wallet;
+                return (
+                  <Button key={o} type="button" size="sm" variant="outline" onClick={() => add(o)} disabled={disabled}>
+                    <Icon /> {UI_PAYMENT_OPTION_LABELS[o]}
+                  </Button>
+                );
+              })}
             </div>
           </div>
 
           {rows.length === 0 && (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Agregá uno o más medios. El efectivo sale de caja negra; las cajas diarias de local solo aparecen si tienen el turno abierto.
+              Agregá uno o más medios: Efectivo (sale de caja negra; las cajas diarias solo si tienen el turno abierto), Banco Macro, Mercado Pago, Cheque propio o Cheque de terceros.
             </p>
           )}
 
@@ -208,28 +208,15 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
               {r.type === "REGISTER" && (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-reg`}>Sale de</Label>
-                    <NativeSelect
-                      id={`${id}-${r.key}-reg`}
-                      value={r.cashRegisterId}
-                      onChange={(e) => {
-                        const reg = usable.find((x) => x.id === e.target.value);
-                        update(r.key, { cashRegisterId: e.target.value, ...(reg && { method: DEFAULT_METHOD[reg.kind] }) });
-                      }}
-                    >
-                      {usable.map((reg) => (
-                        <option key={reg.id} value={reg.id}>
-                          {reg.name} — saldo {formatMoney(reg.balance, { round: true })}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                    <span className="text-sm font-medium">Medio</span>
+                    <span className="flex h-10 items-center font-medium">{UI_PAYMENT_OPTION_LABELS[r.method]}</span>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-m`}>Medio</Label>
-                    <NativeSelect id={`${id}-${r.key}-m`} value={r.method} onChange={(e) => update(r.key, { method: e.target.value as (typeof PAYMENT_METHODS)[number] })}>
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {PAYMENT_METHOD_LABELS[m]}
+                    <Label htmlFor={`${id}-${r.key}-reg`}>Sale de</Label>
+                    <NativeSelect id={`${id}-${r.key}-reg`} value={r.cashRegisterId} onChange={(e) => update(r.key, { cashRegisterId: e.target.value })}>
+                      {registersFor(r.method).map((reg) => (
+                        <option key={reg.id} value={reg.id}>
+                          {reg.name} — saldo {formatMoney(reg.balance, { round: true })}
                         </option>
                       ))}
                     </NativeSelect>
@@ -247,7 +234,7 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
               {r.type === "THIRD_CHEQUE" && (
                 <>
                   <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
-                    <Label htmlFor={`${id}-${r.key}-ch`}>Cheque de terceros en cartera</Label>
+                    <Label htmlFor={`${id}-${r.key}-ch`}>Cheque de terceros en cartera (se endosa)</Label>
                     <NativeSelect id={`${id}-${r.key}-ch`} value={r.chequeId} onChange={(e) => update(r.key, { chequeId: e.target.value })}>
                       {statement.cheques
                         .filter((c) => c.id === r.chequeId || !rows.some((x) => x.type === "THIRD_CHEQUE" && x.chequeId === c.id))
@@ -267,7 +254,7 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
               {r.type === "OWN_CHEQUE" && (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-${r.key}-b`}>Cuenta</Label>
+                    <Label htmlFor={`${id}-${r.key}-b`}>Cheque propio de</Label>
                     <div className="flex gap-2">
                       <NativeSelect id={`${id}-${r.key}-f`} aria-label="Formato" value={r.format} onChange={(e) => update(r.key, { format: e.target.value as "FISICO" | "ECHEQ" })}>
                         <option value="ECHEQ">eCheq</option>

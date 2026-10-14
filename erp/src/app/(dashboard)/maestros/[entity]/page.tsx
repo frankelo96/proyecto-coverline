@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { MasterList } from "@/components/masters/master-list";
 import { hasPermission } from "@/lib/auth/permissions";
-import { ENTITIES, isEntityKey } from "@/lib/masters/definitions";
+import { ENTITIES, isMasterKey } from "@/lib/masters/definitions";
 import { requirePageUser } from "@/server/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +12,13 @@ type Props = { params: Promise<{ entity: string }>; searchParams: Promise<{ q?: 
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { entity } = await params;
-  return { title: isEntityKey(entity) ? ENTITIES[entity].title : "Maestros" };
+  return { title: isMasterKey(entity) ? ENTITIES[entity].title : "Maestros" };
 }
 
 export default async function MasterListPage({ params, searchParams }: Props) {
   const { entity } = await params;
   if (entity === "clientes") redirect("/crm/clientes");
-  if (!isEntityKey(entity)) notFound();
+  if (!isMasterKey(entity)) notFound();
   const def = ENTITIES[entity];
   const user = await requirePageUser(def.readPermission);
   const sp = await searchParams;

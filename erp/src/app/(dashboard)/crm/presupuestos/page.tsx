@@ -2,6 +2,7 @@ import { FilePlus2, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { QuoteStatusBadge } from "@/components/crm/status-badges";
 import { Button } from "@/components/ui/button";
 import { FlashNotice } from "@/components/ui/flash-notice";
@@ -40,13 +41,16 @@ export default async function QuotesPage({ searchParams }: Props) {
             {summary.acceptedMonthCount} por <strong className="text-foreground">{formatMoney(summary.acceptedMonthTotal, { round: true })}</strong>
           </p>
         </div>
-        {canWrite && (
-          <Button asChild>
-            <Link href="/crm/presupuestos/nuevo">
-              <FilePlus2 /> Nuevo presupuesto
-            </Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <ExportButtons report="presupuestos" params={{ desde: `${new Date().getFullYear()}-01-01` }} label="Exportar" />
+          {canWrite && (
+            <Button asChild>
+              <Link href="/crm/presupuestos/nuevo">
+                <FilePlus2 /> Nuevo presupuesto
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
       <FlashNotice message={sp.aviso} />
       <div className="flex flex-wrap items-center justify-between gap-3">

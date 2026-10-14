@@ -42,9 +42,10 @@ export default async function ProductSheetPrintPage({ params, searchParams }: Pr
   const { product, breakdown: b } = await load(productId);
   // Sin permiso de costos solo se imprime la ficha sin precios.
   const withCosts = (await searchParams).costos !== "0" && hasPermission(user.permissions, PERMISSIONS.productionCostWrite);
-  const variants = await db.productVariant.findMany({ where: { productId, active: true }, orderBy: { createdAt: "asc" }, select: { size: true, color: true } });
+  const variants = await db.productVariant.findMany({ where: { productId, active: true }, orderBy: { createdAt: "asc" }, select: { size: true, color: true, fabric: true } });
   const sizes = [...new Set(variants.map((v) => v.size))];
   const colors = [...new Set(variants.map((v) => v.color).filter(Boolean))];
+  const fabrics = [...new Set(variants.map((v) => v.fabric).filter(Boolean))];
 
   return (
     <div className="mx-auto flex max-w-[210mm] flex-col gap-3 bg-white p-8 text-[12px] text-black print:p-0">
@@ -67,7 +68,7 @@ export default async function ProductSheetPrintPage({ params, searchParams }: Pr
         <dl className="grid grid-cols-[auto_1fr] gap-x-3">
           <dt className="font-bold">Producto:</dt>
           <dd>{product.name}</dd>
-          <dt className="font-bold">Categoría:</dt>
+          <dt className="font-bold">Rubro:</dt>
           <dd>{CATEGORY_LABELS[product.category]}</dd>
           {product.description && (
             <>
@@ -81,6 +82,8 @@ export default async function ProductSheetPrintPage({ params, searchParams }: Pr
           <dd>{sizes.join(" · ") || "-"}</dd>
           <dt className="font-bold">Colores:</dt>
           <dd>{colors.join(" · ") || "-"}</dd>
+          <dt className="font-bold">Telas:</dt>
+          <dd>{fabrics.join(" · ") || "-"}</dd>
         </dl>
       </section>
 

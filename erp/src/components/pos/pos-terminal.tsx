@@ -4,6 +4,7 @@ import { Loader2, Minus, PackagePlus, Plus, Printer, Search, ShoppingCart, Trash
 import Link from "next/link";
 import { useId, useMemo, useState, useTransition } from "react";
 
+import { type CatalogProduct, groupCatalog, priceRange, ProductPicker } from "@/components/pos/product-picker";
 import { CollectionPayments, newPayRow, toCollectionPayload, type PayRow } from "@/components/treasury/collection-payments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,9 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { StatusMessage } from "@/components/ui/status-message";
 import type { ActionStatus } from "@/hooks/use-server-action";
 import { formatMoney, formatNumber } from "@/lib/format";
+import { CATEGORY_LABELS } from "@/lib/masters/labels";
 import { computeSaleTotals, planPayments, SaleError } from "@/lib/pos/sale-math";
-import { COLLECTION_METHODS } from "@/lib/validations/treasury";
+import { UI_COLLECTION_METHODS } from "@/lib/validations/treasury";
 import { createSaleAction } from "@/server/actions/treasury.actions";
 import type { TerminalData } from "@/server/queries/treasury.queries";
 
@@ -60,17 +62,40 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
 
   const client = data.clients.find((c) => c.id === clientId) ?? null;
 
+  const products = useMemo(() => groupCatalog(data.catalog), [data.catalog]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [rubro, setRubro] = useState<string>("");
+  const openProduct = products.find((p) => p.productId === openId) ?? null;
+  const rubros = [...new Set(products.map((p) => p.category))];
+
+  /** Código de barras o SKU exacto de una variante (lector de códigos): se agrega directo. */
+  const exactVariant = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? (data.catalog.find((c) => c.barcode?.toLowerCase() === q || c.sku.toLowerCase() === q) ?? null) : null;
+  }, [query, data.catalog]);
+
   const results = useMemo(() => {
     const tokens = normalize(query).split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return [];
-    // Un token igual al talle ("m", "xl", "42") pesa más que una coincidencia parcial (la "m" de "marino").
-    return data.catalog
-      .filter((c) => tokens.every((t) => normalize(`${c.label} ${c.sku}`).includes(t)))
-      .map((c) => ({ c, score: tokens.some((t) => normalize(c.size) === t) ? 0 : 1 }))
-      .sort((a, b) => a.score - b.score)
-      .map((x) => x.c)
+    return products
+      .filter((p) =>
+        tokens.every((t) =>
+          normalize(`${p.name} ${p.sku} ${CATEGORY_LABELS[p.category]} ${p.variants.map((v) => `${v.color ?? ""} ${v.fabric ?? ""}`).join(" ")}`).includes(t),
+        ),
+      )
       .slice(0, 30);
-  }, [query, data.catalog]);
+  }, [query, products]);
+
+  function choose(p: CatalogProduct) {
+    // Un producto con una sola variante se agrega directo; si no, se elige color/tela/talle.
+    if (p.variants.length === 1) {
+      addVariant(p.variants[0].variantId);
+      setOpenId(null);
+    } else setOpenId(p.productId);
+    setQuery("");
+  }
+
+  const inCart = (variantId: string) => num(cart.find((l) => l.variantId === variantId)?.quantity ?? "0");
 
   const hasDiscount = num(globalDiscount) > 0 || cart.some((l) => num(l.discountPct) > 0);
 
@@ -116,7 +141,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
 
   const updateLine = (key: number, patch: Partial<CartLine>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  function quickPay(method: "EFECTIVO" | "TARJETA_DEBITO" | "MERCADO_PAGO" | "TRANSFERENCIA") {
+  function quickPay(method: "EFECTIVO" | "MERCADO_PAGO" | "TRANSFERENCIA") {
     if (!totals) return;
     setPayments([newPayRow(method, totals.total)]);
   }
@@ -131,6 +156,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     setDelivery("RETIRO_SUCURSAL");
     setAddress("");
     setQuery("");
+    setOpenId(null);
   }
 
   function confirm() {
@@ -158,7 +184,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     });
   }
 
-  const methods = COLLECTION_METHODS.filter((m) => (m === "CUENTA_CORRIENTE" ? client && client.creditLimit > 0 : true));
+  const methods = UI_COLLECTION_METHODS.filter((m) => (m === "CUENTA_CORRIENTE" ? client && client.creditLimit > 0 : true));
   const canConfirm = totals && payments.length > 0 && !paymentCheck && !pending && (!hasDiscount || discountReason.trim().length >= 3) && cart.every((l) => num(l.quantity) > 0);
 
   return (
@@ -170,41 +196,95 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
           <Input
             type="search"
             autoFocus
-            placeholder="Buscar prenda, talle o SKU (ej. chomba m)"
+            placeholder="Buscar producto, color, tela, SKU o código de barras"
             aria-label="Buscar artículo"
             className="h-12 pl-11 text-base"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && results.length > 0) {
+              if (e.key !== "Enter") return;
+              if (exactVariant) {
                 e.preventDefault();
-                addVariant(results[0].variantId);
+                addVariant(exactVariant.variantId);
                 setQuery("");
+              } else if (results.length > 0) {
+                e.preventDefault();
+                choose(results[0]);
               }
             }}
           />
         </div>
         {results.length > 0 && (
           <ul className="flex max-h-72 flex-col divide-y overflow-y-auto rounded-lg border bg-card" aria-label="Resultados">
-            {results.map((r) => (
-              <li key={r.variantId}>
+            {results.map((p) => (
+              <li key={p.productId}>
                 <button
                   type="button"
-                  onClick={() => addVariant(r.variantId)}
+                  onClick={() => choose(p)}
                   className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                 >
                   <span>
-                    {r.label}
-                    <span className="block font-mono text-xs text-muted-foreground">{r.sku}</span>
+                    {p.name}
+                    <span className="block text-xs text-muted-foreground">
+                      {CATEGORY_LABELS[p.category]} · {p.variants.length} {p.variants.length === 1 ? "variante" : "variantes"}
+                    </span>
                   </span>
                   <span className="text-right">
-                    <span className="font-mono font-semibold tabular-nums">{formatMoney(r.price)}</span>
-                    <span className={r.stock > 0 ? "block text-xs text-muted-foreground" : "block text-xs font-medium text-destructive"}>stock {formatNumber(r.stock)}</span>
+                    <span className="font-mono font-semibold tabular-nums">{priceRange(p)}</span>
+                    <span className={p.stock > 0 ? "block text-xs text-muted-foreground" : "block text-xs font-medium text-destructive"}>stock {formatNumber(p.stock)}</span>
                   </span>
                 </button>
               </li>
             ))}
           </ul>
+        )}
+        {query.trim() && results.length === 0 && !exactVariant && <p className="text-sm text-muted-foreground">Sin resultados para “{query}”.</p>}
+        {exactVariant && (
+          <p className="text-sm text-muted-foreground">
+            Código de {exactVariant.label}: presioná Enter para agregarlo.
+          </p>
+        )}
+
+        {openProduct && <ProductPicker key={openProduct.productId} product={openProduct} onAdd={addVariant} onClose={() => setOpenId(null)} inCart={inCart} />}
+
+        {!query.trim() && !openProduct && (
+          <section aria-label="Productos por rubro" className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Rubro">
+              {["", ...rubros].map((r) => (
+                <button
+                  key={r || "todos"}
+                  type="button"
+                  aria-pressed={rubro === r}
+                  onClick={() => setRubro(r)}
+                  className={
+                    rubro === r
+                      ? "h-9 rounded-md border border-primary bg-primary px-3 text-sm text-primary-foreground"
+                      : "h-9 rounded-md border border-input bg-card px-3 text-sm hover:bg-muted"
+                  }
+                >
+                  {r ? CATEGORY_LABELS[r as CatalogProduct["category"]] : "Todos los rubros"}
+                </button>
+              ))}
+            </div>
+            <div className="grid max-h-80 grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2 overflow-y-auto">
+              {products
+                .filter((p) => !rubro || p.category === rubro)
+                .map((p) => (
+                  <button
+                    key={p.productId}
+                    type="button"
+                    onClick={() => choose(p)}
+                    className="flex min-h-20 flex-col justify-between gap-1 rounded-md border bg-card p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    <span className="leading-snug font-medium">{p.name}</span>
+                    <span className="flex items-end justify-between gap-2 text-xs text-muted-foreground">
+                      <span>{p.variants.length} var.</span>
+                      <span className="font-mono font-semibold text-foreground">{priceRange(p)}</span>
+                    </span>
+                  </button>
+                ))}
+            </div>
+          </section>
         )}
 
         <Card>
@@ -219,7 +299,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
             )}
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {cart.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Buscá una prenda arriba y presioná Enter para agregarla.</p>}
+            {cart.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Elegí un producto por rubro o buscalo arriba; después tocá color, tela y talle.</p>}
             {cart.map((l, i) => (
               <div key={l.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b pb-3 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]">
                 <div className="min-w-0">
@@ -401,18 +481,15 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
             <CardTitle>Cobro</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Cobro rápido por el total">
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Cobro rápido por el total">
               <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("EFECTIVO")}>
                 Efectivo
               </Button>
-              <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("TARJETA_DEBITO")}>
-                Débito
+              <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("TRANSFERENCIA")}>
+                Banco Macro
               </Button>
               <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("MERCADO_PAGO")}>
                 Mercado Pago
-              </Button>
-              <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("TRANSFERENCIA")}>
-                Transferencia
               </Button>
             </div>
             <CollectionPayments rows={payments} onChange={setPayments} methods={methods} due={totals?.total ?? 0} />

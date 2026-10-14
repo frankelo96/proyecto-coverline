@@ -13,7 +13,7 @@ import {
   WORKSHOP_TYPE_LABELS,
 } from "./labels";
 
-export const ENTITY_KEYS = ["clientes", "productos", "materiales", "proveedores", "talleres"] as const;
+export const ENTITY_KEYS = ["clientes", "productos", "materiales", "proveedores", "talleres", "saldos-clientes", "saldos-proveedores"] as const;
 export type EntityKey = (typeof ENTITY_KEYS)[number];
 
 export interface EntityDef {
@@ -30,6 +30,8 @@ export interface EntityDef {
   writePermission: string;
   /** Cómo se reconoce un registro existente al importar */
   matchHelp: string;
+  /** Solo se importa/exporta (no tiene listado ni formulario propio en Maestros) */
+  importOnly?: boolean;
 }
 
 const TAX_OPTIONS = toOptions(TAX_CONDITION_LABELS).map((o) =>
@@ -68,7 +70,7 @@ const CLIENT_FIELDS: FieldDef[] = [
 const PRODUCT_FIELDS: FieldDef[] = [
   { key: "sku", label: "SKU", type: "text", required: true, max: 40, upper: true, aliases: ["codigo", "codigo producto", "sku producto", "articulo"], section: "Producto" },
   { key: "name", label: "Nombre", type: "text", required: true, max: 160, aliases: ["descripcion corta", "producto"], section: "Producto", wide: true },
-  { key: "category", label: "Categoría", type: "select", required: true, options: toOptions(CATEGORY_LABELS), defaultValue: "TRABAJO", aliases: ["rubro", "linea"], section: "Producto" },
+  { key: "category", label: "Rubro", type: "select", required: true, options: toOptions(CATEGORY_LABELS), defaultValue: "TRABAJO", aliases: ["categoria", "linea"], section: "Producto" },
   { key: "sourcing", label: "Origen", type: "select", options: toOptions(SOURCING_LABELS), defaultValue: "FABRICADO", aliases: ["fabricado/reventa"], section: "Producto", help: "Fabricación propia: el costo sale de la ficha técnica. Reventa: del último precio de compra." },
   { key: "description", label: "Descripción", type: "textarea", max: 2000, section: "Producto", wide: true },
   { key: "listPrice", label: "Precio de lista (sin IVA)", type: "number", minValue: 0, defaultValue: 0, aliases: ["precio", "precio neto", "precio lista"], section: "Precio" },
@@ -80,6 +82,7 @@ const PRODUCT_FIELDS: FieldDef[] = [
   // Variante (una fila por talle/color en la planilla)
   { key: "size", label: "Talle", type: "text", max: 20, upper: true, aliases: ["talla"], importOnly: true },
   { key: "color", label: "Color", type: "text", max: 40, importOnly: true },
+  { key: "fabric", label: "Tela", type: "text", max: 60, aliases: ["material", "tejido"], importOnly: true },
   { key: "variantSku", label: "SKU variante", type: "text", max: 60, upper: true, aliases: ["sku talle"], importOnly: true },
   { key: "barcode", label: "Código de barras", type: "text", max: 40, aliases: ["ean", "codigo barras"], importOnly: true },
   { key: "stockQty", label: "Stock", type: "number", aliases: ["existencia", "cantidad"], importOnly: true },
@@ -128,6 +131,14 @@ const WORKSHOP_FIELDS: FieldDef[] = [
   active,
 ];
 
+const OPENING_FIELDS = (party: FieldDef): FieldDef[] => [
+  party,
+  { key: "description", label: "Comprobante / concepto", type: "text", required: true, max: 200, aliases: ["comprobante", "concepto", "detalle", "factura"] },
+  { key: "issueDate", label: "Fecha", type: "date", required: true, aliases: ["fecha emision", "emision"] },
+  { key: "dueDate", label: "Vencimiento", type: "date", aliases: ["vto", "fecha vencimiento"], help: "Si se deja vacío se calcula con el plazo de pago." },
+  { key: "amount", label: "Importe", type: "number", required: true, minValue: 0.01, aliases: ["saldo", "monto", "deuda"] },
+];
+
 export const ENTITIES: Record<EntityKey, EntityDef> = {
   clientes: {
     key: "clientes",
@@ -152,7 +163,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     readPermission: PERMISSIONS.mastersRead,
     writePermission: PERMISSIONS.mastersWrite,
     matchHelp:
-      "Una fila por talle/color: las filas con el mismo SKU se agrupan en un producto. Se reconoce por SKU; la variante, por SKU variante o por talle + color. El stock importado reemplaza al actual.",
+      "Una fila por variante (color + tela + talle): las filas con el mismo SKU se agrupan en un único producto. Se reconoce por SKU; la variante, por SKU variante o por talle + color + tela. El stock importado reemplaza al actual.",
   },
   materiales: {
     key: "materiales",
@@ -190,9 +201,40 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     writePermission: PERMISSIONS.mastersWrite,
     matchHelp: "Se reconoce por CUIT o, si no tiene, por el nombre exacto.",
   },
+  "saldos-clientes": {
+    key: "saldos-clientes",
+    title: "Saldos iniciales de clientes",
+    singular: "saldo",
+    newLabel: "Nuevo saldo",
+    basePath: "/tesoreria/cobranzas",
+    fields: OPENING_FIELDS({ key: "clientId", label: "Cliente", type: "ref", ref: "clients", required: true, aliases: ["razon social", "cuit", "cuit/dni", "documento"], help: "Razón social o CUIT/DNI de un cliente ya cargado." }),
+    listColumns: ["clientId", "description", "amount"],
+    readPermission: PERMISSIONS.receivablesCollect,
+    writePermission: PERMISSIONS.cashManage,
+    matchHelp:
+      "Una fila por comprobante adeudado (facturas viejas del sistema anterior). Los clientes tienen que estar cargados antes. Si se vuelve a importar el mismo cliente + comprobante, se actualiza en vez de duplicarse.",
+    importOnly: true,
+  },
+  "saldos-proveedores": {
+    key: "saldos-proveedores",
+    title: "Saldos iniciales de proveedores y talleres",
+    singular: "saldo",
+    newLabel: "Nuevo saldo",
+    basePath: "/compras/cuentas",
+    fields: OPENING_FIELDS({ key: "creditorId", label: "Proveedor o taller", type: "ref", ref: "creditors", required: true, aliases: ["proveedor", "taller", "razon social", "cuit"], help: "Nombre o CUIT de un proveedor o taller ya cargado." }),
+    listColumns: ["creditorId", "description", "amount"],
+    readPermission: PERMISSIONS.payablesRead,
+    writePermission: PERMISSIONS.payablesPay,
+    matchHelp:
+      "Una fila por factura impaga del sistema anterior. Proveedores y talleres tienen que estar cargados antes. Si se vuelve a importar el mismo acreedor + comprobante, se actualiza en vez de duplicarse.",
+    importOnly: true,
+  },
 };
 
 export const isEntityKey = (k: string): k is EntityKey => (ENTITY_KEYS as readonly string[]).includes(k);
+
+/** Maestros con listado y formulario (excluye los que solo se importan). */
+export const isMasterKey = (k: string): k is EntityKey => isEntityKey(k) && !ENTITIES[k].importOnly;
 
 /** Campos que se muestran en el formulario de alta/edición. */
 export const formFields = (def: EntityDef) => def.fields.filter((f) => !f.importOnly);

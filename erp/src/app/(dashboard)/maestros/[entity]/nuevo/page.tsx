@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EntityForm } from "@/components/masters/entity-form";
-import { ENTITIES, formFields, isEntityKey } from "@/lib/masters/definitions";
+import { ENTITIES, formFields, isMasterKey } from "@/lib/masters/definitions";
 import { requirePageUser } from "@/server/auth/session";
 import { ADAPTERS } from "@/server/masters/adapters";
 
@@ -15,7 +15,7 @@ type Props = { params: Promise<{ entity: string }> };
 
 export default async function NewMasterPage({ params }: Props) {
   const { entity } = await params;
-  if (!isEntityKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes") notFound();
   const def = ENTITIES[entity];
   await requirePageUser(def.writePermission);
   const refs = await ADAPTERS[entity].refs();

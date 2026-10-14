@@ -717,6 +717,8 @@ model ProductVariant {
   sku                String   @unique
   size               String
   color              String?
+  /// Tela o material de la variante (ej. "Algodón peinado", "Piqué")
+  fabric             String?
   barcode            String?  @unique
   stockQty           Decimal  @default(0) @db.Decimal(12, 4)
   /// Ajuste de precio por talle especial (ej. XXXL +10%)
@@ -729,7 +731,7 @@ model ProductVariant {
   purchaseItems   PurchaseItem[]
   saleItems       SaleItem[]
 
-  @@unique([productId, size, color])
+  @@unique([productId, size, color, fabric])
   @@map("product_variants")
 }
 

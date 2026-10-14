@@ -1,9 +1,12 @@
 import { z } from "zod";
 
+import { variantKey } from "@/lib/catalog/variants";
+
 export const variantRowSchema = z.object({
   id: z.string().nullable(),
   size: z.string().trim().min(1, "Indicá el talle").max(20).transform((s) => s.toUpperCase()),
   color: z.string().trim().max(40).nullable(),
+  fabric: z.string().trim().max(60).nullable(),
   sku: z.string().trim().max(60).nullable(),
   barcode: z.string().trim().max(40).nullable(),
   // Puede ser negativo: el POS permite vender sin stock cargado y se regulariza después.
@@ -20,8 +23,8 @@ export const saveVariantsSchema = z
   .superRefine((v, ctx) => {
     const seen = new Set<string>();
     v.variants.forEach((row, i) => {
-      const key = `${row.size}|${(row.color ?? "").toLowerCase()}`;
-      if (seen.has(key)) ctx.addIssue({ code: "custom", path: ["variants", i, "size"], message: `Talle ${row.size}${row.color ? ` ${row.color}` : ""} repetido` });
+      const key = variantKey(row);
+      if (seen.has(key)) ctx.addIssue({ code: "custom", path: ["variants", i, "size"], message: `Talle ${row.size}${row.color ? ` ${row.color}` : ""}${row.fabric ? ` ${row.fabric}` : ""} repetido` });
       seen.add(key);
     });
   });

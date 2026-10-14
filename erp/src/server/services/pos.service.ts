@@ -10,6 +10,7 @@ import Decimal from "decimal.js";
 
 import { Prisma } from "@/generated/prisma/client";
 import type { InvoiceType } from "@/generated/prisma/enums";
+import { variantLabel } from "@/lib/catalog/variants";
 import { isFiscal } from "@/lib/arca/codes";
 import { formatMoney } from "@/lib/format";
 import { addDays, computeSaleTotals, finalUnitPrice, planPayments, SaleError } from "@/lib/pos/sale-math";
@@ -62,7 +63,7 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
       return {
         input: i,
         variant: v,
-        description: `${v.product.name} T.${v.size}${v.color ? ` ${v.color}` : ""}`,
+        description: variantLabel(v.product.name, v),
         unitPrice: finalUnitPrice(listPrice, vatRate, v.priceAdjustmentPct.toNumber()),
         vatRate,
         unitCost: v.product.currentCost,

@@ -68,9 +68,18 @@ export const workshopInvoiceSchema = z
 export type WorkshopInvoiceInput = z.infer<typeof workshopInvoiceSchema>;
 
 export const PAYMENT_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "MODO", "TARJETA_DEBITO", "TARJETA_CREDITO"] as const;
+/** Medios de pago a proveedores y talleres que ofrece la pantalla. */
+export const UI_PAYMENT_OPTIONS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "OWN_CHEQUE", "THIRD_CHEQUE"] as const;
+export const UI_PAYMENT_OPTION_LABELS: Record<(typeof UI_PAYMENT_OPTIONS)[number], string> = {
+  EFECTIVO: "Efectivo",
+  TRANSFERENCIA: "Banco Macro",
+  MERCADO_PAGO: "Mercado Pago",
+  OWN_CHEQUE: "Cheque propio",
+  THIRD_CHEQUE: "Cheque de terceros",
+};
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
-  TRANSFERENCIA: "Transferencia",
+  TRANSFERENCIA: "Banco Macro",
   MERCADO_PAGO: "Mercado Pago",
   MODO: "MODO",
   TARJETA_DEBITO: "Tarjeta de débito",

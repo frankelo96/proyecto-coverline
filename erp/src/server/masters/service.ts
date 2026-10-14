@@ -189,12 +189,15 @@ function rowLabel(entity: EntityKey, v: Values): string {
     case "clientes":
       return [v.businessName, v.documentNumber].filter(Boolean).join(" · ");
     case "productos":
-      return [v.sku, v.name, v.size ? `talle ${v.size}${v.color ? ` ${v.color}` : ""}` : null].filter(Boolean).join(" · ");
+      return [v.sku, v.name, v.size ? `talle ${v.size}${v.color ? ` ${v.color}` : ""}${v.fabric ? ` ${v.fabric}` : ""}` : null].filter(Boolean).join(" · ");
     case "materiales":
       return `${v.code} · ${v.name}`;
     case "proveedores":
       return [v.businessName, v.cuit].filter(Boolean).join(" · ");
     case "talleres":
       return String(v.name);
+    case "saldos-clientes":
+    case "saldos-proveedores":
+      return `${v.description} · $ ${Number(v.amount).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
   }
 }

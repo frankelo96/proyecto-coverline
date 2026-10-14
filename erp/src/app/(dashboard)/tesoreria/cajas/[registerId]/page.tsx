@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -44,7 +45,10 @@ export default async function RegisterDetailPage({ params }: Props) {
           </p>
           <h2 className="text-2xl font-bold">{d.register.name}</h2>
         </div>
-        <p className={cn("font-mono text-3xl font-semibold tabular-nums", d.balance < 0 && "text-destructive")}>{formatMoney(d.balance)}</p>
+        <div className="flex flex-col items-end gap-2">
+          <p className={cn("font-mono text-3xl font-semibold tabular-nums", d.balance < 0 && "text-destructive")}>{formatMoney(d.balance)}</p>
+          <ExportButtons report="caja-movimientos" params={{ id: d.register.id, desde: `${new Date().getFullYear()}-01-01` }} label="Movimientos del año" />
+        </div>
       </div>
 
       {d.register.requiresSession && d.sessions.length > 0 && (

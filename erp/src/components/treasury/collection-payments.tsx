@@ -93,8 +93,13 @@ export function CollectionPayments({
             <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] items-end gap-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`${id}-${r.key}-m`}>Medio</Label>
-                <NativeSelect id={`${id}-${r.key}-m`} value={r.method} onChange={(e) => update(r.key, { method: e.target.value as CollectionMethod })}>
-                  {methods.map((m) => (
+                <NativeSelect
+                  id={`${id}-${r.key}-m`}
+                  // El eCheq es un "Cheque de terceros" con formato electrónico (se elige abajo).
+                  value={r.method === "ECHEQ" ? "CHEQUE" : r.method}
+                  onChange={(e) => update(r.key, { method: e.target.value as CollectionMethod })}
+                >
+                  {methods.filter((m) => m !== "ECHEQ").map((m) => (
                     <option key={m} value={m}>
                       {METHOD_LABELS[m as PaymentMethod]}
                     </option>
@@ -125,6 +130,15 @@ export function CollectionPayments({
             )}
             {isCheque && (
               <div className="grid grid-cols-2 gap-2">
+                <NativeSelect
+                  aria-label="Formato del cheque"
+                  className="col-span-2"
+                  value={r.method === "ECHEQ" ? "ECHEQ" : "CHEQUE"}
+                  onChange={(e) => update(r.key, { method: e.target.value as CollectionMethod })}
+                >
+                  <option value="CHEQUE">Cheque físico</option>
+                  <option value="ECHEQ">eCheq</option>
+                </NativeSelect>
                 <Input aria-label="Banco" placeholder="Banco" maxLength={60} value={r.cheque.bank} onChange={(e) => updateCheque(r.key, { bank: e.target.value })} />
                 <Input aria-label="Número de cheque" placeholder="N° de cheque" maxLength={30} value={r.cheque.number} onChange={(e) => updateCheque(r.key, { number: e.target.value })} />
                 <Input aria-label="Librador" placeholder="Librador" maxLength={120} value={r.cheque.issuerName} onChange={(e) => updateCheque(r.key, { issuerName: e.target.value })} />

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { StatusMessage } from "@/components/ui/status-message";
 import { useServerAction } from "@/hooks/use-server-action";
+import { variantAttrs } from "@/lib/catalog/variants";
 import { createOrderSchema, type CreateOrderInput } from "@/lib/validations/production";
 import { createOrderAction } from "@/server/actions/production.actions";
 import type { NewOrderFormData } from "@/server/queries/production-orders.queries";
@@ -114,28 +115,37 @@ export function NewOrderForm({ data, prefill }: { data: NewOrderFormData; prefil
       <Card>
         <CardHeader>
           <CardTitle>Curva de talles</CardTitle>
-          <CardDescription>{product ? `Cantidades a producir por talle${product.variants[0]?.color ? ` · ${product.variants[0].color}` : ""}.` : "Elegí una prenda para cargar la curva."}</CardDescription>
+          <CardDescription>{product ? "Cantidades a producir por color, tela y talle." : "Elegí una prenda para cargar la curva."}</CardDescription>
         </CardHeader>
         {product && (
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-              {product.variants.map((v, i) => (
-                <div key={v.id} className="flex flex-col gap-1.5">
-                  <Label htmlFor={`${formId}-size-${v.id}`} className="text-center">
-                    {v.size}
-                  </Label>
-                  <Input
-                    id={`${formId}-size-${v.id}`}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    className="text-center"
-                    {...register(`items.${i}.quantity`, { valueAsNumber: true })}
-                  />
+            {/* Una fila de talles por cada combinación de color y tela. */}
+            {[...new Set(product.variants.map((v) => variantAttrs(v)))].map((group) => (
+              <div key={group || "unico"} className="flex flex-col gap-2">
+                {group && <p className="text-sm font-medium">{group}</p>}
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                  {product.variants.map((v, i) =>
+                    variantAttrs(v) !== group ? null : (
+                      <div key={v.id} className="flex flex-col gap-1.5">
+                        <Label htmlFor={`${formId}-size-${v.id}`} className="text-center">
+                          {v.size}
+                        </Label>
+                        <Input
+                          id={`${formId}-size-${v.id}`}
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1}
+                          className="text-center"
+                          aria-label={`Cantidad talle ${v.size}${group ? ` ${group}` : ""}`}
+                          {...register(`items.${i}.quantity`, { valueAsNumber: true })}
+                        />
+                      </div>
+                    ),
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
             <p className="text-sm">
               Total: <strong className="font-mono tabular-nums">{total}</strong> prendas
             </p>

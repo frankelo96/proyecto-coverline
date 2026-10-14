@@ -15,11 +15,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatMoney } from "@/lib/format";
 import { agingBucket, AGING_LABELS } from "@/lib/purchasing/math";
-import { COLLECTION_METHODS } from "@/lib/validations/treasury";
+import { UI_COLLECTION_METHODS } from "@/lib/validations/treasury";
 import { createReceiptAction } from "@/server/actions/treasury.actions";
 import type { ClientAccount } from "@/server/queries/treasury.queries";
 
-const METHODS = COLLECTION_METHODS.filter((m) => m !== "CUENTA_CORRIENTE");
+const METHODS = UI_COLLECTION_METHODS.filter((m) => m !== "CUENTA_CORRIENTE");
 
 export function ReceiptForm({ account }: { account: ClientAccount }) {
   const id = useId();

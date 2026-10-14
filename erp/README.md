@@ -174,6 +174,22 @@ Ambos tipos guardan los datos del Libro IVA Compras: tipo de comprobante (A/B/C)
 - **Importar** (Excel `.xlsx` o CSV, hasta 5.000 filas): plantilla descargable con hoja de instrucciones, reconocimiento flexible de encabezados (“Razón social”, “CUIT”, “Mail”…), números a la argentina (`1.234,56`), opciones por nombre (“RI”, “Escuela”), **vista previa** con filas nuevas / actualizaciones / errores antes de guardar, y se importan las filas válidas. Clientes por CUIT/DNI o nombre; productos por SKU con **una fila por talle/color**; materiales por código; proveedores y talleres por CUIT o nombre. Las columnas que no vienen en el archivo no se pisan.
 - **Exportar**: cada maestro a Excel o CSV (el archivo exportado se puede editar y volver a importar) y las **ventas del período** a Excel desde `/ventas`.
 
+## Productos con variantes (color × tela × talle)
+
+- Un producto (ej. *Remera algodón La Salle*, rubro Escolar) agrupa todas sus variantes. En **Maestros → Productos** se cargan las listas de talles, colores y telas y se generan todas las combinaciones, cada una con SKU automático, código de barras, stock y ajuste de precio (ej. +10% talles de adulto).
+- **POS**: se elige el producto por rubro o buscándolo (por nombre, color, tela o SKU) y se abre el selector de **color → tela → talle** con el stock de cada talle; cada toque suma una unidad. Un código de barras o SKU de variante exacto (lector) se agrega directo.
+- Producción, remitos, tickets, facturas, importación/exportación e informes de stock muestran color y tela.
+
+## Medios de pago
+
+Cobros (POS, recibos) y pagos a proveedores y talleres usan los medios de Coverline: **Efectivo** (cajas diarias o caja negra), **Banco Macro**, **Mercado Pago**, **Cheque de terceros** (físico o eCheq; en los pagos se endosan desde la cartera) y **Cheque propio** (solo pagos). En el POS también **Cuenta corriente** para clientes con crédito. El sistema valida que cada medio salga de su caja/cuenta (efectivo de cajas, Banco Macro de la cuenta bancaria, Mercado Pago de la billetera).
+
+## Informes y saldos iniciales
+
+- **Informes** (`/informes`): saldos de clientes y de proveedores/talleres con antigüedad, extractos de cuenta corriente, cheques, movimientos de cada caja o cuenta, ventas, compras, presupuestos y stock valorizado, en Excel o CSV. También desde los botones *Exportar* de cada pantalla.
+- **Respaldo completo**: un Excel con todas las bases (re-importables) y los informes del año.
+- **Saldos iniciales**: importación de las cuentas corrientes del sistema anterior (una fila por comprobante adeudado), para clientes (`/tesoreria/cobranzas/importar`) y para proveedores y talleres (`/compras/cuentas/importar`). Reimportar el mismo comprobante lo actualiza en vez de duplicarlo.
+
 ## Pendiente para los próximos módulos
 
 Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

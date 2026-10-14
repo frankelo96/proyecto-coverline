@@ -13,6 +13,7 @@ import Decimal from "decimal.js";
 
 import { Prisma } from "@/generated/prisma/client";
 import type { InvoiceType, PaymentMethod, PurchaseItemType } from "@/generated/prisma/enums";
+import { registerAcceptsMethod } from "@/lib/treasury/cash";
 import { chequeLabel } from "@/lib/treasury/cheques";
 import { endorseCheque, issueOwnCheque } from "@/server/services/cheque.service";
 import { addMovement, lockRegister } from "@/server/services/treasury.service";
@@ -461,6 +462,9 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
   for (const inst of input.instruments) {
     if (inst.type === "REGISTER") {
       const register = await lockRegister(tx, inst.cashRegisterId);
+      if (!registerAcceptsMethod(register.kind, inst.method)) {
+        throw new PurchasingError(`${PAYMENT_METHOD_LABELS[inst.method]} no puede salir de ${register.name}`);
+      }
       await addMovement(tx, {
         register,
         type: "EGRESO",

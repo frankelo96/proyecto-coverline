@@ -21,6 +21,7 @@ import type {
   WorkshopType,
 } from "../src/generated/prisma/enums";
 import { hashPassword } from "../src/lib/auth/password";
+import { autoVariantSku } from "../src/lib/catalog/variants";
 import { recalculateProductCost } from "../src/server/services/costing.service";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
@@ -202,6 +203,10 @@ async function main() {
     await prisma.cashRegister.update({ where: { id: legacyAdmin.id }, data: { name: "Caja Negra", kind: "CAJA_RESGUARDO", requiresSession: false } });
   }
   await prisma.cashRegister.updateMany({ where: { name: "Caja Diaria Mostrador" }, data: { active: false } });
+  // La cuenta bancaria de la empresa es Banco Macro.
+  if (!(await prisma.cashRegister.findUnique({ where: { name: "Banco Macro" } }))) {
+    await prisma.cashRegister.updateMany({ where: { name: "Banco Cuenta Corriente" }, data: { name: "Banco Macro" } });
+  }
 
   const registers = [
     { name: "Caja diaria Recta Martinolli", kind: "CAJA_DIARIA" as const, requiresSession: true, branchId: branchIds.get("Recta Martinolli")!, defaultForMethods: [] },
@@ -209,7 +214,7 @@ async function main() {
     { name: "Caja Negra", kind: "CAJA_RESGUARDO" as const, requiresSession: false, branchId: null, defaultForMethods: [] },
     { name: "Mercado Pago", kind: "BILLETERA_VIRTUAL" as const, requiresSession: false, branchId: null, defaultForMethods: ["MERCADO_PAGO" as const, "MODO" as const] },
     {
-      name: "Banco Cuenta Corriente",
+      name: "Banco Macro",
       kind: "BANCO" as const,
       requiresSession: false,
       branchId: null,
@@ -362,6 +367,7 @@ async function main() {
   }
 
   await seedCrmDemo();
+  await seedVariantDemo();
 
   // Continuar la numeración de presupuestos del sistema anterior (nunca retrocede).
   const nextQuote = Number(process.env.QUOTE_NEXT_NUMBER);
@@ -372,6 +378,44 @@ async function main() {
     );
     console.log(`  Presupuestos: el próximo número es ${nextQuote} (o el siguiente al último existente)`);
   }
+}
+
+/** Producto de ejemplo con colores, telas y talles en un único artículo. */
+async function seedVariantDemo() {
+  const sku = "REM-LS-001";
+  if (await prisma.product.findUnique({ where: { sku } })) return;
+  const product = await prisma.product.create({
+    data: {
+      sku,
+      name: "Remera algodón La Salle",
+      category: "ESCOLAR",
+      sourcing: "FABRICADO",
+      description: "Remera escolar con escudo estampado. Colegio La Salle.",
+      listPrice: D(14_500),
+      pricingPct: D(100),
+      overheadPct: D(8),
+    },
+  });
+  const sizes = ["4", "6", "8", "10", "12", "14", "16", "S", "M", "L", "XL"];
+  const combos = [
+    { color: "Blanco", fabric: "Jersey algodón 24/1" },
+    { color: "Azul marino", fabric: "Jersey algodón 24/1" },
+    { color: "Blanco", fabric: "Piqué 24/1" },
+  ];
+  const data = combos.flatMap((c) =>
+    sizes.map((size, i) => ({
+      productId: product.id,
+      size,
+      color: c.color,
+      fabric: c.fabric,
+      sku: autoVariantSku(sku, { size, ...c }),
+      stockQty: D((i * 7 + c.color.length) % 15),
+      // Talles de adulto un 10% más caros que los de niño.
+      priceAdjustmentPct: D(/^\d+$/.test(size) ? 0 : 10),
+    })),
+  );
+  await prisma.productVariant.createMany({ data });
+  console.log(`  ${sku.padEnd(12)} ${data.length} variantes (color × tela × talle)`);
 }
 
 /** Clientes, oportunidades y presupuestos de ejemplo para recorrer el CRM (solo si no hay oportunidades). */

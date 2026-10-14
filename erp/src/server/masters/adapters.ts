@@ -12,6 +12,7 @@ import type {
   UnitOfMeasure,
   WorkshopType,
 } from "@/generated/prisma/enums";
+import { autoVariantSku, variantKey } from "@/lib/catalog/variants";
 import type { EntityKey } from "@/lib/masters/definitions";
 import { formatCuit, isValidCuit, type RefOptions, type Values } from "@/lib/masters/fields";
 import { db } from "@/server/db";
@@ -223,9 +224,6 @@ function clientValues(c: Prisma.ClientGetPayload<object>): Values {
 
 // ─── Productos (+ variantes al importar) ──────────────────────────────────
 
-const variantSku = (productSku: string, size: string, color: string | null) =>
-  [productSku, size, color ? color.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase() : null].filter(Boolean).join("-");
-
 function productValues(p: Prisma.ProductGetPayload<object>): Values {
   return {
     sku: p.sku,
@@ -276,14 +274,14 @@ const products: Adapter = {
     return p ? productValues(p) : null;
   },
   batchKey(v) {
-    return `sku:${String(v.sku)}|${str(v.variantSku) ?? `${str(v.size) ?? ""}|${(str(v.color) ?? "").toLowerCase()}`}`;
+    return `sku:${String(v.sku)}|${str(v.variantSku) ?? variantKey({ size: str(v.size) ?? "", color: str(v.color), fabric: str(v.fabric) })}`;
   },
   async findExisting(tx, v) {
     const p = await tx.product.findUnique({ where: { sku: String(v.sku) }, select: { id: true } });
     return p?.id ?? null;
   },
   normalize(v) {
-    if ((str(v.color) || str(v.variantSku) || str(v.barcode) || v.stockQty !== null) && !str(v.size)) {
+    if ((str(v.color) || str(v.fabric) || str(v.variantSku) || str(v.barcode) || v.stockQty !== null) && !str(v.size)) {
       // Sin talle no hay variante: para "talle único" usar U.
       if (v.stockQty !== null && v.stockQty !== undefined) throw new MasterError("Para cargar stock indicá el talle (usá U para talle único)", "size");
     }
@@ -308,13 +306,15 @@ const products: Adapter = {
     const size = str(v.size);
     if (opts?.fromImport && size) {
       const color = str(v.color);
-      const sku = str(v.variantSku) ?? variantSku(saved.sku, size, color);
+      const fabric = str(v.fabric);
+      const sku = str(v.variantSku) ?? autoVariantSku(saved.sku, { size, color, fabric });
       const existing =
         (str(v.variantSku) && (await tx.productVariant.findUnique({ where: { sku } }))) ||
-        (await tx.productVariant.findFirst({ where: { productId: saved.id, size, color } }));
+        (await tx.productVariant.findFirst({ where: { productId: saved.id, size, color, fabric } }));
       const variantData = {
         size,
         color,
+        fabric,
         barcode: str(v.barcode),
         ...(typeof v.stockQty === "number" ? { stockQty: new Prisma.Decimal(v.stockQty) } : {}),
         ...(typeof v.priceAdjustmentPct === "number" ? { priceAdjustmentPct: new Prisma.Decimal(v.priceAdjustmentPct) } : {}),
@@ -342,6 +342,7 @@ const products: Adapter = {
         ...base,
         size: x.size,
         color: x.color,
+        fabric: x.fabric,
         variantSku: x.sku,
         barcode: x.barcode,
         stockQty: x.stockQty.toNumber(),
@@ -582,12 +583,154 @@ const workshops: Adapter = {
   },
 };
 
+// ─── Saldos iniciales de cuentas corrientes (solo importación) ────────────
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+const atNoon = (iso: string) => new Date(`${iso}T12:00:00`);
+const addDaysIso = (iso: string, days: number) => isoDay(new Date(atNoon(iso).getTime() + days * 86_400_000));
+
+const openingReceivables: Adapter = {
+  async refs() {
+    const clients = await db.client.findMany({ orderBy: { businessName: "asc" }, select: { id: true, businessName: true, fantasyName: true, documentNumber: true } });
+    return {
+      clients: clients.map((c) => ({
+        value: c.id,
+        label: c.businessName,
+        keys: [...(c.documentNumber ? [c.documentNumber, digits(c.documentNumber)] : []), ...(c.fantasyName ? [c.fantasyName] : [])],
+      })),
+    };
+  },
+  async list() {
+    return [];
+  },
+  async get(id) {
+    const r = await db.accountReceivable.findUnique({ where: { id } });
+    return r ? { clientId: r.clientId, description: r.description, issueDate: isoDay(r.issueDate), dueDate: isoDay(r.dueDate), amount: r.amount.toNumber() } : null;
+  },
+  batchKey: (v) => `${v.clientId}|${String(v.description).toLowerCase()}`,
+  async findExisting(tx, v) {
+    const r = await tx.accountReceivable.findFirst({ where: { clientId: String(v.clientId), description: String(v.description), saleId: null, chequeId: null }, select: { id: true } });
+    return r?.id ?? null;
+  },
+  normalize: (v) => v,
+  async save(tx, id, v, userId) {
+    const client = await tx.client.findUniqueOrThrow({ where: { id: String(v.clientId) }, select: { paymentTermDays: true } });
+    const issue = String(v.issueDate);
+    const due = str(v.dueDate) ?? addDaysIso(issue, client.paymentTermDays);
+    if (due < issue) throw new MasterError("El vencimiento no puede ser anterior a la fecha", "dueDate");
+    const amount = dec(v.amount);
+    if (id) {
+      const current = await tx.accountReceivable.findUniqueOrThrow({ where: { id } });
+      // Si ya tuvo cobros no se toca el importe (quedaría inconsistente con lo cobrado).
+      const untouched = current.balance.equals(current.amount) && current.status === "PENDIENTE";
+      await tx.accountReceivable.update({
+        where: { id },
+        data: { issueDate: atNoon(issue), dueDate: atNoon(due), ...(untouched ? { amount, balance: amount } : {}) },
+      });
+    } else {
+      const created = await tx.accountReceivable.create({
+        data: { clientId: String(v.clientId), description: String(v.description), issueDate: atNoon(issue), dueDate: atNoon(due), amount, balance: amount },
+      });
+      id = created.id;
+    }
+    await audit(tx, userId, "AccountReceivable", id, "OPENING_BALANCE", v);
+    return id;
+  },
+  async setActive() {},
+  async exportRows() {
+    const rows = await db.accountReceivable.findMany({ where: { status: { in: ["PENDIENTE", "PARCIAL"] } }, orderBy: [{ clientId: "asc" }, { dueDate: "asc" }] });
+    return rows.map((r) => ({ clientId: r.clientId, description: r.description, issueDate: isoDay(r.issueDate), dueDate: isoDay(r.dueDate), amount: r.balance.toNumber() }));
+  },
+};
+
+/** Proveedores y talleres comparten la lista: el valor lleva prefijo S: (proveedor) o W: (taller). */
+const splitCreditor = (v: unknown) => {
+  const [kind, id] = String(v).split(":");
+  return kind === "W" ? { supplierId: null, workshopId: id } : { supplierId: id, workshopId: null };
+};
+
+const openingPayables: Adapter = {
+  async refs() {
+    const [suppliers, workshops] = await Promise.all([
+      db.supplier.findMany({ orderBy: { businessName: "asc" }, select: { id: true, businessName: true, cuit: true } }),
+      db.workshop.findMany({ where: { isInternal: false }, orderBy: { name: "asc" }, select: { id: true, name: true, cuit: true } }),
+    ]);
+    return {
+      creditors: [
+        ...suppliers.map((x) => ({ value: `S:${x.id}`, label: x.businessName, keys: x.cuit ? [x.cuit, digits(x.cuit)] : [] })),
+        ...workshops.map((x) => ({ value: `W:${x.id}`, label: x.name, keys: x.cuit ? [x.cuit, digits(x.cuit)] : [] })),
+      ],
+    };
+  },
+  async list() {
+    return [];
+  },
+  async get(id) {
+    const p = await db.accountPayable.findUnique({ where: { id } });
+    if (!p) return null;
+    return {
+      creditorId: p.workshopId ? `W:${p.workshopId}` : `S:${p.supplierId}`,
+      description: p.description,
+      issueDate: isoDay(p.issueDate),
+      dueDate: isoDay(p.dueDate),
+      amount: p.amount.toNumber(),
+    };
+  },
+  batchKey: (v) => `${v.creditorId}|${String(v.description).toLowerCase()}`,
+  async findExisting(tx, v) {
+    const p = await tx.accountPayable.findFirst({
+      where: { ...splitCreditor(v.creditorId), description: String(v.description), purchaseId: null, workshopRemitId: null },
+      select: { id: true },
+    });
+    return p?.id ?? null;
+  },
+  normalize: (v) => v,
+  async save(tx, id, v, userId) {
+    const who = splitCreditor(v.creditorId);
+    const term = who.workshopId
+      ? (await tx.workshop.findUniqueOrThrow({ where: { id: who.workshopId }, select: { paymentTermDays: true } })).paymentTermDays
+      : (await tx.supplier.findUniqueOrThrow({ where: { id: who.supplierId! }, select: { paymentTermDays: true } })).paymentTermDays;
+    const issue = String(v.issueDate);
+    const due = str(v.dueDate) ?? addDaysIso(issue, term);
+    if (due < issue) throw new MasterError("El vencimiento no puede ser anterior a la fecha", "dueDate");
+    const amount = dec(v.amount);
+    if (id) {
+      const current = await tx.accountPayable.findUniqueOrThrow({ where: { id } });
+      const untouched = current.balance.equals(current.amount) && current.status === "PENDIENTE";
+      await tx.accountPayable.update({
+        where: { id },
+        data: { issueDate: atNoon(issue), dueDate: atNoon(due), ...(untouched ? { amount, balance: amount } : {}) },
+      });
+    } else {
+      const created = await tx.accountPayable.create({
+        data: { ...who, description: String(v.description), issueDate: atNoon(issue), dueDate: atNoon(due), amount, balance: amount },
+      });
+      id = created.id;
+    }
+    await audit(tx, userId, "AccountPayable", id, "OPENING_BALANCE", v);
+    return id;
+  },
+  async setActive() {},
+  async exportRows() {
+    const rows = await db.accountPayable.findMany({ where: { status: { in: ["PENDIENTE", "PARCIAL"] } }, orderBy: [{ dueDate: "asc" }] });
+    return rows.map((p) => ({
+      creditorId: p.workshopId ? `W:${p.workshopId}` : `S:${p.supplierId}`,
+      description: p.description,
+      issueDate: isoDay(p.issueDate),
+      dueDate: isoDay(p.dueDate),
+      amount: p.balance.toNumber(),
+    }));
+  },
+};
+
 export const ADAPTERS: Record<EntityKey, Adapter> = {
   clientes: clients,
   productos: products,
   materiales: materials,
   proveedores: suppliers,
   talleres: workshops,
+  "saldos-clientes": openingReceivables,
+  "saldos-proveedores": openingPayables,
 };
 
 export const UNIQUE_LABELS: Record<EntityKey, Record<string, string>> = {
@@ -596,4 +739,6 @@ export const UNIQUE_LABELS: Record<EntityKey, Record<string, string>> = {
   materiales: { code: "código" },
   proveedores: { cuit: "CUIT" },
   talleres: { cuit: "CUIT" },
+  "saldos-clientes": {},
+  "saldos-proveedores": {},
 };

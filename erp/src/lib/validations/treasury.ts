@@ -59,6 +59,13 @@ export type ChequeAction = z.infer<typeof chequeActionSchema>;
 
 export const COLLECTION_METHODS = ["EFECTIVO", "TARJETA_DEBITO", "TARJETA_CREDITO", "MERCADO_PAGO", "MODO", "TRANSFERENCIA", "CHEQUE", "ECHEQ", "CUENTA_CORRIENTE"] as const;
 
+/**
+ * Medios que ofrece la pantalla (los que usa Coverline): Efectivo, Banco Macro,
+ * Mercado Pago y Cheque de terceros (físico o eCheq), más cuenta corriente en el POS.
+ * Tarjetas y MODO siguen aceptándose para el historial pero no se ofrecen.
+ */
+export const UI_COLLECTION_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "CHEQUE", "CUENTA_CORRIENTE"] as const;
+
 export const collectionPaymentSchema = z
   .object({
     method: z.enum(COLLECTION_METHODS),

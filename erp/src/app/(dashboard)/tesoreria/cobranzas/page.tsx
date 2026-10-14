@@ -1,8 +1,11 @@
+import { Upload } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ExportButtons } from "@/components/documents/export-buttons";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
 import { AGING_BUCKETS, AGING_LABELS } from "@/lib/purchasing/math";
 import { cn } from "@/lib/utils";
@@ -15,7 +18,7 @@ export const dynamic = "force-dynamic";
 type Props = { searchParams: Promise<{ saldo?: string }> };
 
 export default async function CollectionsPage({ searchParams }: Props) {
-  await requirePageUser(PERMISSIONS.receivablesCollect);
+  const user = await requirePageUser(PERMISSIONS.receivablesCollect);
   const { saldo } = await searchParams;
   const all = await listClientBalances();
   const rows = saldo === "todos" ? all : all.filter((r) => r.balance > 0);
@@ -29,9 +32,19 @@ export default async function CollectionsPage({ searchParams }: Props) {
           A cobrar <strong className="text-foreground">{formatMoney(total)}</strong> · vencido{" "}
           <strong className={overdue > 0 ? "text-destructive" : "text-foreground"}>{formatMoney(overdue)}</strong>
         </p>
-        <Link href={saldo === "todos" ? "/tesoreria/cobranzas" : "/tesoreria/cobranzas?saldo=todos"} className="text-sm underline underline-offset-4">
-          {saldo === "todos" ? "Solo con saldo" : "Ver todos los clientes"}
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href={saldo === "todos" ? "/tesoreria/cobranzas" : "/tesoreria/cobranzas?saldo=todos"} className="text-sm underline underline-offset-4">
+            {saldo === "todos" ? "Solo con saldo" : "Ver todos los clientes"}
+          </Link>
+          <ExportButtons report="clientes-saldos" label="Exportar saldos" />
+          {hasPermission(user.permissions, PERMISSIONS.cashManage) && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/tesoreria/cobranzas/importar">
+                <Upload /> Importar saldos iniciales
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
       <div className="overflow-hidden rounded-lg border bg-card">
         <Table className="min-w-[900px]">

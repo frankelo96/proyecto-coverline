@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FlashNotice } from "@/components/ui/flash-notice";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
-import { ENTITIES, formFields, isEntityKey } from "@/lib/masters/definitions";
+import { compareSizes } from "@/lib/catalog/variants";
+import { ENTITIES, formFields, isMasterKey } from "@/lib/masters/definitions";
 import { formatMoney } from "@/lib/format";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
@@ -22,14 +23,14 @@ type Props = { params: Promise<{ entity: string; id: string }>; searchParams: Pr
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { entity, id } = await params;
-  if (!isEntityKey(entity)) return {};
+  if (!isMasterKey(entity)) return {};
   const v = await ADAPTERS[entity].get(id);
   return { title: v ? String(v.name ?? v.businessName ?? "Editar") : "Editar" };
 }
 
 export default async function EditMasterPage({ params, searchParams }: Props) {
   const { entity, id } = await params;
-  if (!isEntityKey(entity) || entity === "clientes") notFound();
+  if (!isMasterKey(entity) || entity === "clientes") notFound();
   const def = ENTITIES[entity];
   const user = await requirePageUser(def.readPermission);
   const adapter = ADAPTERS[entity];
@@ -40,7 +41,21 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
   const title = String(values.name ?? values.businessName);
 
   const variants =
-    entity === "productos" ? await db.productVariant.findMany({ where: { productId: id }, orderBy: [{ color: "asc" }, { createdAt: "asc" }] }) : [];
+    entity === "productos"
+      ? (await db.productVariant.findMany({ where: { productId: id } })).sort(
+          (a, b) => (a.color ?? "").localeCompare(b.color ?? "", "es") || (a.fabric ?? "").localeCompare(b.fabric ?? "", "es") || compareSizes(a.size, b.size),
+        )
+      : [];
+  // Sugerencias de tela: las telas del maestro de materias primas y las ya usadas en otros productos.
+  const fabricSuggestions =
+    entity === "productos"
+      ? [
+          ...new Set([
+            ...(await db.rawMaterial.findMany({ where: { type: "TELA", active: true }, select: { name: true }, orderBy: { name: "asc" } })).map((m) => m.name),
+            ...(await db.productVariant.findMany({ where: { fabric: { not: null } }, distinct: ["fabric"], select: { fabric: true } })).map((v) => v.fabric!),
+          ]),
+        ]
+      : [];
   const product = entity === "productos" ? await db.product.findUnique({ where: { id }, select: { currentCost: true, sourcing: true } }) : null;
   const creditorType = entity === "proveedores" ? "proveedor" : entity === "talleres" ? "taller" : null;
 
@@ -87,10 +102,12 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
           key={variants.map((v) => `${v.id}${v.updatedAt.getTime()}`).join("|")}
           productId={id}
           canWrite={canWrite}
+          fabricSuggestions={fabricSuggestions}
           initial={variants.map((v) => ({
             id: v.id,
             size: v.size,
             color: v.color ?? "",
+            fabric: v.fabric ?? "",
             sku: v.sku,
             barcode: v.barcode ?? "",
             stockQty: String(v.stockQty.toNumber()).replace(".", ","),

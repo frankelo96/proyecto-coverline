@@ -92,3 +92,15 @@ describe("CSV", () => {
     expect(parseCsv(csv)).toEqual([["a", "b"], ["1,5", 'x"y']]);
   });
 });
+
+describe("parseDateValue", () => {
+  it("acepta formatos argentinos, ISO y fechas de Excel", async () => {
+    const { parseDateValue } = await import("./fields");
+    expect(parseDateValue("31/12/2025")).toBe("2025-12-31");
+    expect(parseDateValue("5-3-26")).toBe("2026-03-05");
+    expect(parseDateValue("2026-02-28")).toBe("2026-02-28");
+    expect(parseDateValue(46022)).toBe("2025-12-31");
+    expect(parseDateValue("30/02/2026")).toBeNull();
+    expect(parseDateValue("hola")).toBeNull();
+  });
+});

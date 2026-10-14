@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DocumentHeader } from "@/components/documents/document-header";
+import { variantAttrs } from "@/lib/catalog/variants";
 import { PrintButton } from "@/components/production/print-button";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
@@ -87,8 +88,9 @@ export default async function RemitPrintPage({ params }: Props) {
         <p className="mb-1 text-xs font-semibold uppercase">Curva de talles de la orden (referencia)</p>
         <div className="flex flex-wrap gap-x-6 gap-y-1 font-mono">
           {r.order.curve.map((c) => (
-            <span key={`${c.size}-${c.color}`}>
-              {c.size}: {c.quantity}
+            <span key={`${c.size}-${c.color}-${c.fabric}`}>
+              {c.size}
+              {variantAttrs(c) ? ` (${variantAttrs(c)})` : ""}: {c.quantity}
             </span>
           ))}
         </div>

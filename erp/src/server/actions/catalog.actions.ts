@@ -17,7 +17,7 @@ export async function saveVariantsAction(raw: unknown): Promise<ActionResult<{ c
     const r = await db.$transaction((tx) => saveVariants(tx, input, user.id));
     revalidatePath("/maestros", "layout");
     revalidatePath("/pos", "layout");
-    return { ok: true, data: r, message: `Talles guardados (${r.created} nuevos, ${r.updated} actualizados)` };
+    return { ok: true, data: r, message: `Variantes guardadas (${r.created} nuevas, ${r.updated} actualizadas)` };
   } catch (e) {
     if (e instanceof z.ZodError) return { ok: false, error: e.issues[0]?.message ?? "Datos inválidos" };
     if (e instanceof CatalogError || e instanceof AuthorizationError) return { ok: false, error: e.message };

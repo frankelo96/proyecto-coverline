@@ -37,10 +37,10 @@ export const METHOD_LABELS: Record<PaymentMethod, string> = {
   TARJETA_CREDITO: "Tarjeta de crédito",
   MERCADO_PAGO: "Mercado Pago",
   MODO: "MODO",
-  TRANSFERENCIA: "Transferencia",
+  TRANSFERENCIA: "Banco Macro",
   CUENTA_CORRIENTE: "Cuenta corriente",
-  CHEQUE: "Cheque",
-  ECHEQ: "eCheq",
+  CHEQUE: "Cheque de terceros",
+  ECHEQ: "eCheq de terceros",
   MIXTO: "Varios medios",
 };
 
@@ -74,6 +74,18 @@ export function countAdjustment(expected: number, counted: number): { difference
   if (diff.isZero()) return { difference: 0, type: null, amount: 0 };
   return { difference: diff.toNumber(), type: diff.gt(0) ? "AJUSTE_SOBRANTE" : "AJUSTE_FALTANTE", amount: diff.abs().toNumber() };
 }
+
+/**
+ * Qué tipo de caja/cuenta puede mover cada medio: el efectivo sale de cajas
+ * físicas, Banco Macro de la cuenta bancaria y Mercado Pago de la billetera.
+ */
+export const METHOD_REGISTER_KINDS: Partial<Record<PaymentMethod, CashRegisterKind[]>> = {
+  EFECTIVO: ["CAJA_RESGUARDO", "CAJA_DIARIA", "CAJA_ADMINISTRATIVA"],
+  TRANSFERENCIA: ["BANCO"],
+  MERCADO_PAGO: ["BILLETERA_VIRTUAL"],
+};
+
+export const registerAcceptsMethod = (kind: CashRegisterKind, method: PaymentMethod) => METHOD_REGISTER_KINDS[method]?.includes(kind) ?? true;
 
 /** Medios de cobro que van al cajón de la caja diaria del turno. El resto se acredita en su cuenta. */
 export const DRAWER_METHODS: PaymentMethod[] = ["EFECTIVO"];

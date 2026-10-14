@@ -78,24 +78,15 @@ export interface NewOrderFormData {
     name: string;
     hasBom: boolean;
     hasPersonalization: boolean;
-    variants: { id: string; size: string; color: string | null }[];
+    variants: { id: string; size: string; color: string | null; fabric: string | null }[];
   }[];
   clients: { id: string; name: string }[];
 }
 
 const PERSONALIZATION: ServiceType[] = ["BORDADO", "ESTAMPADO", "SUBLIMACION"];
 
-/** Orden de talles para mostrar la curva de forma natural. */
-const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL", "5XL"];
-export const compareSizes = (a: string, b: string) => {
-  const ia = SIZE_ORDER.indexOf(a.toUpperCase());
-  const ib = SIZE_ORDER.indexOf(b.toUpperCase());
-  if (ia !== -1 && ib !== -1) return ia - ib;
-  const na = Number(a);
-  const nb = Number(b);
-  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
-  return a.localeCompare(b, "es");
-};
+export { compareSizes } from "@/lib/catalog/variants";
+import { compareSizes } from "@/lib/catalog/variants";
 
 export async function getNewOrderFormData(): Promise<NewOrderFormData> {
   const [products, clients] = await Promise.all([
@@ -103,7 +94,7 @@ export async function getNewOrderFormData(): Promise<NewOrderFormData> {
       where: { active: true },
       orderBy: { name: "asc" },
       include: {
-        variants: { where: { active: true }, select: { id: true, size: true, color: true } },
+        variants: { where: { active: true }, select: { id: true, size: true, color: true, fabric: true } },
         services: { select: { serviceCost: { select: { type: true } } } },
         _count: { select: { bom: true } },
       },
@@ -117,7 +108,7 @@ export async function getNewOrderFormData(): Promise<NewOrderFormData> {
       name: p.name,
       hasBom: p._count.bom > 0,
       hasPersonalization: p.services.some((s) => PERSONALIZATION.includes(s.serviceCost.type)),
-      variants: [...p.variants].sort((a, b) => compareSizes(a.size, b.size)),
+      variants: [...p.variants].sort((a, b) => (a.color ?? "").localeCompare(b.color ?? "", "es") || (a.fabric ?? "").localeCompare(b.fabric ?? "", "es") || compareSizes(a.size, b.size)),
     })),
     clients: clients.map((c) => ({ id: c.id, name: c.fantasyName ? `${c.fantasyName} (${c.businessName})` : c.businessName })),
   };
@@ -152,7 +143,7 @@ export interface OrderDetail {
   startedAt: string | null;
   completedAt: string | null;
   createdBy: string | null;
-  items: { variantId: string; size: string; color: string | null; quantity: number; quantityFinished: number }[];
+  items: { variantId: string; size: string; color: string | null; fabric: string | null; quantity: number; quantityFinished: number }[];
   balance: { sent: number; received: number; waste: number; atWorkshops: number; unsent: number } | null;
   workshops: WorkshopOption[];
   logs: {
@@ -194,7 +185,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       },
       client: { select: { businessName: true, fantasyName: true } },
       createdBy: { select: { name: true } },
-      items: { include: { variant: { select: { size: true, color: true } } } },
+      items: { include: { variant: { select: { size: true, color: true, fabric: true } } } },
       stageLogs: { orderBy: { createdAt: "asc" }, include: { user: { select: { name: true } } } },
       remits: { orderBy: { number: "asc" }, include: { workshop: { select: { name: true } } } },
     },
@@ -245,7 +236,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     completedAt: o.completedAt?.toISOString() ?? null,
     createdBy: o.createdBy?.name ?? null,
     items: o.items
-      .map((i) => ({ variantId: i.variantId, size: i.variant.size, color: i.variant.color, quantity: i.quantity, quantityFinished: i.quantityFinished }))
+      .map((i) => ({ variantId: i.variantId, size: i.variant.size, color: i.variant.color, fabric: i.variant.fabric, quantity: i.quantity, quantityFinished: i.quantityFinished }))
       .sort((a, b) => compareSizes(a.size, b.size)),
     balance: balance && { sent: balance.sent, received: balance.received, waste: balance.waste, atWorkshops: balance.atWorkshops, unsent: balance.unsent },
     workshops,
@@ -343,7 +334,7 @@ export async function getRemitForPrint(remitId: string) {
         include: {
           product: { select: { sku: true, name: true } },
           client: { select: { businessName: true } },
-          items: { include: { variant: { select: { size: true, color: true } } } },
+          items: { include: { variant: { select: { size: true, color: true, fabric: true } } } },
         },
       },
     },
@@ -368,7 +359,7 @@ export async function getRemitForPrint(remitId: string) {
       productName: r.productionOrder.product.name,
       clientName: r.productionOrder.client?.businessName ?? null,
       curve: r.productionOrder.items
-        .map((i) => ({ size: i.variant.size, color: i.variant.color, quantity: i.quantity }))
+        .map((i) => ({ size: i.variant.size, color: i.variant.color, fabric: i.variant.fabric, quantity: i.quantity }))
         .sort((a, b) => compareSizes(a.size, b.size)),
     },
   };

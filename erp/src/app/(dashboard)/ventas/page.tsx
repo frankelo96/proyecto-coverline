@@ -47,7 +47,7 @@ export default async function SalesPage({ searchParams }: Props) {
             {pending > 0 && <span className="font-semibold text-accent-strong"> {pending} comprobantes sin CAE.</span>}
           </p>
         </div>
-        <form action="/api/exportar-ventas" className="flex flex-wrap items-end gap-2" aria-label="Exportar ventas a Excel">
+        <form action="/api/reportes/ventas" className="flex flex-wrap items-end gap-2" aria-label="Exportar ventas a Excel">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Desde
             <Input type="date" name="desde" defaultValue={monthStart} className="h-9 w-40" />

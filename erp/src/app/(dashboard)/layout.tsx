@@ -3,7 +3,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 
 /** Rutas habilitadas con el permiso que las muestra. Cada módulo nuevo se suma acá. */
-const NAV: (NavItem & { permission: string; hideIf?: string })[] = [
+const NAV: (NavItem & { permission: string | null; hideIf?: string })[] = [
   { href: "/pos", label: "POS", permission: PERMISSIONS.posSell },
   { href: "/ventas", label: "Ventas", permission: PERMISSIONS.posSell },
   { href: "/crm", label: "CRM", permission: PERMISSIONS.crmRead },
@@ -13,11 +13,13 @@ const NAV: (NavItem & { permission: string; hideIf?: string })[] = [
   { href: "/compras", label: "Compras", permission: PERMISSIONS.purchasesRead },
   { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead, hideIf: PERMISSIONS.purchasesRead },
   { href: "/maestros", label: "Maestros", permission: PERMISSIONS.mastersRead },
+  // Cada informe filtra por su propio permiso.
+  { href: "/informes", label: "Informes", permission: null },
 ];
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await requirePageUser();
-  const items = NAV.filter((n) => hasPermission(user.permissions, n.permission) && !(n.hideIf && hasPermission(user.permissions, n.hideIf))).map(({ href, label }) => ({
+  const items = NAV.filter((n) => (n.permission === null || hasPermission(user.permissions, n.permission)) && !(n.hideIf && hasPermission(user.permissions, n.hideIf))).map(({ href, label }) => ({
     href,
     label,
   }));
