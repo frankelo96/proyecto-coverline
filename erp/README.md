@@ -190,6 +190,10 @@ Cobros (POS, recibos) y pagos a proveedores y talleres usan los medios de Coverl
 - **Respaldo completo**: un Excel con todas las bases (re-importables) y los informes del año.
 - **Saldos iniciales**: importación de las cuentas corrientes del sistema anterior (una fila por comprobante adeudado), para clientes (`/tesoreria/cobranzas/importar`) y para proveedores y talleres (`/compras/cuentas/importar`). Reimportar el mismo comprobante lo actualiza en vez de duplicarlo.
 
+## Catálogo base de prendas clásicas
+
+`prisma/catalog/base-catalog.ts` define 49 prendas que confecciona Coverline (chombas, remeras, buzos, camperas, cardigans, sweaters, pantalones, bermudas, camisas, ambos, guardapolvos, náuticos, chaquetillas, sacos de chef, cofias y delantales) con ficha técnica estándar: materiales y avíos con consumo de referencia para talle M y merma, procesos de corte/confección/terminación, curva de talles, colores habituales, tela y ajuste de precio por talle (−20% talles 4–8, −10% 10–16, +10% extra grandes). El precio de lista inicial es el sugerido (costo × 2, redondeado). El seed solo crea lo que falta, así que las correcciones hechas desde la app no se pisan.
+
 ## Pendiente para los próximos módulos
 
 Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

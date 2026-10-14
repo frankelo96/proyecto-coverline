@@ -22,6 +22,7 @@ import type {
 } from "../src/generated/prisma/enums";
 import { hashPassword } from "../src/lib/auth/password";
 import { autoVariantSku } from "../src/lib/catalog/variants";
+import { CATALOG_MATERIALS, CATALOG_PRODUCTS, CATALOG_SERVICES, sizeAdjustment } from "./catalog/base-catalog";
 import { recalculateProductCost } from "../src/server/services/costing.service";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
@@ -246,9 +247,10 @@ async function main() {
       metersPerKg: m.metersPerKg !== undefined ? D(m.metersPerKg) : null,
       supplierId: supplierIds.get(m.supplier) ?? null,
     };
+    // update vacío: lo que se edite desde Maestros no se pisa en cada arranque.
     const rm = await prisma.rawMaterial.upsert({
       where: { code: m.code },
-      update: data,
+      update: {},
       create: { ...data, code: m.code, currentCost: D(m.cost), stockQty: D(m.type === "TELA" ? 400 : m.type === "INSUMO" ? 20 : 3000) },
     });
     materialIds.set(m.code, rm.id);
@@ -279,6 +281,8 @@ async function main() {
       }));
     serviceIds.set(s.key, sc.id);
   }
+
+  await seedBaseCatalog(supplierIds, workshopIds, materialIds, serviceIds);
 
   // --- Cliente de ejemplo --------------------------------------------------------
   await prisma.client.upsert({
@@ -378,6 +382,92 @@ async function main() {
     );
     console.log(`  Presupuestos: el próximo número es ${nextQuote} (o el siguiente al último existente)`);
   }
+}
+
+/**
+ * Catálogo base de prendas clásicas (prisma/catalog/base-catalog.ts) con ficha
+ * técnica estándar. Solo crea lo que falta: no pisa cambios hechos en la app.
+ */
+async function seedBaseCatalog(
+  supplierIds: Map<string, string>,
+  workshopIds: Map<string, string>,
+  materialIds: Map<string, string>,
+  serviceIds: Map<string, string>,
+) {
+  for (const m of CATALOG_MATERIALS) {
+    const rm = await prisma.rawMaterial.upsert({
+      where: { code: m.code },
+      update: {},
+      create: {
+        code: m.code,
+        name: m.name,
+        type: m.type,
+        uom: m.uom,
+        composition: m.composition ?? null,
+        widthCm: m.widthCm !== undefined ? D(m.widthCm) : null,
+        metersPerKg: m.metersPerKg !== undefined ? D(m.metersPerKg) : null,
+        currentCost: D(m.cost),
+        supplierId: supplierIds.get(m.supplier) ?? null,
+      },
+    });
+    materialIds.set(m.code, rm.id);
+  }
+  for (const s of CATALOG_SERVICES) {
+    const existing = await prisma.serviceCost.findFirst({ where: { name: s.name, type: s.type } });
+    const sc =
+      existing ??
+      (await prisma.serviceCost.create({
+        data: { type: s.type, name: s.name, unitCost: D(s.cost), unitLabel: s.unitLabel, workshopId: s.workshop ? (workshopIds.get(s.workshop) ?? null) : null },
+      }));
+    serviceIds.set(s.key, sc.id);
+  }
+
+  let created = 0;
+  for (const p of CATALOG_PRODUCTS) {
+    if (await prisma.product.findUnique({ where: { sku: p.sku } })) continue;
+    const product = await prisma.product.create({
+      data: {
+        sku: p.sku,
+        name: p.name,
+        category: p.category,
+        sourcing: "FABRICADO",
+        description: `${p.description}\nFicha estándar de referencia: revisar consumos y tarifas.`,
+        pricingMode: "MARKUP",
+        pricingPct: D(p.pricingPct ?? 100),
+        overheadPct: D(8),
+      },
+    });
+    await prisma.productBOM.createMany({
+      data: p.bom.map((b, i) => {
+        const rawMaterialId = materialIds.get(b.code);
+        if (!rawMaterialId) throw new Error(`Material ${b.code} inexistente en el catálogo (${p.sku})`);
+        return { productId: product.id, rawMaterialId, quantity: D(b.quantity), wastePct: D(b.wastePct ?? 0), sortOrder: i };
+      }),
+    });
+    await prisma.productServiceCost.createMany({
+      data: p.services.map((s, i) => {
+        const serviceCostId = serviceIds.get(s.key);
+        if (!serviceCostId) throw new Error(`Proceso ${s.key} inexistente en el catálogo (${p.sku})`);
+        return { productId: product.id, serviceCostId, quantity: D(s.quantity ?? 1), sortOrder: i };
+      }),
+    });
+    const variants = p.colors.flatMap((color) =>
+      p.sizes.map((size) => ({
+        productId: product.id,
+        size,
+        color,
+        fabric: p.fabric,
+        sku: autoVariantSku(p.sku, { size, color, fabric: p.fabric }),
+        priceAdjustmentPct: D(sizeAdjustment(size)),
+      })),
+    );
+    await prisma.productVariant.createMany({ data: variants });
+    // Precio de lista inicial = precio sugerido (costo + recargo) redondeado a $100.
+    const result = await recalculateProductCost(prisma, product.id, "MANUAL", { force: true });
+    await prisma.product.update({ where: { id: product.id }, data: { listPrice: D(Math.ceil(result.breakdown.suggestedNetPrice / 100) * 100) } });
+    created++;
+  }
+  if (created) console.log(`  Catálogo base: ${created} productos con ficha técnica estándar`);
 }
 
 /** Producto de ejemplo con colores, telas y talles en un único artículo. */
