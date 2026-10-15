@@ -1,4 +1,4 @@
-import { ChevronLeft, Factory, UserPlus } from "lucide-react";
+import { ChevronLeft, ClipboardList, Factory, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -67,10 +67,28 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
 
       <FlashNotice message={aviso} />
 
+      {q.client && (q.status === "BORRADOR" || q.status === "ENVIADO") && can(PERMISSIONS.posSell) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm">
+          <span>¿El cliente confirmó? Convertilo en pedido: se elige el talle de cada prenda, se cobra la seña y el presupuesto queda aceptado.</span>
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/ventas/pedidos/nuevo?presupuesto=${q.id}`}>
+              <ClipboardList /> Convertir en pedido
+            </Link>
+          </Button>
+        </div>
+      )}
+
       {q.status === "ACEPTADO" && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/5 px-4 py-3 text-sm">
-          <span>Presupuesto aceptado. Próximo paso: cargar la producción o cobrar la seña en el POS.</span>
+          <span>Presupuesto aceptado. Próximo paso: convertirlo en pedido (cobra la seña y lanza la producción) o cargar la producción directa.</span>
           <div className="flex flex-wrap gap-2">
+            {q.client && can(PERMISSIONS.posSell) && (
+              <Button asChild size="sm">
+                <Link href={`/ventas/pedidos/nuevo?presupuesto=${q.id}`}>
+                  <ClipboardList /> Convertir en pedido
+                </Link>
+              </Button>
+            )}
             {!q.client && q.lead && can(PERMISSIONS.crmWrite) && <ConvertLeadButton leadId={q.lead.id} />}
             {can(PERMISSIONS.productionWrite) &&
               [...new Map(q.items.filter((i) => i.productId).map((i) => [i.productId!, i])).values()].map((i) => (

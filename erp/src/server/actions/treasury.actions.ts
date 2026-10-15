@@ -20,7 +20,8 @@ import {
   transferSchema,
 } from "@/lib/validations/treasury";
 import { authorizeSale, type AuthorizeResult } from "@/server/arca/authorize";
-import { AuthorizationError, type CurrentUser, requireActionUser } from "@/server/auth/session";
+import { AuthorizationError, requireActionUser } from "@/server/auth/session";
+import { requireForRegister } from "@/server/auth/registers";
 import { db } from "@/server/db";
 import { applyChequeAction } from "@/server/services/cheque.service";
 import { createSale } from "@/server/services/pos.service";
@@ -53,21 +54,6 @@ function revalidateTreasury() {
   revalidatePath("/pos", "layout");
   revalidatePath("/tesoreria", "layout");
   revalidatePath("/compras/cuentas", "layout");
-}
-
-/**
- * Las cajas diarias se operan con permiso de turno; la caja negra y los bancos, con permiso de tesorería.
- * Quien tiene un local asignado solo opera las cajas de ese local.
- */
-async function requireForRegister(registerId: string, user: CurrentUser) {
-  const register = await db.cashRegister.findUnique({ where: { id: registerId }, select: { kind: true, branchId: true, name: true } });
-  if (!register) throw new AuthorizationError("Caja inexistente");
-  const needed = register.kind === "CAJA_DIARIA" ? PERMISSIONS.cashSession : PERMISSIONS.cashManage;
-  if (!hasPermission(user.permissions, needed)) throw new AuthorizationError();
-  if (user.branchId && register.branchId && register.branchId !== user.branchId) {
-    throw new AuthorizationError(`"${register.name}" es de otro local: solo podés operar las cajas de tu local`);
-  }
-  return register;
 }
 
 export async function openSessionAction(raw: unknown): Promise<ActionResult<{ difference: number }>> {

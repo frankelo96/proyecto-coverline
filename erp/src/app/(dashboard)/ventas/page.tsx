@@ -1,4 +1,4 @@
-import { FileSpreadsheet, Search, Ticket } from "lucide-react";
+import { ClipboardList, FileSpreadsheet, Search, Ticket } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -43,6 +43,11 @@ export default async function SalesPage({ searchParams }: Props) {
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">Ventas y comprobantes</h1>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/ventas/pedidos">
+                <ClipboardList /> Pedidos
+              </Link>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link href="/ventas/vales">
                 <Ticket /> Vales
