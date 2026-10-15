@@ -125,14 +125,16 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
   // --- Reintegro: solo por un medio con que se cobró la venta (no se puede sacar efectivo de una venta cobrada por transferencia).
   // El vale se puede dar siempre (no sale dinero).
   if (input.refundMethod !== "CUENTA_CORRIENTE" && input.refundMethod !== "VALE") {
-    const [paid, refunded] = await Promise.all([
+    const [paid, deposits, refunded] = await Promise.all([
       tx.payment.aggregate({ where: { saleId: original.id, method: input.refundMethod }, _sum: { amount: true } }),
+      // Venta de un pedido: la seña cuenta como cobrada con el medio con que se pagó.
+      tx.payment.aggregate({ where: { customerOrder: { saleId: original.id }, method: input.refundMethod }, _sum: { amount: true } }),
       tx.payment.aggregate({
         where: { method: input.refundMethod, sale: { originalSaleId: original.id, kind: "DEVOLUCION", status: { not: "ANULADA" }, id: { not: nc.id } } },
         _sum: { amount: true },
       }),
     ]);
-    const available = (paid._sum.amount?.toNumber() ?? 0) - (refunded._sum.amount?.toNumber() ?? 0);
+    const available = (paid._sum.amount?.toNumber() ?? 0) + (deposits._sum.amount?.toNumber() ?? 0) - (refunded._sum.amount?.toNumber() ?? 0);
     if (available + 0.005 < totalReturned) {
       throw new SaleError(
         available > 0

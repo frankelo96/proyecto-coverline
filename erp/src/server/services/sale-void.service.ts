@@ -60,10 +60,20 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string }
   if (blocker) throw new SaleError(blocker);
   const concept = `Anulación venta #${sale.number}`;
 
-  // --- Stock: vuelve al local de la venta
-  for (const it of sale.items) {
-    if (!it.variantId || !sale.branchId) continue;
-    await adjustBranchStock(tx, it.variantId, sale.branchId, it.quantity, { reason: "ANULACION_VENTA", refType: "VENTA", refId: sale.id, userId: user.id, notes: `${concept}: ${input.reason}` });
+  // --- Stock: se revierte cada movimiento de la venta (venta, entrega de pedido, cambios de talle) en su local.
+  const move = { reason: "ANULACION_VENTA" as const, refType: "VENTA", refId: sale.id, userId: user.id, notes: `${concept}: ${input.reason}` };
+  const moves = await tx.stockMovement.groupBy({ by: ["variantId", "branchId"], where: { refType: "VENTA", refId: sale.id }, _sum: { delta: true } });
+  if (moves.length > 0) {
+    for (const m of moves) {
+      const delta = m._sum.delta ?? new Prisma.Decimal(0);
+      if (!delta.isZero()) await adjustBranchStock(tx, m.variantId, m.branchId, delta.neg(), move);
+    }
+  } else {
+    // Ventas anteriores al registro de movimientos: vuelve al local de la venta.
+    for (const it of sale.items) {
+      if (!it.variantId || !sale.branchId) continue;
+      await adjustBranchStock(tx, it.variantId, sale.branchId, it.quantity, move);
+    }
   }
 
   // --- Dinero que entró a cajas y cuentas (efectivo, banco, Mercado Pago, tarjetas): contraasiento
@@ -80,7 +90,9 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string }
     }
     // Vale usado: recupera el saldo
     if (p.method === "VALE" && p.storeCreditId) await restoreStoreCredit(tx, p.storeCreditId, p.amount.toNumber());
+    // La seña aplicada no se devuelve: sigue en el pedido, que vuelve a quedar para entregar.
   }
+  await tx.customerOrder.updateMany({ where: { saleId: sale.id }, data: { status: "LISTO", saleId: null, deliveredAt: null } });
 
   // --- Deuda en cuenta corriente: se anula si no tiene cobros aplicados
   for (const r of sale.receivables) {

@@ -20,7 +20,7 @@ export interface CollectionContext {
   clientId: string | null;
   userId: string;
   concept: string;
-  link: { saleId?: string; receiptId?: string };
+  link: { saleId?: string; receiptId?: string; customerOrderId?: string };
   /** Efectivo que queda en caja (recibido − vuelto). Por defecto, la suma de pagos en efectivo. */
   cashKept?: number;
 }
@@ -76,6 +76,7 @@ export async function registerCollections(tx: Tx, payments: CollectionPayment[],
           installments: p.installments,
           saleId: ctx.link.saleId ?? null,
           receiptId: ctx.link.receiptId ?? null,
+          customerOrderId: ctx.link.customerOrderId ?? null,
           chequeId,
           cashRegisterId: registerId,
           cashMovementId: movementId,

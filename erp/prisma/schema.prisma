@@ -175,6 +175,8 @@ enum PaymentMethod {
   ECHEQ
   /// Vale / saldo a favor del cliente (cambios y devoluciones)
   VALE
+  /// Seña de un pedido aplicada a la venta de la entrega (el dinero entró al cobrar la seña)
+  SENA
   /// Solo para imputaciones de una orden de pago con varios instrumentos
   MIXTO
 }
@@ -426,6 +428,7 @@ model Client {
   quotes           Quote[]
   sales            Sale[]
   storeCredits     StoreCredit[]
+  customerOrders   CustomerOrder[]
   productionOrders ProductionOrder[]
   receivables      AccountReceivable[]
   cheques          Cheque[]
@@ -508,7 +511,8 @@ model Quote {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  items QuoteItem[]
+  items          QuoteItem[]
+  customerOrders CustomerOrder[]
 
   @@index([status])
   @@index([clientId])
@@ -720,6 +724,7 @@ model Product {
   saleItems        SaleItem[]
   quoteItems       QuoteItem[]
   priceListItems   PriceListItem[]
+  orderItems       CustomerOrderItem[]
 
   @@index([category])
   @@map("products")
@@ -749,6 +754,7 @@ model ProductVariant {
   saleItems       SaleItem[]
   branchStocks    BranchStock[]
   wooLinks        WooLink[]
+  orderItems      CustomerOrderItem[]
 
   @@unique([productId, size, color, fabric])
   @@map("product_variants")
@@ -871,6 +877,9 @@ model ProductionOrder {
   clientDesign            ClientDesign?         @relation(fields: [clientDesignId], references: [id], onDelete: SetNull)
   saleId                  String?
   sale                    Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  /// Pedido de cliente que origina la orden
+  customerOrderId         String?
+  customerOrder           CustomerOrder?        @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
   status                  ProductionOrderStatus @default(BORRADOR)
   currentStage            ProductionStage       @default(CORTE_INTERNO)
   quantityPlanned         Int
@@ -1029,6 +1038,8 @@ model Sale {
   receivables      AccountReceivable[]
   productionOrders ProductionOrder[]
   cashMovements    CashMovement[]
+  /// Pedido que se entregó con esta venta
+  customerOrder    CustomerOrder?
 
   @@unique([invoiceType, pointOfSale, invoiceNumber])
   @@index([createdAt])
@@ -1090,6 +1101,7 @@ model Branch {
   employees      Employee[]
   stockMovements StockMovement[]
   users          User[]
+  customerOrders CustomerOrder[]
 
   @@map("branches")
 }
@@ -1350,6 +1362,9 @@ model Payment {
   cashRegister        CashRegister?      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
   cashMovementId      String?            @unique
   cashMovement        CashMovement?      @relation(fields: [cashMovementId], references: [id], onDelete: SetNull)
+  /// Seña de un pedido
+  customerOrderId     String?
+  customerOrder       CustomerOrder?     @relation(fields: [customerOrderId], references: [id], onDelete: Restrict)
   /// Vale emitido (devolución) o usado (venta) con este pago
   storeCreditId       String?
   storeCredit         StoreCredit?       @relation(fields: [storeCreditId], references: [id], onDelete: Restrict)
@@ -1359,6 +1374,7 @@ model Payment {
 
   @@index([saleId])
   @@index([storeCreditId])
+  @@index([customerOrderId])
   @@index([createdAt, method])
   @@map("payments")
 }
@@ -1691,4 +1707,72 @@ model PriceListItem {
 
   @@unique([priceListId, productId])
   @@map("price_list_items")
+}
+
+enum CustomerOrderStatus {
+  ABIERTO
+  EN_PRODUCCION
+  LISTO
+  ENTREGADO
+  CANCELADO
+}
+
+/// Pedido de cliente con seña: se cobra la seña, se produce o reserva y al
+/// entregarlo se genera la venta descontando lo señado.
+model CustomerOrder {
+  id           String              @id @default(cuid())
+  number       Int                 @unique @default(autoincrement())
+  status       CustomerOrderStatus @default(ABIERTO)
+  clientId     String
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  quoteId      String?
+  quote        Quote?              @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  /// Local que tomó el pedido (y donde se retira)
+  branchId     String?
+  branch       Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  priceListId  String?
+  promisedDate DateTime?
+  notes        String?
+  subtotal     Decimal             @db.Decimal(14, 2)
+  taxTotal     Decimal             @db.Decimal(14, 2)
+  total        Decimal             @db.Decimal(14, 2)
+  /// Venta generada al entregar
+  saleId       String?             @unique
+  sale         Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  cancelReason String?
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  deliveredAt  DateTime?
+  cancelledAt  DateTime?
+
+  items            CustomerOrderItem[]
+  payments         Payment[]
+  productionOrders ProductionOrder[]
+
+  @@index([status])
+  @@index([clientId])
+  @@map("customer_orders")
+}
+
+model CustomerOrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       CustomerOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description String
+  quantity    Decimal         @db.Decimal(12, 4)
+  /// Precio final unitario (IVA incluido) acordado al tomar el pedido
+  unitPrice   Decimal         @db.Decimal(14, 2)
+  discountPct Decimal         @default(0) @db.Decimal(6, 2)
+  vatRate     Decimal         @default(21) @db.Decimal(6, 2)
+  /// Total de la línea con IVA
+  subtotal    Decimal         @db.Decimal(14, 2)
+  sortOrder   Int             @default(0)
+
+  @@index([orderId])
+  @@map("customer_order_items")
 }
