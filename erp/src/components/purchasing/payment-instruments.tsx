@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, FileText, Trash2, Wallet } from "lucide-react";
+import { Banknote, FileText, PiggyBank, Trash2, Wallet } from "lucide-react";
 import { useId, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,18 +19,20 @@ type UiPaymentOption = (typeof UI_PAYMENT_OPTIONS)[number];
 export type InstrumentRow =
   | { key: number; type: "REGISTER"; cashRegisterId: string; method: RegisterMethod; amount: string; reference: string }
   | { key: number; type: "THIRD_CHEQUE"; chequeId: string }
-  | { key: number; type: "OWN_CHEQUE"; format: "FISICO" | "ECHEQ"; bankRegisterId: string; number: string; paymentDate: string; amount: string };
+  | { key: number; type: "OWN_CHEQUE"; format: "FISICO" | "ECHEQ"; bankRegisterId: string; number: string; paymentDate: string; amount: string }
+  | { key: number; type: "CREDIT"; creditId: string; amount: string };
 
 const num = (v: string) => (v.trim() === "" ? 0 : Number(v));
 
 export function toInstrument(r: InstrumentRow): PaymentInstrument {
   if (r.type === "REGISTER") return { type: "REGISTER", method: r.method, cashRegisterId: r.cashRegisterId, amount: num(r.amount), reference: r.reference.trim() || null };
   if (r.type === "THIRD_CHEQUE") return { type: "THIRD_CHEQUE", chequeId: r.chequeId };
+  if (r.type === "CREDIT") return { type: "CREDIT", creditId: r.creditId, amount: num(r.amount) };
   return { type: "OWN_CHEQUE", format: r.format, bankRegisterId: r.bankRegisterId, number: r.number.trim(), paymentDate: r.paymentDate, amount: num(r.amount) };
 }
 
 /** Importe total de los medios cargados (los cheques de terceros van por su importe completo). */
-export function instrumentsTotal(rows: InstrumentRow[], sources: PaymentSources) {
+export function instrumentsTotal(rows: InstrumentRow[], sources: Pick<PaymentSources, "cheques">) {
   const cheques = new Map(sources.cheques.map((c) => [c.id, c.amount]));
   return Math.round(rows.reduce((a, r) => a + (r.type === "THIRD_CHEQUE" ? (cheques.get(r.chequeId) ?? 0) : num(r.amount)), 0) * 100) / 100;
 }
@@ -45,7 +47,7 @@ export function PaymentInstruments({
   onChange,
   suggested,
 }: {
-  sources: PaymentSources;
+  sources: PaymentSources & { credits?: { id: string; number: number; origin: string; balance: number }[] };
   rows: InstrumentRow[];
   onChange: (rows: InstrumentRow[]) => void;
   /** Importe que se propone al agregar un medio (lo que falta pagar) */
@@ -85,6 +87,22 @@ export function PaymentInstruments({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">Con qué se paga</h3>
         <div className="flex flex-wrap gap-2">
+          {!!sources.credits?.length && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const used = new Set(rows.flatMap((r) => (r.type === "CREDIT" ? [r.creditId] : [])));
+                const c = sources.credits!.find((x) => !used.has(x.id));
+                if (!c) return;
+                const rest = Math.max(0, Math.round((suggested - instrumentsTotal(rows, sources)) * 100) / 100);
+                onChange([...rows, { key: nextKey, type: "CREDIT", creditId: c.id, amount: String(Math.min(c.balance, rest || c.balance)) }]);
+              }}
+            >
+              <PiggyBank /> Saldo a favor
+            </Button>
+          )}
           {UI_PAYMENT_OPTIONS.map((o) => {
             const disabled = o === "THIRD_CHEQUE" ? sources.cheques.length === 0 : o === "OWN_CHEQUE" ? banks.length === 0 : registersFor(o).length === 0;
             const Icon = o === "EFECTIVO" ? Banknote : o === "THIRD_CHEQUE" || o === "OWN_CHEQUE" ? FileText : Wallet;
@@ -148,6 +166,24 @@ export function PaymentInstruments({
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Importe</span>
                 <span className="flex h-10 items-center justify-end font-mono tabular-nums">{formatMoney(chequeById.get(r.chequeId)?.amount ?? 0)}</span>
+              </div>
+            </>
+          )}
+          {r.type === "CREDIT" && (
+            <>
+              <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
+                <Label htmlFor={`${id}-${r.key}-cr`}>Saldo a favor que se usa</Label>
+                <NativeSelect id={`${id}-${r.key}-cr`} value={r.creditId} onChange={(e) => update(r.key, { creditId: e.target.value })}>
+                  {(sources.credits ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.number} · {c.origin === "ANTICIPO" ? "Anticipo" : c.origin === "NOTA_CREDITO" ? "Nota de crédito" : "Pago de más"} · disponible {formatMoney(c.balance)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-${r.key}-a`}>Importe</Label>
+                <Input id={`${id}-${r.key}-a`} type="number" inputMode="decimal" step="0.01" min={0} className="text-right" value={r.amount} onChange={(e) => update(r.key, { amount: e.target.value })} />
               </div>
             </>
           )}

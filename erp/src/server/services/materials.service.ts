@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 
 type Tx = Prisma.TransactionClient;
 
-export type MaterialMoveReason = "COMPRA" | "ANULACION_COMPRA" | "CONSUMO_OP" | "DEVOLUCION_OP" | "AJUSTE_CORTE" | "AJUSTE" | "IMPORTACION";
+export type MaterialMoveReason = "COMPRA" | "ANULACION_COMPRA" | "CONSUMO_OP" | "DEVOLUCION_OP" | "AJUSTE_CORTE" | "AJUSTE" | "IMPORTACION" | "DEVOLUCION_PROVEEDOR";
 
 export const MATERIAL_MOVE_LABELS: Record<MaterialMoveReason, string> = {
   COMPRA: "Compra",
@@ -14,6 +14,7 @@ export const MATERIAL_MOVE_LABELS: Record<MaterialMoveReason, string> = {
   AJUSTE_CORTE: "Ajuste de corte (real vs. teórico)",
   AJUSTE: "Ajuste de inventario",
   IMPORTACION: "Importación",
+  DEVOLUCION_PROVEEDOR: "Devolución a proveedor",
 };
 
 /**

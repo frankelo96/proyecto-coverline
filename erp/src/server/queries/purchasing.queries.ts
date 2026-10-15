@@ -330,6 +330,8 @@ export interface CreditorStatement {
   registers: { id: string; name: string; kind: CashRegisterKind; requiresSession: boolean; hasOpenSession: boolean; balance: number }[];
   /** Cheques de terceros en cartera disponibles para endosar. */
   cheques: { id: string; label: string; issuerName: string; amount: number; paymentDate: string }[];
+  /** Saldos a favor con este acreedor (anticipos, notas de crédito, pagos de más) */
+  credits?: { id: string; number: number; origin: string; balance: number; notes: string | null; date: string }[];
 }
 
 export async function getCreditorStatement(type: CreditorType, id: string): Promise<CreditorStatement | null> {
@@ -340,7 +342,7 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
   if (!creditor) return null;
 
   const whereOwner = isSupplier ? { supplierId: id } : { workshopId: id };
-  const [payables, orders, sources] = await Promise.all([
+  const [payables, orders, sources, creditNotes, credits] = await Promise.all([
     db.accountPayable.findMany({ where: { ...whereOwner, status: { not: "ANULADO" } }, orderBy: { issueDate: "asc" } }),
     db.paymentOrder.findMany({
       where: whereOwner,
@@ -348,6 +350,8 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
       include: { cashRegister: { select: { name: true } }, items: { include: { cashRegister: { select: { name: true } } } } },
     }),
     getPaymentSources(),
+    isSupplier ? db.purchase.findMany({ where: { supplierId: id, kind: "NOTA_CREDITO", status: { not: "ANULADA" } }, orderBy: { date: "asc" } }) : [],
+    getCreditorCredits(whereOwner),
   ]);
 
   // Extracto: documentos (debe) y órdenes de pago (haber) con saldo corrido.
@@ -371,8 +375,18 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
           : (o.cashRegister?.name ?? "")
       }${o.reference ? ` (${o.reference})` : ""}`,
       debit: 0,
-      credit: o.amount.toNumber(),
+      // El saldo a favor usado ya figuró como pago (anticipo) o nota de crédito: no se cuenta dos veces.
+      credit: o.amount.toNumber() - o.items.filter((i) => i.method === "SALDO_A_FAVOR").reduce((a, i) => a + i.amount.toNumber(), 0),
       href: `/compras/pagos/${o.id}`,
+    })),
+    ...creditNotes.map((n) => ({
+      key: `n-${n.id}`,
+      at: n.date,
+      kind: "PAGO" as const,
+      description: `Nota de crédito #${n.number} — ${invoiceLabel(n)}`,
+      debit: 0,
+      credit: n.total.toNumber(),
+      href: `/compras/${n.id}`,
     })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   let running = 0;
@@ -405,6 +419,7 @@ export async function getCreditorStatement(type: CreditorType, id: string): Prom
       })),
     lines,
     ...sources,
+    credits,
   };
 }
 
@@ -480,4 +495,93 @@ export async function getPaymentOrderForPrint(id: string) {
       amount: p.amount.toNumber(),
     })),
   };
+}
+
+// ─── Órdenes de compra ────────────────────────────────────────────────────
+
+export async function listPurchaseOrders(open: boolean) {
+  const orders = await db.purchaseOrder.findMany({
+    where: open ? { status: { in: ["ABIERTA", "PARCIAL"] } } : {},
+    orderBy: { number: "desc" },
+    take: 300,
+    include: { supplier: { select: { businessName: true } }, items: { select: { quantity: true, receivedQty: true } } },
+  });
+  return orders.map((o) => {
+    const ordered = o.items.reduce((a, i) => a + i.quantity.toNumber(), 0);
+    const received = o.items.reduce((a, i) => a + Math.min(i.receivedQty.toNumber(), i.quantity.toNumber()), 0);
+    return {
+      id: o.id,
+      number: o.number,
+      status: o.status,
+      supplier: o.supplier.businessName,
+      date: o.date.toISOString(),
+      expectedDate: o.expectedDate?.toISOString() ?? null,
+      total: o.total.toNumber(),
+      progressPct: ordered > 0 ? Math.round((received / ordered) * 100) : 0,
+    };
+  });
+}
+
+export async function getPurchaseOrderDetail(id: string) {
+  const o = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      supplier: true,
+      items: { orderBy: { sortOrder: "asc" } },
+      purchases: { orderBy: { date: "asc" }, select: { id: true, number: true, date: true, status: true, invoiceType: true, pointOfSale: true, invoiceNumber: true, remitNumber: true, total: true } },
+    },
+  });
+  if (!o) return null;
+  return {
+    id: o.id,
+    number: o.number,
+    status: o.status,
+    date: o.date.toISOString(),
+    expectedDate: o.expectedDate?.toISOString() ?? null,
+    notes: o.notes,
+    cancelReason: o.cancelReason,
+    supplier: { id: o.supplier.id, name: o.supplier.businessName, cuit: o.supplier.cuit, phone: o.supplier.phone, email: o.supplier.email },
+    subtotal: o.subtotal.toNumber(),
+    taxTotal: o.taxTotal.toNumber(),
+    total: o.total.toNumber(),
+    items: o.items.map((i) => ({
+      id: i.id,
+      description: i.description,
+      quantity: i.quantity.toNumber(),
+      receivedQty: i.receivedQty.toNumber(),
+      uom: i.uom,
+      unitCost: i.unitCost.toNumber(),
+      vatRate: i.vatRate.toNumber(),
+    })),
+    purchases: o.purchases.map((p) => ({ id: p.id, number: p.number, date: p.date.toISOString(), status: p.status, label: invoiceLabel(p), total: p.total.toNumber() })),
+  };
+}
+
+/** Líneas pendientes de una orden para precargar la recepción. */
+export async function getReceivingOrder(id: string) {
+  const o = await db.purchaseOrder.findUnique({ where: { id }, include: { items: { orderBy: { sortOrder: "asc" }, include: { rawMaterial: { select: { type: true } } } } } });
+  if (!o || (o.status !== "ABIERTA" && o.status !== "PARCIAL")) return null;
+  return {
+    id: o.id,
+    number: o.number,
+    supplierId: o.supplierId,
+    items: o.items
+      .filter((i) => i.receivedQty.lt(i.quantity))
+      .map((i) => ({
+        purchaseOrderItemId: i.id,
+        group: (i.productVariantId ? "PRODUCTO" : i.rawMaterial?.type === "TELA" ? "TELA" : "AVIO") as "TELA" | "AVIO" | "PRODUCTO",
+        rawMaterialId: i.rawMaterialId,
+        productVariantId: i.productVariantId,
+        quantity: i.quantity.minus(i.receivedQty).toNumber(),
+        uom: i.uom,
+        unitCost: i.unitCost.toNumber(),
+        vatRate: i.vatRate.toNumber() as 21 | 10.5 | 27 | 0,
+      })),
+  };
+}
+
+/** Saldos a favor vigentes de un proveedor o taller (anticipos, notas de crédito, pagos de más). */
+export async function getCreditorCredits(creditor: { supplierId?: string; workshopId?: string }) {
+  const credits = await db.creditorCredit.findMany({ where: { ...creditor, balance: { gt: 0 } }, orderBy: { createdAt: "asc" } });
+  return credits.map((c) => ({ id: c.id, number: c.number, origin: c.origin, balance: c.balance.toNumber(), notes: c.notes, date: c.createdAt.toISOString() }));
 }

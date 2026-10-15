@@ -184,7 +184,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
               {p.notes && <p className="border-t pt-4 text-sm text-muted-foreground">{p.notes}</p>}
             </CardContent>
           </Card>
-          {canWrite && p.status !== "ANULADA" && p.payments.length === 0 && <AnnulPurchase purchaseId={p.id} kind={p.kind} />}
+          {canWrite && p.status !== "ANULADA" && p.kind !== "NOTA_CREDITO" && p.payments.length === 0 && <AnnulPurchase purchaseId={p.id} kind={p.kind} />}
         </aside>
       </div>
     </div>

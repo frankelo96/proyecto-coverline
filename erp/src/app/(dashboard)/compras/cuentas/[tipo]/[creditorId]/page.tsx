@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { ExportButtons } from "@/components/documents/export-buttons";
 import { PaymentOrderForm } from "@/components/purchasing/payment-order-form";
+import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
@@ -50,8 +51,30 @@ export default async function CreditorStatementPage({ params }: Props) {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">{s.name}</h1>
       </div>
-      <ExportButtons report="acreedor-extracto" params={{ tipo, id: s.id }} label="Exportar extracto" />
+      <div className="flex flex-wrap gap-2">
+        {tipo === "proveedor" && hasPermission(user.permissions, PERMISSIONS.purchasesWrite) && (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/compras/notas-credito/nueva?proveedor=${s.id}`}>Cargar nota de crédito</Link>
+          </Button>
+        )}
+        <ExportButtons report="acreedor-extracto" params={{ tipo, id: s.id }} label="Exportar extracto" />
       </div>
+      </div>
+
+      {!!s.credits?.length && (
+        <div className="rounded-lg border border-success/40 bg-success/5 px-4 py-3 text-sm">
+          <strong>Saldo a favor con {s.name}: {formatMoney(s.credits.reduce((a, c) => a + c.balance, 0))}</strong>
+          <span className="text-muted-foreground"> — se usa en la orden de pago con el medio «Saldo a favor».</span>
+          <ul className="mt-1 text-xs text-muted-foreground">
+            {s.credits.map((c) => (
+              <li key={c.id}>
+                #{c.number} · {c.origin === "ANTICIPO" ? "Anticipo" : c.origin === "NOTA_CREDITO" ? "Nota de crédito" : "Pago de más"} · {formatMoney(c.balance)}
+                {c.notes ? ` · ${c.notes}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <div className="col-span-2 rounded-lg bg-ink p-4 text-ink-foreground sm:col-span-1 lg:col-span-2">

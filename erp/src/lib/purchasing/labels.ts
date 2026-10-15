@@ -4,6 +4,7 @@ import { isoLocalDate } from "@/lib/dates";
 export const PURCHASE_KIND_LABELS: Record<PurchaseKind, string> = {
   MERCADERIA: "Mercadería",
   SERVICIO_TALLER: "Servicio de taller",
+  NOTA_CREDITO: "Nota de crédito de proveedor",
 };
 
 export const ITEM_TYPE_LABELS: Record<PurchaseItemType, string> = {
@@ -12,6 +13,7 @@ export const ITEM_TYPE_LABELS: Record<PurchaseItemType, string> = {
   PRODUCTO_TERMINADO: "Producto terminado",
   SERVICIO_CONFECCION: "Confección",
   SERVICIO_PERSONALIZACION: "Personalización",
+  OTRO: "Bonificación / otros",
 };
 
 export const PURCHASE_STATUS_LABELS: Record<PurchaseStatus, string> = {

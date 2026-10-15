@@ -28,12 +28,13 @@ import {
   purchasableUoms,
   PurchasingError,
 } from "@/lib/purchasing/math";
-import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
+import { CREDIT_NOTE_LABELS, PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
 import type { MerchandisePurchaseInput, PaymentInstrument, PaymentOrderInput, WorkshopInvoiceInput } from "@/lib/validations/purchasing";
 import { periodLabel, SALARY_CONCEPT_LABELS, type SalaryPaymentInput } from "@/lib/validations/payroll";
 import { priceFromCost } from "@/lib/costing/escandallo";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
 import { moveRawMaterial } from "@/server/services/materials.service";
+import { receiveAgainstOrder, receptionAlertText } from "@/server/services/purchase-orders.service";
 import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
@@ -41,7 +42,8 @@ const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
 
 export function invoiceLabel(p: { invoiceType: InvoiceType | null; pointOfSale: number | null; invoiceNumber: string | null; remitNumber?: string | null }) {
   if (!p.invoiceType || p.invoiceType === "TICKET_INTERNO") return p.remitNumber ? `Remito ${p.remitNumber}` : "Sin comprobante";
-  const label = PURCHASE_INVOICE_LABELS[p.invoiceType as keyof typeof PURCHASE_INVOICE_LABELS] ?? p.invoiceType;
+  const label =
+    PURCHASE_INVOICE_LABELS[p.invoiceType as keyof typeof PURCHASE_INVOICE_LABELS] ?? CREDIT_NOTE_LABELS[p.invoiceType as keyof typeof CREDIT_NOTE_LABELS] ?? p.invoiceType;
   return `${label} ${String(p.pointOfSale ?? 0).padStart(5, "0")}-${(p.invoiceNumber ?? "").padStart(8, "0")}`;
 }
 
@@ -89,6 +91,8 @@ export interface MerchandiseResult {
   number: number;
   costAlerts: CostAlert[];
   affectedProducts: AffectedProduct[];
+  /** Recepción contra orden de compra: número, si quedó completa y diferencias */
+  order: { number: number; complete: boolean; alerts: string[] } | null;
 }
 
 export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurchaseInput, userId: string): Promise<MerchandiseResult> {
@@ -164,8 +168,10 @@ export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurcha
       total: D(totals.total),
       notes: input.notes,
       createdById: userId,
+      purchaseOrderId: input.purchaseOrderId,
       items: {
         create: resolved.map((r, i) => ({
+          purchaseOrderItemId: input.purchaseOrderId ? r.item.purchaseOrderItemId : null,
           itemType: r.itemType,
           description: r.description,
           rawMaterialId: r.material?.id ?? null,
@@ -261,7 +267,19 @@ export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurcha
     });
   }
 
-  return { ...purchase, costAlerts, affectedProducts: [...affected.values()] };
+  // 5) Recepción contra la orden de compra.
+  let order: MerchandiseResult["order"] = null;
+  if (input.purchaseOrderId) {
+    const rec = await receiveAgainstOrder(
+      tx,
+      input.purchaseOrderId,
+      supplier.id,
+      input.items.map((i) => ({ purchaseOrderItemId: i.purchaseOrderItemId, rawMaterialId: i.kind === "RAW" ? i.rawMaterialId : null, productVariantId: i.kind === "VARIANT" ? i.productVariantId : null, quantity: i.quantity, uom: i.uom, unitCost: i.unitCost })),
+    );
+    order = { number: rec.number, complete: rec.complete, alerts: rec.alerts.map(receptionAlertText) };
+  }
+
+  return { ...purchase, costAlerts, affectedProducts: [...affected.values()], order };
 }
 
 export async function createWorkshopInvoice(tx: Tx, input: WorkshopInvoiceInput, userId: string) {
@@ -395,6 +413,16 @@ export async function annulPurchase(tx: Tx, input: { purchaseId: string; reason:
       if (it.rawMaterialId) await moveRawMaterial(tx, { rawMaterialId: it.rawMaterialId, delta: qty.neg(), reason: "ANULACION_COMPRA", refType: "COMPRA", refId: purchase.id, userId });
       if (it.productVariantId)
         await adjustBranchStock(tx, it.productVariantId, await mainBranchId(tx), qty.neg(), { reason: "ANULACION_COMPRA", refType: "COMPRA", refId: purchase.id, userId, notes: `Anulación compra #${purchase.number}` });
+      // Lo recibido contra la orden de compra vuelve a quedar pendiente.
+      if (it.purchaseOrderItemId) await tx.purchaseOrderItem.update({ where: { id: it.purchaseOrderItemId }, data: { receivedQty: { decrement: it.quantity } } });
+    }
+    if (purchase.purchaseOrderId) {
+      const order = await tx.purchaseOrder.findUnique({ where: { id: purchase.purchaseOrderId }, include: { items: true } });
+      if (order && order.status !== "CANCELADA") {
+        const any = order.items.some((i) => i.receivedQty.gt(0));
+        const all = order.items.every((i) => i.receivedQty.gte(i.quantity));
+        await tx.purchaseOrder.update({ where: { id: order.id }, data: { status: all ? "RECIBIDA" : any ? "PARCIAL" : "ABIERTA" } });
+      }
     }
   } else {
     const remitIds = purchase.invoicedRemits.map((r) => r.id);
@@ -429,8 +457,8 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
   if (!creditor) throw new PurchasingError("Acreedor inexistente");
   const creditorName = "businessName" in creditor ? creditor.businessName : creditor.name;
 
-  await tx.$queryRaw`SELECT id FROM accounts_payable WHERE id IN (${Prisma.join(input.payableIds)}) FOR UPDATE`;
-  const payables = await tx.accountPayable.findMany({ where: { id: { in: input.payableIds } } });
+  if (input.payableIds.length) await tx.$queryRaw`SELECT id FROM accounts_payable WHERE id IN (${Prisma.join(input.payableIds)}) FOR UPDATE`;
+  const payables = input.payableIds.length ? await tx.accountPayable.findMany({ where: { id: { in: input.payableIds } } }) : [];
   if (payables.length !== new Set(input.payableIds).size) throw new PurchasingError("Algún comprobante no existe");
   for (const p of payables) {
     const owner = isSupplier ? p.supplierId : p.workshopId;
@@ -440,10 +468,14 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
 
   const { total, summaryMethod, cheques } = await instrumentsTotal(tx, input.instruments);
 
-  const allocations = allocatePayment(
-    total.toNumber(),
-    payables.map((p) => ({ id: p.id, balance: p.balance.toNumber(), dueDate: p.dueDate })),
-  );
+  // Lo que supere los comprobantes elegidos queda como anticipo / saldo a favor (si se pidió).
+  const open = payables.reduce((a, p) => a.plus(p.balance.toString()), new Decimal(0));
+  const excess = Decimal.max(total.minus(open), 0).toDecimalPlaces(2);
+  if (excess.gt(0) && !input.excessAsCredit) {
+    throw new PurchasingError(`El pago supera en ${formatMoney(excess.toNumber())} a los comprobantes elegidos: marcá «dejar el excedente como anticipo» o ajustá los importes`);
+  }
+  if (excess.gt(0) && input.instruments.some((i) => i.type === "CREDIT")) throw new PurchasingError("No se puede generar un anticipo usando saldo a favor");
+  const allocations = open.gt(0) ? allocatePayment(Decimal.min(total, open).toNumber(), payables.map((p) => ({ id: p.id, balance: p.balance.toNumber(), dueDate: p.dueDate }))) : [];
 
   const order = await tx.paymentOrder.create({
     data: {
@@ -456,7 +488,22 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     },
     select: { id: true, number: true },
   });
-  await applyInstruments(tx, { orderId: order.id, concept: `Orden de pago #${order.number} — ${creditorName}`, payee: creditorName, instruments: input.instruments, cheques }, userId);
+  const owner = isSupplier ? { supplierId: creditor.id } : { workshopId: creditor.id };
+  await applyInstruments(tx, { orderId: order.id, concept: `Orden de pago #${order.number} — ${creditorName}`, payee: creditorName, instruments: input.instruments, cheques, owner }, userId);
+  let credit: { number: number } | null = null;
+  if (excess.gt(0)) {
+    credit = await tx.creditorCredit.create({
+      data: {
+        ...owner,
+        origin: payables.length ? "EXCEDENTE" : "ANTICIPO",
+        amount: D(excess),
+        balance: D(excess),
+        paymentOrderId: order.id,
+        notes: `${payables.length ? "Pago de más" : "Anticipo"} en la orden de pago #${order.number}`,
+      },
+      select: { number: true },
+    });
+  }
 
   for (const a of allocations) {
     const p = payables.find((x) => x.id === a.payableId)!;
@@ -470,7 +517,11 @@ export async function createPaymentOrder(tx: Tx, input: PaymentOrderInput, userI
     });
   }
 
-  return { ...order, allocated: allocations.length, message: `Orden de pago #${order.number} por ${formatMoney(total.toNumber())} registrada` };
+  return {
+    ...order,
+    allocated: allocations.length,
+    message: `Orden de pago #${order.number} por ${formatMoney(total.toNumber())} registrada${credit ? ` · ${formatMoney(excess.toNumber())} quedan como saldo a favor (#${credit.number})` : ""}`,
+  };
 }
 
 // ─── Medios de pago de una orden (proveedores, talleres y sueldos) ────────
@@ -483,7 +534,9 @@ async function instrumentsTotal(tx: Tx, instruments: PaymentInstrument[]) {
   const amountOf = (i: PaymentInstrument) =>
     i.type === "THIRD_CHEQUE" ? new Decimal(cheques.find((c) => c.id === i.chequeId)?.amount.toString() ?? "0") : new Decimal(i.amount);
   const total = instruments.reduce((a, i) => a.plus(amountOf(i)), new Decimal(0)).toDecimalPlaces(2);
-  const methods = new Set(instruments.map((i) => (i.type === "REGISTER" ? i.method : i.type === "OWN_CHEQUE" ? (i.format === "ECHEQ" ? "ECHEQ" : "CHEQUE") : "CHEQUE")));
+  const methods = new Set(
+    instruments.map((i) => (i.type === "REGISTER" ? i.method : i.type === "OWN_CHEQUE" ? (i.format === "ECHEQ" ? "ECHEQ" : "CHEQUE") : i.type === "CREDIT" ? "SALDO_A_FAVOR" : "CHEQUE")),
+  );
   const summaryMethod = (methods.size === 1 ? [...methods][0] : "MIXTO") as PaymentMethod;
   return { total, summaryMethod, cheques };
 }
@@ -491,7 +544,7 @@ async function instrumentsTotal(tx: Tx, instruments: PaymentInstrument[]) {
 /** Registra cada instrumento: egreso de caja/cuenta, endoso de cheque de terceros o emisión de cheque propio. */
 async function applyInstruments(
   tx: Tx,
-  o: { orderId: string; concept: string; payee: string; instruments: PaymentInstrument[]; cheques: { id: string }[] },
+  o: { orderId: string; concept: string; payee: string; instruments: PaymentInstrument[]; cheques: { id: string }[]; owner?: { supplierId?: string; workshopId?: string } },
   userId: string,
 ) {
   for (const inst of o.instruments) {
@@ -511,6 +564,17 @@ async function applyInstruments(
       });
       await tx.paymentOrderItem.create({
         data: { paymentOrderId: o.orderId, method: inst.method, amount: D(inst.amount), cashRegisterId: register.id, reference: inst.reference },
+      });
+    } else if (inst.type === "CREDIT") {
+      if (!o.owner) throw new PurchasingError("El saldo a favor solo se usa para pagar al mismo proveedor o taller");
+      await tx.$queryRaw`SELECT id FROM creditor_credits WHERE id = ${inst.creditId} FOR UPDATE`;
+      const credit = await tx.creditorCredit.findUnique({ where: { id: inst.creditId } });
+      const sameOwner = credit && (o.owner.supplierId ? credit.supplierId === o.owner.supplierId : credit.workshopId === o.owner.workshopId);
+      if (!credit || !sameOwner) throw new PurchasingError("Saldo a favor inexistente o de otro acreedor");
+      if (credit.balance.lt(inst.amount - 0.005)) throw new PurchasingError(`El saldo a favor #${credit.number} tiene ${formatMoney(credit.balance.toNumber())}`);
+      await tx.creditorCredit.update({ where: { id: credit.id }, data: { balance: D(Decimal.max(new Decimal(credit.balance.toString()).minus(inst.amount), 0)) } });
+      await tx.paymentOrderItem.create({
+        data: { paymentOrderId: o.orderId, method: "SALDO_A_FAVOR", amount: D(inst.amount), creditId: credit.id, reference: `Saldo a favor #${credit.number}` },
       });
     } else if (inst.type === "THIRD_CHEQUE") {
       const cheque = await endorseCheque(tx, inst.chequeId, o.orderId, o.payee);

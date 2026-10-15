@@ -177,6 +177,8 @@ enum PaymentMethod {
   VALE
   /// Seña de un pedido aplicada a la venta de la entrega (el dinero entró al cobrar la seña)
   SENA
+  /// Saldo a favor con un proveedor o taller (anticipo, nota de crédito o pago de más)
+  SALDO_A_FAVOR
   /// Solo para imputaciones de una orden de pago con varios instrumentos
   MIXTO
 }
@@ -261,6 +263,8 @@ enum PurchaseStatus {
 enum PurchaseKind {
   MERCADERIA
   SERVICIO_TALLER
+  /// Nota de crédito de un proveedor (devolución de mercadería, bonificación o descuento)
+  NOTA_CREDITO
 }
 
 enum PurchaseItemType {
@@ -269,6 +273,8 @@ enum PurchaseItemType {
   PRODUCTO_TERMINADO
   SERVICIO_CONFECCION
   SERVICIO_PERSONALIZACION
+  /// Bonificación, descuento o diferencia de precio (notas de crédito)
+  OTRO
 }
 
 enum ProductSourcing {
@@ -556,10 +562,12 @@ model Supplier {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  rawMaterials  RawMaterial[]
-  purchases     Purchase[]
-  payables      AccountPayable[]
-  paymentOrders PaymentOrder[]
+  rawMaterials   RawMaterial[]
+  purchases      Purchase[]
+  payables       AccountPayable[]
+  paymentOrders  PaymentOrder[]
+  purchaseOrders PurchaseOrder[]
+  credits        CreditorCredit[]
 
   @@map("suppliers")
 }
@@ -592,6 +600,7 @@ model RawMaterial {
   bomLines      ProductBOM[]
   priceHistory  RawMaterialPriceHistory[]
   purchaseItems PurchaseItem[]
+  orderItems    PurchaseOrderItem[]
 
   @@index([type])
   @@map("raw_materials")
@@ -647,9 +656,14 @@ model Purchase {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
+  /// Orden de compra que se recibe con este comprobante
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+
   items          PurchaseItem[]
   payables       AccountPayable[]
   invoicedRemits WorkshopRemit[]
+  credits        CreditorCredit[]
 
   @@index([supplierId, date])
   @@index([workshopId, date])
@@ -682,6 +696,9 @@ model PurchaseItem {
   /// Costo de reposición vigente antes de esta compra (auditoría del impacto)
   previousUnitCost Decimal?         @db.Decimal(14, 4)
   updatedCost      Boolean          @default(false)
+  /// Línea de la orden de compra que se recibe
+  purchaseOrderItemId String?
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
 
   @@index([rawMaterialId])
   @@index([productVariantId])
@@ -751,6 +768,7 @@ model ProductVariant {
 
   productionItems ProductionOrderItem[]
   purchaseItems   PurchaseItem[]
+  purchaseOrderItems PurchaseOrderItem[]
   saleItems       SaleItem[]
   branchStocks    BranchStock[]
   wooLinks        WooLink[]
@@ -862,6 +880,7 @@ model Workshop {
   payables      AccountPayable[]
   purchases     Purchase[]
   paymentOrders PaymentOrder[]
+  credits       CreditorCredit[]
 
   @@map("workshops")
 }
@@ -1229,6 +1248,7 @@ model PaymentOrder {
   items         PaymentOrderItem[]
   cheques       Cheque[]
   cashMovements CashMovement[]
+  credits       CreditorCredit[]
 
   @@index([supplierId, date])
   @@index([workshopId, date])
@@ -1247,6 +1267,9 @@ model PaymentOrderItem {
   cashRegister   CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
   chequeId       String?
   cheque         Cheque?       @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  /// Saldo a favor aplicado
+  creditId       String?
+  credit         CreditorCredit? @relation(fields: [creditId], references: [id], onDelete: Restrict)
   reference      String?
 
   @@index([paymentOrderId])
@@ -1775,4 +1798,88 @@ model CustomerOrderItem {
 
   @@index([orderId])
   @@map("customer_order_items")
+}
+
+enum PurchaseOrderStatus {
+  ABIERTA
+  PARCIAL
+  RECIBIDA
+  CANCELADA
+}
+
+/// Orden de compra a un proveedor: lo que se pidió, a qué precio y cuánto llegó.
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  number       Int                 @unique @default(autoincrement())
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status       PurchaseOrderStatus @default(ABIERTA)
+  date         DateTime            @default(now())
+  expectedDate DateTime?
+  notes        String?
+  subtotal     Decimal             @db.Decimal(14, 2)
+  taxTotal     Decimal             @db.Decimal(14, 2)
+  total        Decimal             @db.Decimal(14, 2)
+  cancelReason String?
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  items     PurchaseOrderItem[]
+  purchases Purchase[]
+
+  @@index([supplierId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               String          @id @default(cuid())
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder   @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  rawMaterialId    String?
+  rawMaterial      RawMaterial?    @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  description      String
+  quantity         Decimal         @db.Decimal(14, 4)
+  uom              UnitOfMeasure
+  /// Precio unitario neto pactado
+  unitCost         Decimal         @db.Decimal(14, 4)
+  vatRate          Decimal         @default(21) @db.Decimal(6, 2)
+  /// Cantidad recibida (en la unidad de la orden)
+  receivedQty      Decimal         @default(0) @db.Decimal(14, 4)
+  sortOrder        Int             @default(0)
+
+  receptions PurchaseItem[]
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+/// Saldo a favor con un proveedor o taller: anticipo, nota de crédito o pago de más.
+/// Se usa como medio de pago en una orden de pago.
+model CreditorCredit {
+  id             String        @id @default(cuid())
+  number         Int           @unique @default(autoincrement())
+  supplierId     String?
+  supplier       Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  workshopId     String?
+  workshop       Workshop?     @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  /// ANTICIPO, NOTA_CREDITO, EXCEDENTE
+  origin         String
+  amount         Decimal       @db.Decimal(14, 2)
+  balance        Decimal       @db.Decimal(14, 2)
+  purchaseId     String?
+  purchase       Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  paymentOrderId String?
+  paymentOrder   PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  uses PaymentOrderItem[]
+
+  @@index([supplierId])
+  @@index([workshopId])
+  @@map("creditor_credits")
 }

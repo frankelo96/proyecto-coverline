@@ -1,4 +1,4 @@
-import { Package, Plus, Scissors } from "lucide-react";
+import { Package, Plus, Scissors, Undo2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -39,7 +39,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
         <div className="flex flex-col gap-1.5">
           <h1 className="text-3xl font-bold tracking-tight">Compras</h1>
           <p className="text-sm text-muted-foreground">
-            {active.length} comprobantes · {formatMoney(active.reduce((a, r) => a + r.total, 0), { round: true })} · saldo a pagar{" "}
+            {active.length} comprobantes · {formatMoney(active.reduce((a, r) => a + (r.kind === "NOTA_CREDITO" ? -r.total : r.total), 0), { round: true })} · saldo a pagar{" "}
             {formatMoney(active.reduce((a, r) => a + r.balance, 0), { round: true })}
           </p>
         </div>
@@ -55,6 +55,11 @@ export default async function PurchasesPage({ searchParams }: Props) {
               <Button asChild variant="outline">
                 <Link href="/compras/talleres/nueva">
                   <Scissors /> Factura de taller
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/compras/notas-credito/nueva">
+                  <Undo2 /> Nota de crédito
                 </Link>
               </Button>
             </div>
@@ -120,7 +125,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
                 <TableCell>{new Date(r.date).toLocaleDateString("es-AR")}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant={r.kind === "MERCADERIA" ? "default" : "accent"}>{PURCHASE_KIND_LABELS[r.kind]}</Badge>
+                    <Badge variant={r.kind === "MERCADERIA" ? "default" : r.kind === "NOTA_CREDITO" ? "success" : "accent"}>{PURCHASE_KIND_LABELS[r.kind]}</Badge>
                     {r.itemTypes.map((t) => (
                       <Badge key={t} variant="outline">
                         {ITEM_TYPE_LABELS[t]}
@@ -131,7 +136,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
                 </TableCell>
                 <TableCell>{r.creditorName}</TableCell>
                 <TableCell className="font-mono text-xs">{r.voucher}</TableCell>
-                <TableCell className="text-right font-mono tabular-nums">{formatMoney(r.total)}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">{formatMoney(r.kind === "NOTA_CREDITO" ? -r.total : r.total)}</TableCell>
                 <TableCell className="pr-5 text-right font-mono tabular-nums">{r.balance > 0 ? formatMoney(r.balance) : "—"}</TableCell>
               </TableRow>
             ))}

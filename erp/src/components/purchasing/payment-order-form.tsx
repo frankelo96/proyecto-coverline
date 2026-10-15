@@ -34,6 +34,7 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
   const [rows, setRows] = useState<InstrumentRow[]>([]);
   const [notes, setNotes] = useState("");
   const [lastOrder, setLastOrder] = useState<string | null>(null);
+  const [asAdvance, setAsAdvance] = useState(statement.open.length === 0);
 
   const selectedTotal = statement.open.filter((p) => selected.has(p.id)).reduce((a, p) => a + p.balance, 0);
   const instrumentsTotal = sumInstruments(rows, statement);
@@ -45,7 +46,9 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
     setSelected(next);
   }
 
-  const allocation = computeAllocation(instrumentsTotal, statement.open.filter((p) => selected.has(p.id)));
+  const excess = Math.max(0, Math.round((instrumentsTotal - selectedTotal) * 100) / 100);
+  // Con anticipo, se imputa hasta el saldo elegido y el resto queda a favor.
+  const allocation = computeAllocation(asAdvance ? Math.min(instrumentsTotal, selectedTotal) : instrumentsTotal, statement.open.filter((p) => selected.has(p.id)));
 
   const printLink = lastOrder && status?.kind === "success" && (
     <Button asChild variant="outline">
@@ -54,16 +57,6 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
       </Link>
     </Button>
   );
-
-  if (statement.open.length === 0) {
-    return (
-      <div className="flex flex-col gap-3 px-5 pb-5">
-        <StatusMessage status={status} />
-        {printLink}
-        <p className="text-sm text-muted-foreground">No hay comprobantes pendientes de pago.</p>
-      </div>
-    );
-  }
 
   return (
     <form
@@ -75,8 +68,9 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
             createPaymentOrderAction({
               creditorType: statement.type === "proveedor" ? "SUPPLIER" : "WORKSHOP",
               creditorId: statement.id,
-              payableIds: [...selected],
+              payableIds: [...selected].filter((pid) => statement.open.some((p) => p.id === pid)),
               instruments: rows.map(toInstrument),
+              excessAsCredit: asAdvance,
               notes: notes.trim() || null,
             }),
           (d) => {
@@ -87,6 +81,8 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
         );
       }}
     >
+      {statement.open.length === 0 && <p className="px-5 text-sm text-muted-foreground">No hay comprobantes pendientes: lo que pagues queda como anticipo (saldo a favor).</p>}
+      {statement.open.length > 0 && (
       <Table className="min-w-[640px]">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -128,6 +124,7 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
           })}
         </TableBody>
       </Table>
+      )}
 
       {canPay && (
         <div className="flex flex-col gap-4 px-5 pb-5">
@@ -144,10 +141,15 @@ export function PaymentOrderForm({ statement, canPay }: { statement: CreditorSta
             <Label htmlFor={`${id}-notes`}>Observaciones</Label>
             <Input id={`${id}-notes`} maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
-          {allocation.error && <p className="text-sm text-destructive">{allocation.error}</p>}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4" checked={asAdvance} disabled={statement.open.length === 0} onChange={(e) => setAsAdvance(e.target.checked)} />
+            Dejar el excedente como anticipo (saldo a favor para próximas compras)
+            {asAdvance && excess > 0 && <strong className="font-mono">{formatMoney(excess)}</strong>}
+          </label>
+          {!asAdvance && allocation.error && <p className="text-sm text-destructive">{allocation.error}</p>}
           <StatusMessage status={status} />
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={pending || !!allocation.error || selected.size === 0 || rows.length === 0 || instrumentsTotal <= 0}>
+            <Button type="submit" disabled={pending || (!asAdvance && !!allocation.error) || (selected.size === 0 && !asAdvance) || rows.length === 0 || instrumentsTotal <= 0}>
               {pending && <Loader2 className="animate-spin" />} Registrar orden de pago
             </Button>
             {printLink}

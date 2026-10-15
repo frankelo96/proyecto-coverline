@@ -6,6 +6,7 @@ export default async function PurchasesLayout({ children }: Readonly<{ children:
   const user = await requirePageUser();
   const tabs = [
     { href: "/compras", label: "Comprobantes de compra", permission: PERMISSIONS.purchasesRead },
+    { href: "/compras/ordenes", label: "Órdenes de compra", permission: PERMISSIONS.purchasesRead },
     { href: "/compras/cuentas", label: "Cuentas a pagar", permission: PERMISSIONS.payablesRead },
   ].filter((t) => hasPermission(user.permissions, t.permission));
   return (

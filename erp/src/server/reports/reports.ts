@@ -9,7 +9,7 @@ import { ITEM_TYPE_LABELS, PURCHASE_KIND_LABELS, TAX_CONDITION_LABELS } from "@/
 import { METHOD_LABELS, MOVEMENT_LABELS, MOVEMENT_SIGN, REGISTER_KIND_LABELS } from "@/lib/treasury/cash";
 import { CHEQUE_FORMAT_LABELS, CHEQUE_STATUS_LABELS } from "@/lib/treasury/cheques";
 import { periodLabel, periodOf, SALARY_CONCEPT_LABELS } from "@/lib/validations/payroll";
-import { PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
+import { CREDIT_NOTE_LABELS, PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
 import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
 import { getCreditorStatement, listCreditors } from "@/server/queries/purchasing.queries";
@@ -384,11 +384,12 @@ export const REPORTS: Record<string, ReportDef> = {
           cuit: x.supplier?.cuit ?? x.workshop?.cuit ?? null,
           voucher:
             x.invoiceType && x.invoiceNumber
-              ? `${PURCHASE_INVOICE_LABELS[x.invoiceType as keyof typeof PURCHASE_INVOICE_LABELS] ?? x.invoiceType} ${String(x.pointOfSale ?? 0).padStart(5, "0")}-${x.invoiceNumber.padStart(8, "0")}`
+              ? `${PURCHASE_INVOICE_LABELS[x.invoiceType as keyof typeof PURCHASE_INVOICE_LABELS] ?? CREDIT_NOTE_LABELS[x.invoiceType as keyof typeof CREDIT_NOTE_LABELS] ?? x.invoiceType} ${String(x.pointOfSale ?? 0).padStart(5, "0")}-${x.invoiceNumber.padStart(8, "0")}`
               : (x.remitNumber ?? null),
-          net: x.subtotal.toNumber(),
-          vat: x.taxTotal.toNumber(),
-          total: x.total.toNumber(),
+          // Las notas de crédito restan (Libro IVA Compras).
+          net: (x.kind === "NOTA_CREDITO" ? -1 : 1) * x.subtotal.toNumber(),
+          vat: (x.kind === "NOTA_CREDITO" ? -1 : 1) * x.taxTotal.toNumber(),
+          total: (x.kind === "NOTA_CREDITO" ? -1 : 1) * x.total.toNumber(),
           balance: x.status === "ANULADA" ? 0 : x.payables.reduce((a, b) => a + b.balance.toNumber(), 0),
           status: x.status === "ANULADA" ? "Anulada" : null,
         })),

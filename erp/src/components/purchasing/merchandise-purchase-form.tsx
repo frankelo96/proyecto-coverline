@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, Loader2, Plus, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useId, useMemo, useState, useTransition } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -19,7 +20,7 @@ import { formatMoney, formatNumber, formatPct, UOM_SHORT } from "@/lib/format";
 import { suggestedInvoiceType, todayIso } from "@/lib/purchasing/labels";
 import { computePurchaseTotals, convertToStockUnit, costChange, discriminatesVat, PurchasingError } from "@/lib/purchasing/math";
 import { headerRefine, invoiceHeaderShape, merchandiseItemSchema } from "@/lib/validations/purchasing";
-import { createMerchandisePurchaseAction } from "@/server/actions/purchasing.actions";
+import { createMerchandisePurchaseAction, createPurchaseOrderAction } from "@/server/actions/purchasing.actions";
 import type { MerchandiseFormData } from "@/server/queries/purchasing.queries";
 import type { MerchandiseResult } from "@/server/services/purchasing.service";
 
@@ -34,13 +35,14 @@ const GROUPS = {
 } as const;
 type Group = keyof typeof GROUPS;
 
-const formSchema = z
-  .object({
-    supplierId: z.string().min(1, "Elegí el proveedor"),
-    items: z.array(z.intersection(merchandiseItemSchema, z.object({ group: z.enum(["TELA", "AVIO", "PRODUCTO"]) }))).min(1, "Cargá al menos un ítem"),
-    ...invoiceHeaderShape,
-  })
-  .superRefine(headerRefine);
+const baseSchema = z.object({
+  supplierId: z.string().min(1, "Elegí el proveedor"),
+  items: z.array(z.intersection(merchandiseItemSchema, z.object({ group: z.enum(["TELA", "AVIO", "PRODUCTO"]) }))).min(1, "Cargá al menos un ítem"),
+  ...invoiceHeaderShape,
+});
+const formSchema = baseSchema.superRefine(headerRefine);
+/** La orden de compra no tiene comprobante: no se exige número de factura. */
+const orderSchema = baseSchema;
 type FormValues = z.infer<typeof formSchema>;
 type Item = FormValues["items"][number];
 
@@ -49,8 +51,23 @@ const UNUSUAL_CHANGE_PCT = 30;
 
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData }) {
+/** Orden de compra que se recibe: líneas pendientes con el precio pactado. */
+export interface ReceivingOrder {
+  id: string;
+  number: number;
+  supplierId: string;
+  items: { purchaseOrderItemId: string; group: Group; rawMaterialId: string | null; productVariantId: string | null; quantity: number; uom: Item["uom"]; unitCost: number; vatRate: Item["vatRate"] }[];
+}
+
+/**
+ * Compra de mercadería (factura o remito: ingresa al stock) o, con mode="order",
+ * orden de compra al proveedor (solo lo pedido y el precio pactado).
+ */
+export function MerchandisePurchaseForm({ data, mode = "purchase", fromOrder }: { data: MerchandiseFormData; mode?: "purchase" | "order"; fromOrder?: ReceivingOrder }) {
   const id = useId();
+  const router = useRouter();
+  const isOrder = mode === "order";
+  const [expectedDate, setExpectedDate] = useState("");
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<ActionStatus>(null);
   const [result, setResult] = useState<MerchandiseResult | null>(null);
@@ -71,7 +88,26 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
     otherTaxes: 0,
     notes: null,
   };
-  const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: emptyValues });
+  const initialValues: FormValues = fromOrder
+    ? {
+        ...emptyValues,
+        supplierId: fromOrder.supplierId,
+        invoiceType: suggestedInvoiceType(data.suppliers.find((x) => x.id === fromOrder.supplierId)?.taxCondition ?? "RESPONSABLE_INSCRIPTO"),
+        items: fromOrder.items.map((i) => ({
+          group: i.group,
+          kind: GROUPS[i.group].kind,
+          rawMaterialId: i.rawMaterialId,
+          productVariantId: i.productVariantId,
+          quantity: i.quantity,
+          uom: i.uom,
+          unitCost: i.unitCost,
+          vatRate: i.vatRate,
+          updateCost: i.group !== "PRODUCTO" || variants.get(i.productVariantId ?? "")?.sourcing === "REVENTA",
+          purchaseOrderItemId: i.purchaseOrderItemId,
+        })) as Item[],
+      }
+    : emptyValues;
+  const form = useForm<FormValues>({ resolver: zodResolver(isOrder ? orderSchema : formSchema), defaultValues: initialValues });
   const { control, register, setValue, handleSubmit, reset, formState } = form;
   const items = useFieldArray({ control, name: "items" });
   const values = useWatch({ control }) as FormValues;
@@ -101,6 +137,7 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
       unitCost: 0,
       vatRate: 21,
       updateCost: true,
+      purchaseOrderItemId: null,
     } as Item);
   }
 
@@ -147,10 +184,25 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
     (v) => {
       setStatus(null);
       setResult(null);
+      if (isOrder) {
+        startTransition(async () => {
+          const res = await createPurchaseOrderAction({
+            supplierId: v.supplierId,
+            expectedDate: expectedDate || null,
+            notes: v.notes,
+            items: v.items.map((i) => ({ kind: i.kind, rawMaterialId: i.rawMaterialId, productVariantId: i.productVariantId, quantity: i.quantity, uom: i.uom, unitCost: i.unitCost, vatRate: i.vatRate })),
+          });
+          if (res.ok) router.push(`/compras/ordenes/${res.data.id}?aviso=${encodeURIComponent(res.message ?? "Orden registrada")}`);
+          else setStatus({ kind: "error", text: res.error });
+        });
+        return;
+      }
       startTransition(async () => {
         const res = await createMerchandisePurchaseAction({
           ...v,
+          purchaseOrderId: fromOrder?.id ?? null,
           items: v.items.map((i) => ({
+            purchaseOrderItemId: fromOrder ? i.purchaseOrderItemId : null,
             kind: i.kind,
             rawMaterialId: i.rawMaterialId,
             productVariantId: i.productVariantId,
@@ -164,6 +216,10 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
         if (res.ok) {
           setResult(res.data);
           setStatus({ kind: "success", text: res.message ?? "Compra registrada" });
+          if (fromOrder) {
+            router.push(`/compras/${res.data.id}?aviso=${encodeURIComponent(res.message ?? "Compra registrada")}${res.data.order?.alerts.length ? encodeURIComponent(`. Diferencias con la orden: ${res.data.order.alerts.join("; ")}`) : ""}`);
+            return;
+          }
           reset({ ...emptyValues, supplierId: v.supplierId, invoiceType: v.invoiceType, date: v.date });
         } else {
           setStatus({ kind: "error", text: res.error });
@@ -203,7 +259,19 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
               ))}
             </NativeSelect>
           </div>
-          <InvoiceHeaderFields form={form} dueHint={supplier ? `Si lo dejás vacío: fecha + ${supplier.paymentTermDays} días` : "Según plazo del proveedor"} />
+          {isOrder ? (
+            <div className="flex max-w-xs flex-col gap-2">
+              <Label htmlFor={`${id}-exp`}>Fecha de entrega esperada</Label>
+              <Input id={`${id}-exp`} type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
+            </div>
+          ) : (
+            <InvoiceHeaderFields form={form} dueHint={supplier ? `Si lo dejás vacío: fecha + ${supplier.paymentTermDays} días` : "Según plazo del proveedor"} />
+          )}
+          {fromOrder && (
+            <p className="rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
+              Recibiendo la orden de compra #{fromOrder.number}: se cargaron las cantidades pendientes con el precio pactado. Ajustá lo que realmente llegó y el precio de la factura; las diferencias quedan avisadas.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -288,7 +356,7 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
                       <Trash2 />
                     </Button>
 
-                    {imp && (
+                    {imp && !isOrder && (
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs md:col-span-6">
                         {"error" in imp ? (
                           <span className="text-destructive">{imp.error}</span>
@@ -347,11 +415,11 @@ export function MerchandisePurchaseForm({ data }: { data: MerchandiseFormData })
       </div>
 
       <StatusMessage status={status} />
-      {result && <PurchaseResultPanel result={result} />}
+      {result && !isOrder && <PurchaseResultPanel result={result} />}
 
       <div className="flex gap-2">
         <Button type="submit" disabled={pending || items.fields.length === 0}>
-          {pending && <Loader2 className="animate-spin" />} Registrar compra
+          {pending && <Loader2 className="animate-spin" />} {isOrder ? "Registrar orden de compra" : fromOrder ? `Registrar recepción de la OC #${fromOrder.number}` : "Registrar compra"}
         </Button>
         <Button asChild variant="outline">
           <Link href="/compras">Volver</Link>
