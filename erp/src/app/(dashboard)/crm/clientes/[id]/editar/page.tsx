@@ -35,7 +35,7 @@ export default async function EditClientPage({ params, searchParams }: Props) {
         <ActiveToggle entity="clientes" id={id} active={values.active !== false} />
       </div>
       <FlashNotice message={aviso ? `${aviso}. Completá los datos fiscales (CUIT, condición frente al IVA) antes de facturarle.` : undefined} />
-      <EntityForm entity="clientes" id={id} fields={formFields(def)} initial={values} refs={{}} basePath={def.basePath} />
+      <EntityForm entity="clientes" id={id} fields={formFields(def)} initial={values} refs={await ADAPTERS.clientes.refs()} basePath={def.basePath} />
     </div>
   );
 }

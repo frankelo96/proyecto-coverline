@@ -399,6 +399,9 @@ model Client {
   documentType    DocumentType @default(DNI)
   documentNumber  String?
   taxCondition    TaxCondition @default(CONSUMIDOR_FINAL)
+  /// Lista de precios del cliente (mayorista, colegio, empresa…). Sin lista: precio de lista minorista.
+  priceListId     String?
+  priceList       PriceList?   @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   email           String?
   phone           String?
   whatsapp        String?
@@ -716,6 +719,7 @@ model Product {
   productionOrders ProductionOrder[]
   saleItems        SaleItem[]
   quoteItems       QuoteItem[]
+  priceListItems   PriceListItem[]
 
   @@index([category])
   @@map("products")
@@ -1003,6 +1007,9 @@ model Sale {
   arcaRequestedNumber Int?
   arcaLockedAt        DateTime?
   arcaAuthorizedAt    DateTime?
+  /// Lista de precios aplicada (null = minorista)
+  priceListId         String?
+  priceList           PriceList?           @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   // --- Totales ---
   subtotal            Decimal              @db.Decimal(14, 2)
   discountTotal       Decimal              @default(0) @db.Decimal(14, 2)
@@ -1652,4 +1659,36 @@ model StoreCredit {
   @@index([clientId])
   @@index([status])
   @@map("store_credits")
+}
+
+/// Lista de precios: ajuste general sobre el precio de lista (ej. −20% mayorista)
+/// y precios fijos por producto que reemplazan al ajuste.
+model PriceList {
+  id            String          @id @default(cuid())
+  name          String          @unique
+  /// % sobre el precio de lista neto: negativo descuenta, positivo recarga
+  adjustmentPct Decimal         @default(0) @db.Decimal(6, 2)
+  notes         String?
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  items   PriceListItem[]
+  clients Client[]
+  sales   Sale[]
+
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id          String    @id @default(cuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Precio neto (sin IVA) de esta lista para el producto; el ajuste por talle se aplica igual
+  netPrice    Decimal   @db.Decimal(14, 2)
+
+  @@unique([priceListId, productId])
+  @@map("price_list_items")
 }

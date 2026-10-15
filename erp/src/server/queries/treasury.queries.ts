@@ -13,6 +13,7 @@ import type {
 } from "@/generated/prisma/enums";
 import { compareSizes, variantLabel } from "@/lib/catalog/variants";
 import { finalUnitPrice } from "@/lib/pos/sale-math";
+import { activePriceListRules } from "@/server/services/price-lists.service";
 import { agingSummary, type AgingBucket } from "@/lib/purchasing/math";
 import { MOVEMENT_SIGN } from "@/lib/treasury/cash";
 import { chequeLabel } from "@/lib/treasury/cheques";
@@ -68,7 +69,12 @@ export interface CatalogItem {
   size: string;
   color: string | null;
   fabric: string | null;
+  /** Precio final minorista (IVA incluido, con ajuste de talle) */
   price: number;
+  /** Para recalcular con una lista de precios */
+  netPrice: number;
+  vatRate: number;
+  sizeAdjustmentPct: number;
   /** Stock en el local de la caja */
   stock: number;
   /** Stock sumando los locales (sin el mayorista) */
@@ -83,6 +89,7 @@ export interface PosClient {
   canInvoiceA: boolean;
   creditLimit: number;
   balance: number;
+  priceListId: string | null;
 }
 
 export async function getTerminalData(registerId: string) {
@@ -95,7 +102,7 @@ export async function getTerminalData(registerId: string) {
       sales: { orderBy: { number: "desc" }, take: 8, select: { id: true, number: true, kind: true, total: true, createdAt: true, client: { select: { businessName: true } } } },
     },
   });
-  const [products, clients, balances, vaults] = await Promise.all([
+  const [products, clients, balances, vaults, priceLists] = await Promise.all([
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
       orderBy: { name: "asc" },
@@ -104,6 +111,7 @@ export async function getTerminalData(registerId: string) {
     db.client.findMany({ where: { active: true }, orderBy: { businessName: "asc" } }),
     db.accountReceivable.groupBy({ by: ["clientId"], where: { status: { in: [...OPEN] } }, _sum: { balance: true } }),
     db.cashRegister.findMany({ where: { active: true, kind: "CAJA_RESGUARDO" }, select: { id: true, name: true } }),
+    activePriceListRules(db),
   ]);
   const catalog: CatalogItem[] = products.flatMap((p) =>
     [...p.variants]
@@ -121,6 +129,9 @@ export async function getTerminalData(registerId: string) {
         color: v.color,
         fabric: v.fabric,
         price: finalUnitPrice(p.listPrice.toNumber(), p.vatRate.toNumber(), v.priceAdjustmentPct.toNumber()),
+        netPrice: p.listPrice.toNumber(),
+        vatRate: p.vatRate.toNumber(),
+        sizeAdjustmentPct: v.priceAdjustmentPct.toNumber(),
         stock: v.branchStocks.find((s) => s.branchId === register.branchId)?.quantity.toNumber() ?? 0,
         // Suma de los locales: el stock mayorista está reservado para pedidos de clientes.
         totalStock: v.branchStocks.reduce((a, s) => a + s.quantity.toNumber(), 0),
@@ -152,8 +163,10 @@ export async function getTerminalData(registerId: string) {
       canInvoiceA: c.taxCondition === "RESPONSABLE_INSCRIPTO" && c.documentType === "CUIT" && !!c.documentNumber,
       creditLimit: c.creditLimit.toNumber(),
       balance: balanceOf.get(c.id) ?? 0,
+      priceListId: c.priceListId,
     })),
     vaults,
+    priceLists,
   };
 }
 

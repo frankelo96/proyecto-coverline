@@ -17,6 +17,7 @@ import type { ActionStatus } from "@/hooks/use-server-action";
 import { computeQuoteTotals } from "@/lib/crm/quote-math";
 import { formatMoney } from "@/lib/format";
 import { parseLocaleNumber } from "@/lib/masters/fields";
+import { listNetPrice } from "@/lib/pos/price-lists";
 import { saveQuoteAction } from "@/server/actions/crm.actions";
 import type { QuoteFormData } from "@/server/queries/crm.queries";
 
@@ -69,6 +70,8 @@ export function QuoteForm({ data, initial }: { data: QuoteFormData; initial: Quo
 
   const updateLine = (i: number, patch: Partial<QuoteFormLine>) => setLines((prev) => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
+  const clientList = data.priceLists.find((l) => l.id === data.clients.find((c) => c.id === clientId)?.priceListId) ?? null;
+
   function onProductText(i: number, text: string) {
     const p = productsByLabel.get(text);
     if (p) {
@@ -76,7 +79,7 @@ export function QuoteForm({ data, initial }: { data: QuoteFormData; initial: Quo
         productText: text,
         productId: p.id,
         description: `${p.name}${p.sizes ? ` (talles ${p.sizes})` : ""}`,
-        unitPrice: decimalText(p.listPrice),
+        unitPrice: decimalText(listNetPrice(p.listPrice, p.id, clientList)),
         vatRate: String(p.vatRate),
       });
     } else updateLine(i, { productText: text, productId: null });
@@ -187,6 +190,11 @@ export function QuoteForm({ data, initial }: { data: QuoteFormData; initial: Quo
                   <option key={c.id} value={clientLabel(c)} />
                 ))}
               </datalist>
+              {clientList && (
+                <p className="text-xs font-medium text-accent-strong">
+                  Lista de precios del cliente: {clientList.name}. Los productos que agregues toman ese precio.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 ¿No está?{" "}
                 <Link href="/crm/clientes/nuevo" className="underline underline-offset-4" target="_blank">

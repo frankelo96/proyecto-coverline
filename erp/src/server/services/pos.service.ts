@@ -13,10 +13,12 @@ import type { InvoiceType } from "@/generated/prisma/enums";
 import { variantLabel } from "@/lib/catalog/variants";
 import { isFiscal } from "@/lib/arca/codes";
 import { formatMoney } from "@/lib/format";
-import { addDays, computeSaleTotals, finalUnitPrice, planPayments, SaleError } from "@/lib/pos/sale-math";
+import { listFinalPrice } from "@/lib/pos/price-lists";
+import { addDays, computeSaleTotals, planPayments, SaleError } from "@/lib/pos/sale-math";
 import { TreasuryError } from "@/lib/treasury/cash";
 import type { SaleInput } from "@/lib/validations/treasury";
 import { registerCollections } from "@/server/services/collection.service";
+import { priceListRule } from "@/server/services/price-lists.service";
 import { lockRegister, openSessionOf } from "@/server/services/treasury.service";
 import { adjustBranchStock } from "@/server/services/stock.service";
 
@@ -50,6 +52,12 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
     throw new SaleError("La factura A requiere un cliente responsable inscripto con CUIT");
   }
 
+  // --- Lista de precios: la del cliente; otra distinta solo con permiso de descuento (es un precio especial).
+  // "MINORISTA" fuerza el precio de lista sin la lista del cliente.
+  const listId = input.priceListId === "MINORISTA" ? null : (input.priceListId ?? client?.priceListId ?? null);
+  if (listId !== (client?.priceListId ?? null) && !user.canDiscount) throw new SaleError("Solo un usuario con permiso de descuento puede cambiar la lista de precios del cliente");
+  const list = listId ? await priceListRule(tx, listId) : null;
+
   // --- Ítems con precio del servidor
   const variantIds = input.items.flatMap((i) => (i.variantId ? [i.variantId] : []));
   const variants = await tx.productVariant.findMany({ where: { id: { in: variantIds } }, include: { product: true } });
@@ -65,7 +73,7 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
         input: i,
         variant: v,
         description: variantLabel(v.product.name, v),
-        unitPrice: finalUnitPrice(listPrice, vatRate, v.priceAdjustmentPct.toNumber()),
+        unitPrice: listFinalPrice(listPrice, vatRate, v.priceAdjustmentPct.toNumber(), v.productId, list),
         vatRate,
         unitCost: v.product.currentCost,
       };
@@ -108,6 +116,7 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
       channel: "MOSTRADOR",
       status: input.deliveryMethod === "ENVIO" ? "CONFIRMADA" : "ENTREGADA",
       clientId: client?.id ?? null,
+      priceListId: list?.id ?? null,
       userId: user.id,
       cashSessionId: session.id,
       branchId: branch.id,

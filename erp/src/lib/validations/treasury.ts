@@ -84,6 +84,8 @@ export type CollectionPayment = z.infer<typeof collectionPaymentSchema>;
 export const saleSchema = z.object({
   registerId: id,
   clientId: z.string().nullable(),
+  /** Lista de precios; si se omite se usa la del cliente */
+  priceListId: z.string().nullable().default(null),
   invoiceType: z.enum(["TICKET_INTERNO", "FACTURA_B", "FACTURA_A"]),
   items: z
     .array(

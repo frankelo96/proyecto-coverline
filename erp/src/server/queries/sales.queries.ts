@@ -74,6 +74,7 @@ export async function getSaleDetail(id: string) {
       branch: true,
       user: { select: { name: true } },
       client: { select: { id: true, businessName: true } },
+      priceList: { select: { name: true } },
       originalSale: { select: { id: true, number: true, invoiceType: true, pointOfSale: true, invoiceNumber: true, arcaStatus: true } },
       returns: { orderBy: { createdAt: "asc" }, select: { id: true, number: true, total: true, createdAt: true, status: true, invoiceType: true, pointOfSale: true, invoiceNumber: true, arcaStatus: true } },
       receivables: { where: { status: { in: ["PENDIENTE", "PARCIAL"] } }, select: { balance: true } },
@@ -124,6 +125,7 @@ export async function getSaleDetail(id: string) {
     taxTotal: s.taxTotal.toNumber(),
     discountTotal: s.discountTotal.toNumber(),
     discountReason: s.discountReason,
+    priceListName: s.priceList?.name ?? null,
     total: s.total.toNumber(),
     change: s.changeAmount.toNumber(),
     items: s.items.map((i) => {

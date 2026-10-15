@@ -61,6 +61,7 @@ const CLIENT_FIELDS: FieldDef[] = [
   { key: "postalCode", label: "Código postal", type: "text", max: 12, aliases: ["cp"], section: "Contacto" },
   { key: "creditLimit", label: "Límite de crédito", type: "number", minValue: 0, defaultValue: 0, aliases: ["limite", "credito"], section: "Comercial", help: "Para ventas en cuenta corriente. 0 = sin crédito." },
   { key: "paymentTermDays", label: "Plazo de pago (días)", type: "int", minValue: 0, maxValue: 365, defaultValue: 0, aliases: ["plazo", "dias"], section: "Comercial" },
+  { key: "priceListId", label: "Lista de precios", type: "ref", ref: "priceLists", aliases: ["lista", "lista de precios"], section: "Comercial", help: "Vacío = precio minorista. Se aplica sola en el POS y en presupuestos." },
   { key: "tags", label: "Etiquetas", type: "tags", aliases: ["tags", "segmentos"], section: "Comercial", help: "Separadas por coma. Sirven para armar campañas (ej. colegio, reposicion-anual)." },
   { key: "purchaseMonths", label: "Meses de compra", type: "months", aliases: ["meses", "temporada"], section: "Comercial", help: "Meses en que suele comprar (ej. febrero, marzo)." },
   { key: "notes", label: "Observaciones", type: "textarea", max: 2000, aliases: ["notas", "comentarios"], section: "Comercial", wide: true },

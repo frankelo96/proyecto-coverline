@@ -16,6 +16,7 @@ import { StatusMessage } from "@/components/ui/status-message";
 import type { ActionStatus } from "@/hooks/use-server-action";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { CATEGORY_LABELS } from "@/lib/masters/labels";
+import { listFinalPrice } from "@/lib/pos/price-lists";
 import { computeSaleTotals, planPayments, SaleError } from "@/lib/pos/sale-math";
 import { UI_COLLECTION_METHODS } from "@/lib/validations/treasury";
 import { createSaleAction } from "@/server/actions/treasury.actions";
@@ -61,8 +62,17 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
   const [pending, startTransition] = useTransition();
 
   const client = data.clients.find((c) => c.id === clientId) ?? null;
+  // Lista de precios: "" = la del cliente; "MINORISTA" = sin lista; o el id de otra lista (con permiso de descuento).
+  const [listChoice, setListChoice] = useState("");
+  const listIdFor = (c: typeof client, choice: string) => (choice === "" ? (c?.priceListId ?? null) : choice === "MINORISTA" ? null : choice);
+  const listFor = (c: typeof client, choice: string) => data.priceLists.find((l) => l.id === listIdFor(c, choice)) ?? null;
+  const priceList = listFor(client, listChoice);
 
-  const products = useMemo(() => groupCatalog(data.catalog), [data.catalog]);
+  const catalog = useMemo(
+    () => (priceList ? data.catalog.map((c) => ({ ...c, price: listFinalPrice(c.netPrice, c.vatRate, c.sizeAdjustmentPct, c.productId, priceList) })) : data.catalog),
+    [data.catalog, priceList],
+  );
+  const products = useMemo(() => groupCatalog(catalog), [catalog]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [rubro, setRubro] = useState<string>("");
   const openProduct = products.find((p) => p.productId === openId) ?? null;
@@ -71,8 +81,8 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
   /** Código de barras o SKU exacto de una variante (lector de códigos): se agrega directo. */
   const exactVariant = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? (data.catalog.find((c) => c.barcode?.toLowerCase() === q || c.sku.toLowerCase() === q) ?? null) : null;
-  }, [query, data.catalog]);
+    return q ? (catalog.find((c) => c.barcode?.toLowerCase() === q || c.sku.toLowerCase() === q) ?? null) : null;
+  }, [query, catalog]);
 
   const results = useMemo(() => {
     const tokens = normalize(query).split(/\s+/).filter(Boolean);
@@ -122,7 +132,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
   }, [totals, payments]);
 
   function addVariant(variantId: string) {
-    const item = data.catalog.find((c) => c.variantId === variantId)!;
+    const item = catalog.find((c) => c.variantId === variantId)!;
     setCart((c) => {
       const existing = c.find((l) => l.variantId === variantId);
       if (existing) return c.map((l) => (l === existing ? { ...l, quantity: String(num(l.quantity) + 1) } : l));
@@ -139,6 +149,18 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     setFreePrice("");
   }
 
+  /** Cambió el cliente o la lista: se recalculan los precios de las prendas ya cargadas. */
+  function changePricing(nextClientId: string, nextChoice: string) {
+    const nextClient = data.clients.find((c) => c.id === nextClientId) ?? null;
+    const list = listFor(nextClient, nextChoice);
+    setCart((c) =>
+      c.map((l) => {
+        const item = l.variantId ? data.catalog.find((x) => x.variantId === l.variantId) : null;
+        return item ? { ...l, unitPrice: listFinalPrice(item.netPrice, item.vatRate, item.sizeAdjustmentPct, item.productId, list) } : l;
+      }),
+    );
+  }
+
   const updateLine = (key: number, patch: Partial<CartLine>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   function quickPay(method: "EFECTIVO" | "MERCADO_PAGO" | "TRANSFERENCIA") {
@@ -150,6 +172,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     setCart([]);
     setPayments([]);
     setClientId("");
+    setListChoice("");
     setInvoiceType("TICKET_INTERNO");
     setGlobalDiscount("0");
     setDiscountReason("");
@@ -165,6 +188,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
       const res = await createSaleAction({
         registerId: data.register.id,
         clientId: clientId || null,
+        priceListId: listChoice || null,
         invoiceType,
         items: cart.map((l) => ({ variantId: l.variantId, description: l.variantId ? null : l.description, quantity: num(l.quantity), unitPrice: l.unitPrice, discountPct: num(l.discountPct) })),
         globalDiscountPct: num(globalDiscount),
@@ -407,7 +431,11 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                 onChange={(e) => {
                   setClientId(e.target.value);
                   const c = data.clients.find((x) => x.id === e.target.value);
-                  if (!c?.canInvoiceA && invoiceType === "FACTURA_A") setInvoiceType("FACTURA_B");
+                  // Comprobante sugerido por la condición frente al IVA: RI con CUIT → A; el resto, B (o ticket si venía en ticket).
+                  if (c?.canInvoiceA) setInvoiceType("FACTURA_A");
+                  else if (invoiceType === "FACTURA_A") setInvoiceType("FACTURA_B");
+                  setListChoice("");
+                  changePricing(e.target.value, "");
                 }}
               >
                 <option value="">Consumidor final</option>
@@ -424,6 +452,31 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                 </p>
               )}
             </div>
+            {data.priceLists.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-list`}>Lista de precios</Label>
+                <NativeSelect
+                  id={`${id}-list`}
+                  value={listChoice}
+                  disabled={!canDiscount}
+                  onChange={(e) => {
+                    setListChoice(e.target.value);
+                    changePricing(clientId, e.target.value);
+                  }}
+                >
+                  <option value="">{client?.priceListId ? `Del cliente: ${data.priceLists.find((l) => l.id === client.priceListId)?.name ?? "—"}` : "Minorista (precio de lista)"}</option>
+                  {client?.priceListId && <option value="MINORISTA">Minorista (precio de lista)</option>}
+                  {data.priceLists
+                    .filter((l) => l.id !== client?.priceListId)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                </NativeSelect>
+                {!canDiscount && <p className="text-xs text-muted-foreground">Se aplica la lista del cliente. Para usar otra hace falta permiso de descuento.</p>}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${id}-inv`}>Comprobante</Label>
               <NativeSelect id={`${id}-inv`} value={invoiceType} onChange={(e) => setInvoiceType(e.target.value as typeof invoiceType)}>

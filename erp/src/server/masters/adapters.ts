@@ -96,7 +96,8 @@ export function uniqueMessage(e: unknown, labels: Record<string, string>): strin
 
 const clients: Adapter = {
   async refs() {
-    return {};
+    const lists = await db.priceList.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+    return { priceLists: lists.map((l) => ({ value: l.id, label: l.name, keys: [l.name] })) };
   },
   async list(q, includeInactive) {
     const qDigits = q ? digits(q) : "";
@@ -183,6 +184,7 @@ const clients: Adapter = {
       postalCode: str(v.postalCode),
       creditLimit: dec(v.creditLimit),
       paymentTermDays: num(v.paymentTermDays),
+      priceListId: str(v.priceListId),
       tags: (v.tags as string[]) ?? [],
       purchaseMonths: (v.purchaseMonths as number[]) ?? [],
       notes: str(v.notes),
@@ -218,6 +220,7 @@ function clientValues(c: Prisma.ClientGetPayload<object>): Values {
     postalCode: c.postalCode,
     creditLimit: c.creditLimit.toNumber(),
     paymentTermDays: c.paymentTermDays,
+    priceListId: c.priceListId,
     tags: c.tags,
     purchaseMonths: c.purchaseMonths,
     notes: c.notes,

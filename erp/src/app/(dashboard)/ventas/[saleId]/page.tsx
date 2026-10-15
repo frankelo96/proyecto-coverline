@@ -165,6 +165,12 @@ export default async function SaleDetailPage({ params, searchParams }: Props) {
         <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
           <Card>
             <CardContent className="flex flex-col gap-3 text-sm">
+              {s.priceListName && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Lista de precios</span>
+                  <span>{s.priceListName}</span>
+                </div>
+              )}
               {s.discountTotal > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Descuentos ({s.discountReason})</span>

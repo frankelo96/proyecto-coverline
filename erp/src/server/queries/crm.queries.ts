@@ -4,6 +4,7 @@ import type { ClientType, LeadStatus, QuoteStatus } from "@/generated/prisma/enu
 import { effectiveQuoteStatus } from "@/lib/crm/quote-math";
 import { whatsappNumber } from "@/lib/masters/fields";
 import { db } from "@/server/db";
+import { activePriceListRules } from "@/server/services/price-lists.service";
 import { voucherLabel } from "@/server/queries/sales.queries";
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
@@ -74,11 +75,11 @@ export async function getQuotePipelineSummary() {
 }
 
 export async function getQuoteFormData() {
-  const [clients, leads, products] = await Promise.all([
+  const [clients, leads, products, priceLists] = await Promise.all([
     db.client.findMany({
       where: { active: true },
       orderBy: { businessName: "asc" },
-      select: { id: true, businessName: true, documentNumber: true, taxCondition: true, paymentTermDays: true },
+      select: { id: true, businessName: true, documentNumber: true, taxCondition: true, paymentTermDays: true, priceListId: true },
     }),
     db.lead.findMany({
       where: { status: { notIn: ["GANADO", "PERDIDO"] } },
@@ -90,9 +91,11 @@ export async function getQuoteFormData() {
       orderBy: { name: "asc" },
       select: { id: true, sku: true, name: true, listPrice: true, vatRate: true, variants: { where: { active: true }, select: { size: true }, orderBy: { createdAt: "asc" } } },
     }),
+    activePriceListRules(db),
   ]);
   return {
-    clients: clients.map((c) => ({ id: c.id, name: c.businessName, document: c.documentNumber, taxCondition: c.taxCondition, paymentTermDays: c.paymentTermDays })),
+    priceLists,
+    clients: clients.map((c) => ({ id: c.id, name: c.businessName, document: c.documentNumber, taxCondition: c.taxCondition, paymentTermDays: c.paymentTermDays, priceListId: c.priceListId })),
     leads: leads.map((l) => ({ id: l.id, label: l.company ? `${l.company} (${l.name})` : l.name, clientId: l.clientId })),
     products: products.map((p) => ({
       id: p.id,

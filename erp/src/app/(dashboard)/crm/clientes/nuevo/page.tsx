@@ -6,6 +6,7 @@ import { EntityForm } from "@/components/masters/entity-form";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { ENTITIES, formFields } from "@/lib/masters/definitions";
 import { requirePageUser } from "@/server/auth/session";
+import { ADAPTERS } from "@/server/masters/adapters";
 
 export const metadata: Metadata = { title: "Nuevo cliente" };
 
@@ -20,7 +21,7 @@ export default async function NewClientPage() {
         </Link>
         <h1 className="text-3xl font-bold tracking-tight">Nuevo cliente</h1>
       </div>
-      <EntityForm entity="clientes" id={null} fields={formFields(def)} initial={null} refs={{}} basePath={def.basePath} />
+      <EntityForm entity="clientes" id={null} fields={formFields(def)} initial={null} refs={await ADAPTERS.clientes.refs()} basePath={def.basePath} />
     </div>
   );
 }
