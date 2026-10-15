@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BridgeControls } from "@/components/woo/bridge-controls";
+import { PriceSyncToggle } from "@/components/woo/price-sync-toggle";
 import { LinkCell } from "@/components/woo/link-cell";
 import { WooControls } from "@/components/woo/woo-controls";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { ORDER_STATUS_LABELS, webQuantity } from "@/lib/woo/stock";
 import { cn } from "@/lib/utils";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { getWebPriceSync } from "@/server/services/settings.service";
 import { webStockByVariant } from "@/server/services/stock.service";
 import { wooConfig } from "@/server/woo/config";
 import { PLUGIN_VERSION } from "@/server/woo/wordpress-plugin";
@@ -55,6 +57,7 @@ export default async function WebStorePage({ searchParams }: Props) {
     webStockByVariant(db),
     db.wooBridge.findUnique({ where: { id: "default" } }),
   ]);
+  const priceSync = await getWebPriceSync();
   const stale = isStale(bridge?.lastSeenAt ?? null);
   const modeLabel = cfg.mode === "activo" ? "Activa" : cfg.mode === "solo-lectura" ? "Modo prueba (solo lectura)" : "Desactivada";
   const modeBadge = cfg.mode === "activo" ? ("success" as const) : cfg.mode === "solo-lectura" ? ("accent" as const) : ("outline" as const);
@@ -116,6 +119,7 @@ export default async function WebStorePage({ searchParams }: Props) {
         </CardHeader>
         <CardContent className="flex flex-col gap-5 text-sm">
           {canWrite && <BridgeControls connected={!!bridge} />}
+          {bridge && <PriceSyncToggle enabled={priceSync} canWrite={canWrite} />}
           {(!bridge || !bridge.lastSeenAt) && (
             <ol className="list-inside list-decimal space-y-1.5">
               <li>Tocá «Descargar plugin para WordPress» (ya trae la dirección del ERP y la clave; no lo compartas).</li>

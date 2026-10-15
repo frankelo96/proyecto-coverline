@@ -2,7 +2,7 @@ import "server-only";
 
 import JSZip from "jszip";
 
-export const PLUGIN_VERSION = "1.2.0";
+export const PLUGIN_VERSION = "1.3.0";
 export const PLUGIN_SLUG = "coverline-erp-stock";
 
 /**
@@ -15,7 +15,7 @@ export const PLUGIN_SLUG = "coverline-erp-stock";
 const PLUGIN_SOURCE = String.raw`<?php
 /**
  * Plugin Name: Coverline ERP – Stock
- * Description: Sincroniza el stock de WooCommerce con Coverline ERP (stock de los locales menos el margen de seguridad) y le informa los pedidos web. No modifica precios.
+ * Description: Sincroniza el stock de WooCommerce con Coverline ERP (stock de los locales menos el margen de seguridad) y le informa los pedidos web. Si se activa en el ERP, también actualiza el precio regular.
  * Version: __VERSION__
  * Author: Coverline
  * Requires Plugins: woocommerce
@@ -119,6 +119,12 @@ function coverline_erp_stock_of($product)
 }
 
 /** Código de barras del campo "GTIN, UPC, EAN o ISBN" de WooCommerce (desde la versión 9.2). */
+function coverline_erp_price_of($product)
+{
+    $price = $product->get_regular_price();
+    return $price === '' || $price === null ? null : (float) $price;
+}
+
 function coverline_erp_gtin_of($product)
 {
     return method_exists($product, 'get_global_unique_id') ? (string) $product->get_global_unique_id() : '';
@@ -143,6 +149,7 @@ function coverline_erp_catalog()
                     'name' => (string) $variation->get_name(),
                     'stock' => coverline_erp_stock_of($variation),
                     'gtin' => coverline_erp_gtin_of($variation),
+                    'price' => coverline_erp_price_of($variation),
                 );
             }
         } else {
@@ -153,6 +160,7 @@ function coverline_erp_catalog()
                 'name' => (string) $product->get_name(),
                 'stock' => coverline_erp_stock_of($product),
                 'gtin' => coverline_erp_gtin_of($product),
+                'price' => coverline_erp_price_of($product),
             );
         }
     }
@@ -178,6 +186,30 @@ function coverline_erp_apply_stock($items)
             }
         } catch (Throwable $e) {
             $row['error'] = 'Artículo ' . $id . ': ' . $e->getMessage();
+        }
+        $applied[] = $row;
+    }
+    return $applied;
+}
+
+/** Graba el precio regular recibido del ERP (solo si está activa la sincronización de precios). */
+function coverline_erp_apply_prices($items)
+{
+    $applied = array();
+    foreach ($items as $item) {
+        $id = !empty($item['variation_id']) ? (int) $item['variation_id'] : (int) $item['product_id'];
+        $price = round((float) $item['price'], 2);
+        $row = array('product_id' => (int) $item['product_id'], 'variation_id' => (int) $item['variation_id'], 'price' => $price);
+        try {
+            $product = wc_get_product($id);
+            if (!$product) {
+                $row['error'] = 'El artículo ' . $id . ' ya no existe en la tienda';
+            } elseif ($price > 0 && coverline_erp_price_of($product) !== $price) {
+                $product->set_regular_price(wc_format_decimal($price, 2));
+                $product->save();
+            }
+        } catch (Throwable $e) {
+            $row['error'] = 'Precio del artículo ' . $id . ': ' . $e->getMessage();
         }
         $applied[] = $row;
     }
@@ -229,6 +261,7 @@ function coverline_erp_sync($manual = false)
             'site' => home_url(),
             'orders' => coverline_erp_orders(),
             'applied' => get_option('coverline_erp_applied', array()),
+            'applied_prices' => get_option('coverline_erp_applied_prices', array()),
         );
         if ($manual || get_option('coverline_erp_need_catalog', 1)) {
             $payload['catalog'] = coverline_erp_catalog();
@@ -250,12 +283,15 @@ function coverline_erp_sync($manual = false)
         }
         // Lo informado ya quedó registrado en el ERP.
         update_option('coverline_erp_applied', array(), false);
+        update_option('coverline_erp_applied_prices', array(), false);
         $applied = !empty($data['stock']) ? coverline_erp_apply_stock($data['stock']) : array();
         update_option('coverline_erp_applied', $applied, false);
+        $prices = !empty($data['prices']) ? coverline_erp_apply_prices($data['prices']) : array();
+        update_option('coverline_erp_applied_prices', $prices, false);
         $gtins = !empty($data['gtin']) ? coverline_erp_apply_gtin($data['gtin']) : 0;
         update_option('coverline_erp_need_catalog', !empty($data['need_catalog']) ? 1 : 0, false);
         update_option('coverline_erp_last_ok', $started, false);
-        $message = $data['message'] . (count($applied) ? ' · ' . count($applied) . ' artículos actualizados en la tienda' : '') . ($gtins ? ' · ' . $gtins . ' códigos de barras cargados' : '');
+        $message = $data['message'] . (count($applied) ? ' · ' . count($applied) . ' artículos actualizados en la tienda' : '') . ($gtins ? ' · ' . $gtins . ' códigos de barras cargados' : '') . (count($prices) ? ' · ' . count($prices) . ' precios actualizados' : '');
         update_option('coverline_erp_last_result', array('time' => time(), 'ok' => true, 'message' => $message), false);
         return $message;
     } catch (Throwable $e) {
@@ -289,7 +325,7 @@ function coverline_erp_admin_page()
     $last = get_option('coverline_erp_last_result');
     $next = wp_next_scheduled('coverline_erp_sync_event');
     echo '<div class="wrap"><h1>Coverline ERP – Stock</h1>';
-    echo '<p>Conectado con <code>' . esc_html(COVERLINE_ERP_URL) . '</code>. El stock de la tienda lo calcula el ERP (stock de los locales menos el margen de seguridad); este plugin solo lo copia. Los precios no se tocan.</p>';
+    echo '<p>Conectado con <code>' . esc_html(COVERLINE_ERP_URL) . '</code>. El stock de la tienda lo calcula el ERP (stock de los locales menos el margen de seguridad); este plugin solo lo copia. Los precios solo se actualizan si se activa la sincronización de precios en el ERP.</p>';
     if ($last) {
         $color = $last['ok'] ? '#00a32a' : '#d63638';
         echo '<p><strong>Última sincronización:</strong> ' . esc_html(wp_date('d/m/Y H:i', $last['time'])) . ' — <span style="color:' . $color . '">' . esc_html($last['message']) . '</span></p>';

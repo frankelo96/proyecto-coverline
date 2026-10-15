@@ -6,8 +6,10 @@ import { z } from "zod";
 
 import { Prisma } from "@/generated/prisma/client";
 import { normalizeEan13 } from "@/lib/catalog/barcode";
+import { finalUnitPrice } from "@/lib/pos/sale-math";
 import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
+import { getWebPriceSync } from "@/server/services/settings.service";
 import { webStockByVariant } from "@/server/services/stock.service";
 
 import type { WooOrderData } from "./client";
@@ -86,11 +88,13 @@ export const bridgeRequestSchema = z.object({
         name: z.string().default(""),
         stock: z.number().nullable().default(null),
         gtin: z.string().max(40).default(""),
+        price: z.number().nullable().default(null),
       }),
     )
     .optional(),
   orders: z.array(orderSchema).default([]),
   applied: z.array(z.object({ product_id: int, variation_id: int.default(0), quantity: int, error: z.string().optional() })).default([]),
+  applied_prices: z.array(z.object({ product_id: int, variation_id: int.default(0), price: z.coerce.number(), error: z.string().optional() })).default([]),
 });
 export type BridgeRequest = z.infer<typeof bridgeRequestSchema>;
 
@@ -102,13 +106,15 @@ export interface BridgeResponse {
   stock: { product_id: number; variation_id: number; quantity: number }[];
   /** Códigos de barras a cargar en la tienda (campo GTIN), cuando difieren del ERP */
   gtin: { product_id: number; variation_id: number; gtin: string }[];
+  /** Precio regular a publicar (solo si está activa la sincronización de precios) */
+  prices: { product_id: number; variation_id: number; price: number }[];
   message: string;
 }
 
 export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<BridgeResponse> {
   const { mode, safetyStock } = wooConfig();
   await db.wooBridge.update({ where: { id: bridgeId }, data: { lastSeenAt: new Date(), pluginVersion: req.version || null, siteUrl: req.site || null } });
-  if (mode === "desactivado") return { ok: true, mode, need_catalog: false, stock: [], gtin: [], message: "Sincronización desactivada en el ERP" };
+  if (mode === "desactivado") return { ok: true, mode, need_catalog: false, stock: [], gtin: [], prices: [], message: "Sincronización desactivada en el ERP" };
 
   const summary: SyncSummary = { mode, orders: { seen: 0, deducted: 0, restocked: 0, baseline: 0, unmatchedLines: [] }, push: { pending: 0, sent: 0, errors: [], preview: [] } };
   const run = await db.wooSyncRun.create({ data: { trigger: "puente", mode } });
@@ -126,10 +132,16 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
       }
     }
 
+    for (const a of req.applied_prices) {
+      const where = { wooProductId: a.product_id, wooVariationId: a.variation_id };
+      if (a.error) await db.wooLink.updateMany({ where, data: { lastError: a.error.slice(0, 300) } });
+      else await db.wooLink.updateMany({ where, data: { lastPushedPrice: a.price } });
+    }
+
     // 2. Lista de productos (cada una hora o cuando se pide desde el ERP).
     if (req.catalog) {
       summary.catalog = await linkCatalog(
-        req.catalog.map((c) => ({ productId: c.product_id, variationId: c.variation_id, sku: c.sku, gtin: c.gtin, name: c.name, stock: c.stock === null ? null : Math.floor(c.stock) })),
+        req.catalog.map((c) => ({ productId: c.product_id, variationId: c.variation_id, sku: c.sku, gtin: c.gtin, name: c.name, stock: c.stock === null ? null : Math.floor(c.stock), price: c.price })),
       );
       await db.wooBridge.update({ where: { id: bridgeId }, data: { lastCatalogAt: now, catalogRequested: false } });
     }
@@ -138,13 +150,26 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
     await processOrders(mode, req.orders as unknown as WooOrderData[], summary);
 
     // 4. Stock a publicar: lo que difiere de lo que hoy tiene la tienda.
-    const links = await db.wooLink.findMany({ where: { variantId: { not: null } }, include: { variant: { select: { sku: true, barcode: true } } } });
+    const links = await db.wooLink.findMany({
+      where: { variantId: { not: null } },
+      include: { variant: { select: { sku: true, barcode: true, priceAdjustmentPct: true, product: { select: { listPrice: true, vatRate: true } } } } },
+    });
     const stock = await webStockByVariant(db);
     const pending = links
       .map((l) => ({ link: l, total: stock.get(l.variantId!) ?? 0, quantity: webQuantity(stock.get(l.variantId!) ?? 0, safetyStock) }))
       .filter((x) => x.link.lastPushedQty !== x.quantity);
     summary.push.pending = pending.length;
     summary.push.preview = pending.slice(0, 300).map((x) => ({ sku: x.link.variant!.sku, name: x.link.wooName, total: x.total, web: x.quantity, before: x.link.lastPushedQty }));
+
+    // 5. Precios (opcional): precio de lista minorista con IVA y ajuste de talle.
+    const syncPrices = mode === "activo" && (await getWebPriceSync());
+    const prices = syncPrices
+      ? links
+          .map((l) => ({ l, price: finalUnitPrice(l.variant!.product.listPrice.toNumber(), l.variant!.product.vatRate.toNumber(), l.variant!.priceAdjustmentPct.toNumber()) }))
+          .filter(({ l, price }) => price > 0 && (l.lastPushedPrice === null || Math.abs(l.lastPushedPrice.toNumber() - price) > 0.005))
+          .slice(0, 200)
+          .map(({ l, price }) => ({ product_id: l.wooProductId, variation_id: l.wooVariationId, price }))
+      : [];
 
     const bridge = await db.wooBridge.findUniqueOrThrow({ where: { id: bridgeId } });
     const needCatalog = bridge.catalogRequested || !bridge.lastCatalogAt || now.getTime() - bridge.lastCatalogAt.getTime() > CATALOG_EVERY_MS;
@@ -166,9 +191,10 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
               return ean && current !== ean ? [{ product_id: l.wooProductId, variation_id: l.wooVariationId, gtin: ean }] : [];
             })
           : [],
+      prices,
       message:
         mode === "activo"
-          ? `${summary.orders.deducted} pedidos descontados, ${pending.length} artículos para actualizar`
+          ? `${summary.orders.deducted} pedidos descontados, ${pending.length} artículos para actualizar${prices.length ? `, ${prices.length} precios` : ""}`
           : `Modo prueba: ${pending.length} artículos cambiarían (no se escribe nada en la tienda)`,
     };
   } catch (e) {

@@ -1500,6 +1500,8 @@ model WooLink {
   /// Cómo se vinculó: SKU (automático) o MANUAL
   linkedBy       String?
   lastPushedQty  Int?
+  /// Precio regular que tiene la tienda (lo informa el plugin; se actualiza si está activa la sincronización de precios)
+  lastPushedPrice Decimal?       @db.Decimal(14, 2)
   lastPushedAt   DateTime?
   lastError      String?
   createdAt      DateTime        @default(now())

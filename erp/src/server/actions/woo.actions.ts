@@ -7,6 +7,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { setWebPriceSync } from "@/server/services/settings.service";
 import { disconnectBridge, regenerateBridgeToken, requestCatalog } from "@/server/woo/bridge";
 import { wooAccessMode, WooError, wooFetch } from "@/server/woo/client";
 import { wooConfig } from "@/server/woo/config";
@@ -122,5 +123,24 @@ export async function disconnectBridgeAction(): Promise<ActionResult> {
     return { ok: true, data: undefined, message: "Plugin desconectado. Desactivalo también en WordPress." };
   } catch (e) {
     return fail(e, "disconnect");
+  }
+}
+
+/** Activa o desactiva la actualización del precio regular de la tienda desde el ERP. */
+export async function setWebPriceSyncAction(enabled: boolean): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.mastersWrite);
+    await setWebPriceSync(enabled === true);
+    await db.auditLog.create({ data: { userId: user.id, entity: "AppSetting", entityId: "woo.syncPrices", action: "UPDATE", data: { enabled } } });
+    revalidatePath("/maestros/tienda-web");
+    return {
+      ok: true,
+      data: undefined,
+      message: enabled
+        ? "Sincronización de precios activada: en la próxima sincronización la tienda toma el precio de lista (con IVA y ajuste de talle)."
+        : "Sincronización de precios desactivada: los precios de la tienda no se tocan.",
+    };
+  } catch (e) {
+    return fail(e, "prices");
   }
 }

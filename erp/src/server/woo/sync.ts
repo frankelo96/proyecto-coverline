@@ -47,6 +47,8 @@ export interface CatalogItem {
   stock?: number | null;
   /** Código de barras (GTIN/EAN) cargado en la tienda; también sirve para vincular */
   gtin?: string;
+  /** Precio regular que tiene hoy la tienda (lo informa el plugin desde la v1.3) */
+  price?: number | null;
 }
 
 /** Guarda los artículos de la tienda y los vincula por SKU (los vínculos manuales se respetan). */
@@ -75,6 +77,7 @@ export async function linkCatalog(items: CatalogItem[]) {
         variantId,
         linkedBy: keepManual ? "MANUAL" : variantId ? "SKU" : null,
         ...(it.stock !== undefined ? { lastPushedQty: it.stock } : {}),
+        ...(it.price !== undefined && it.price !== null ? { lastPushedPrice: it.price } : {}),
       },
       create: {
         wooProductId: it.productId,
@@ -84,6 +87,7 @@ export async function linkCatalog(items: CatalogItem[]) {
         variantId,
         linkedBy: variantId ? "SKU" : null,
         ...(it.stock !== undefined ? { lastPushedQty: it.stock } : {}),
+        ...(it.price !== undefined && it.price !== null ? { lastPushedPrice: it.price } : {}),
       },
     });
   }
