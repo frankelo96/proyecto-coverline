@@ -1,4 +1,4 @@
-import { ArrowRight, Barcode, ChevronLeft, Printer, Scissors } from "lucide-react";
+import { ArrowRight, Barcode, ChevronLeft, FileText, Printer, Scissors } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -66,6 +66,13 @@ export default async function OrderDetailPage({ params }: Props) {
           <p className="text-sm text-muted-foreground">{order.client ? `Pedido de ${order.client.name}` : "Producción para stock"}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {order.batch && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/produccion/comprobantes/${order.batch.id}`} target="_blank">
+                <FileText /> Comprobante #{order.batch.number}
+              </Link>
+            </Button>
+          )}
           {order.status !== "CANCELADA" && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/produccion/ordenes/${order.id}/corte`} target="_blank">

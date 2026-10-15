@@ -11,6 +11,7 @@ import {
   cancelSchema,
   closeCutSchema,
   closeQualitySchema,
+  createBatchSchema,
   createOrderSchema,
   materialRulesSchema,
   orderIdSchema,
@@ -51,6 +52,17 @@ export async function createOrderAction(raw: unknown): Promise<ActionResult<{ id
     const { result } = await run(createOrderSchema, raw, (tx, input, userId) => production.createProductionOrder(tx, input, userId));
     revalidatePath("/produccion/ordenes");
     return { ok: true, data: result, message: `Orden #${result.number} creada` };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+export async function createBatchAction(raw: unknown): Promise<ActionResult<{ id: string; number: number }>> {
+  try {
+    const { result } = await run(createBatchSchema, raw, (tx, input, userId) => production.createProductionBatch(tx, input, userId));
+    revalidatePath("/produccion/ordenes");
+    const ops = result.orders.map((o) => `#${o.number}`).join(", ");
+    return { ok: true, data: { id: result.id, number: result.number }, message: `Comprobante #${result.number} creado (órdenes ${ops})` };
   } catch (e) {
     return toError(e);
   }

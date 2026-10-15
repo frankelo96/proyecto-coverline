@@ -20,7 +20,10 @@ export default async function NewOrderPage({ searchParams }: Props) {
       <Link href="/produccion/ordenes" className="inline-flex min-h-10 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft aria-hidden="true" className="size-4" /> Órdenes de producción
       </Link>
-      <h1 className="text-3xl font-bold tracking-tight">Nueva orden de producción</h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Nueva orden de producción</h1>
+        <p className="text-sm text-muted-foreground">Cargá todos los productos del pedido con “Agregar producto”. Se genera una orden por producto (para corte y talleres) y un comprobante con el detalle completo.</p>
+      </div>
       <NewOrderForm data={data} prefill={{ productId: sp.producto, clientId: sp.cliente, notes: sp.notas?.slice(0, 500) }} />
     </div>
   );

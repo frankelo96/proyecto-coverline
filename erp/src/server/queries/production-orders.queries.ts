@@ -132,6 +132,8 @@ export interface OrderDetail {
   requiresPersonalization: boolean;
   product: { id: string; sku: string; name: string };
   client: { name: string } | null;
+  /** Comprobante que agrupa esta orden con otras del mismo pedido */
+  batch: { id: string; number: number } | null;
   quantityPlanned: number;
   quantityInProcess: number;
   quantityFinished: number;
@@ -186,6 +188,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         },
       },
       client: { select: { businessName: true, fantasyName: true } },
+      batch: { select: { id: true, number: true } },
       createdBy: { select: { name: true } },
       items: { include: { variant: { select: { size: true, color: true, fabric: true } } } },
       stageLogs: { orderBy: { createdAt: "asc" }, include: { user: { select: { name: true } } } },
@@ -238,6 +241,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     requiresPersonalization: o.requiresPersonalization,
     product: { id: o.product.id, sku: o.product.sku, name: o.product.name },
     client: o.client ? { name: o.client.fantasyName ?? o.client.businessName } : null,
+    batch: o.batch,
     quantityPlanned: o.quantityPlanned,
     quantityInProcess: o.quantityInProcess,
     quantityFinished: o.quantityFinished,

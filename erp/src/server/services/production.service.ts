@@ -23,8 +23,9 @@ import {
   WorkflowError,
   type OrderLike,
 } from "@/lib/production/workflow";
+import { startOfLocalDay } from "@/lib/dates";
 import { formatMoney, formatNumber } from "@/lib/format";
-import type { CreateOrderInput } from "@/lib/validations/production";
+import type { CreateBatchInput, CreateOrderInput } from "@/lib/validations/production";
 import { type MaterialAlternative, orderConsumption } from "@/lib/production/consumption";
 import { moveRawMaterial, netConsumptionOfOrder } from "@/server/services/materials.service";
 import { adjustBranchStock, mainBranchId, wholesaleBranchId } from "@/server/services/stock.service";
@@ -86,7 +87,13 @@ async function logStage(
   });
 }
 
-export async function createProductionOrder(tx: Tx, input: CreateOrderInput, userId: string) {
+/** "AAAA-MM-DD" del formulario = medianoche argentina, para que no se muestre un día antes. */
+function parseDueDate(v: string | null) {
+  if (!v) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? startOfLocalDay(v) : new Date(v);
+}
+
+export async function createProductionOrder(tx: Tx, input: CreateOrderInput, userId: string, batchId: string | null = null) {
   const product = await tx.product.findUnique({
     where: { id: input.productId },
     include: { variants: { where: { active: true }, select: { id: true } } },
@@ -107,9 +114,10 @@ export async function createProductionOrder(tx: Tx, input: CreateOrderInput, use
     data: {
       productId: product.id,
       clientId: input.clientId,
-      dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      dueDate: parseDueDate(input.dueDate),
       notes: input.notes,
       requiresPersonalization: input.requiresPersonalization,
+      batchId,
       quantityPlanned,
       estimatedUnitCost: product.currentCost,
       createdById: userId,
@@ -117,6 +125,30 @@ export async function createProductionOrder(tx: Tx, input: CreateOrderInput, use
     },
     select: { id: true, number: true },
   });
+}
+
+/** Crea el comprobante y una orden de producción por cada producto cargado. */
+export async function createProductionBatch(tx: Tx, input: CreateBatchInput, userId: string) {
+  if (input.clientId) {
+    const client = await tx.client.findUnique({ where: { id: input.clientId }, select: { id: true } });
+    if (!client) throw new WorkflowError("Cliente inexistente");
+  }
+  const batch = await tx.productionBatch.create({
+    data: { clientId: input.clientId, dueDate: parseDueDate(input.dueDate), notes: input.notes, createdById: userId },
+    select: { id: true, number: true },
+  });
+  const orders = [];
+  for (const p of input.products) {
+    orders.push(
+      await createProductionOrder(
+        tx,
+        { productId: p.productId, clientId: input.clientId, dueDate: input.dueDate, notes: input.notes, requiresPersonalization: p.requiresPersonalization, items: p.items },
+        userId,
+        batch.id,
+      ),
+    );
+  }
+  return { ...batch, orders };
 }
 
 export interface MaterialShortage {

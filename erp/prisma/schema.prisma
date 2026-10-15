@@ -334,6 +334,7 @@ model User {
   paymentOrders        PaymentOrder[]
   remitsCreated        WorkshopRemit[]
   productionOrders     ProductionOrder[]
+  productionBatches    ProductionBatch[]
   ownedLeads           Lead[]
   quotes               Quote[]
   sales                Sale[]
@@ -437,6 +438,7 @@ model Client {
   customerOrders   CustomerOrder[]
   campaignContacts CampaignContact[]
   productionOrders ProductionOrder[]
+  productionBatches ProductionBatch[]
   receivables      AccountReceivable[]
   cheques          Cheque[]
   receipts         Receipt[]
@@ -901,6 +903,9 @@ model ProductionOrder {
   /// Pedido de cliente que origina la orden
   customerOrderId         String?
   customerOrder           CustomerOrder?        @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
+  /// Comprobante que agrupa varias órdenes cargadas juntas (pedido mayorista de varios productos)
+  batchId                 String?
+  batch                   ProductionBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
   status                  ProductionOrderStatus @default(BORRADOR)
   currentStage            ProductionStage       @default(CORTE_INTERNO)
   quantityPlanned         Int
@@ -928,6 +933,23 @@ model ProductionOrder {
 
   @@index([status, currentStage])
   @@map("production_orders")
+}
+
+/// Comprobante de orden de producción: agrupa las órdenes (una por producto) de un mismo pedido.
+model ProductionBatch {
+  id          String    @id @default(cuid())
+  number      Int       @unique @default(autoincrement())
+  clientId    String?
+  client      Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  dueDate     DateTime?
+  notes       String?
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  orders ProductionOrder[]
+
+  @@map("production_batches")
 }
 
 model ProductionOrderItem {

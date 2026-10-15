@@ -19,6 +19,34 @@ export const createOrderSchema = z
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
+/** Varios productos cargados juntos: una orden por producto, agrupadas en un comprobante. */
+export const createBatchSchema = z
+  .object({
+    clientId: z.string().nullable(),
+    dueDate: z.string().nullable(),
+    notes,
+    products: z
+      .array(
+        z.object({
+          productId: z.string().min(1, "Elegí la prenda"),
+          requiresPersonalization: z.boolean(),
+          items: z.array(z.object({ variantId: id, quantity: int("Cantidad").max(100000) })),
+        }),
+      )
+      .min(1, "Agregá al menos un producto")
+      .max(50, "Máximo 50 productos por comprobante"),
+  })
+  .superRefine((v, ctx) => {
+    v.products.forEach((p, i) => {
+      if (!p.items.some((x) => x.quantity > 0)) ctx.addIssue({ code: "custom", message: `Producto ${i + 1}: cargá al menos un talle con cantidad`, path: ["products", i, "items"] });
+    });
+    const ids = v.products.map((p) => p.productId);
+    if (new Set(ids).size !== ids.length) ctx.addIssue({ code: "custom", message: "Hay un producto repetido: cargá todas sus variantes en el mismo bloque", path: ["products"] });
+    if (v.dueDate && Number.isNaN(Date.parse(v.dueDate))) ctx.addIssue({ code: "custom", message: "Fecha inválida", path: ["dueDate"] });
+  });
+
+export type CreateBatchInput = z.infer<typeof createBatchSchema>;
+
 export const orderIdSchema = z.object({ orderId: id });
 
 export const closeCutSchema = z.object({
