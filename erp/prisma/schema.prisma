@@ -719,7 +719,8 @@ model ProductVariant {
   color              String?
   /// Tela o material de la variante (ej. "Algodón peinado", "Piqué")
   fabric             String?
-  barcode            String?  @unique
+  /// EAN-13. Si no se carga uno, la base asigna uno interno (prefijo 20, uso en el comercio)
+  barcode            String?  @unique @default(dbgenerated("next_internal_ean()"))
   stockQty           Decimal  @default(0) @db.Decimal(12, 4)
   /// Ajuste de precio por talle especial (ej. XXXL +10%)
   priceAdjustmentPct Decimal  @default(0) @db.Decimal(6, 2)

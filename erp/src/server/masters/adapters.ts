@@ -316,7 +316,7 @@ const products: Adapter = {
         size,
         color,
         fabric,
-        barcode: str(v.barcode),
+        barcode: str(v.barcode) ?? undefined,
         ...(typeof v.priceAdjustmentPct === "number" ? { priceAdjustmentPct: new Prisma.Decimal(v.priceAdjustmentPct) } : {}),
         active: true,
       };

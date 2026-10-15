@@ -1,12 +1,14 @@
-import { ArrowRight, ChevronLeft, Printer } from "lucide-react";
+import { ArrowRight, Barcode, ChevronLeft, Printer } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { OrderActions } from "@/components/production/order-actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { encodeLabelItems } from "@/lib/catalog/labels";
 import { variantAttrs } from "@/lib/catalog/variants";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
@@ -63,9 +65,18 @@ export default async function OrderDetailPage({ params }: Props) {
           <h1 className="text-3xl font-bold tracking-tight">{order.product.name}</h1>
           <p className="text-sm text-muted-foreground">{order.client ? `Pedido de ${order.client.name}` : "Producción para stock"}</p>
         </div>
-        <Badge variant={order.status === "CANCELADA" ? "destructive" : order.status === "COMPLETADA" ? "success" : "default"}>
-          {STATUS_LABELS[order.status]}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-3">
+          {order.quantityFinished > 0 && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/maestros/etiquetas?items=${encodeLabelItems(order.items.map((i) => ({ variantId: i.variantId, qty: i.quantityFinished })))}`}>
+                <Barcode /> Etiquetas de lo terminado
+              </Link>
+            </Button>
+          )}
+          <Badge variant={order.status === "CANCELADA" ? "destructive" : order.status === "COMPLETADA" ? "success" : "default"}>
+            {STATUS_LABELS[order.status]}
+          </Badge>
+        </div>
       </div>
 
       {/* Stepper de etapas */}

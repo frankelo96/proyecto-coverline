@@ -9,9 +9,16 @@ export const variantRowSchema = z.object({
   fabric: z.string().trim().max(60).nullable(),
   sku: z.string().trim().max(60).nullable(),
   barcode: z.string().trim().max(40).nullable(),
-  // Stock de cada local. Puede ser negativo: el POS permite vender sin stock cargado y se regulariza después.
+  // Stock de cada local que se modificó. Puede ser negativo: el POS permite vender sin stock cargado y se regulariza después.
+  // `before` es lo que mostraba la pantalla: se aplica la diferencia, así no se pisan ventas hechas mientras tanto.
   stocks: z
-    .array(z.object({ branchId: z.string().min(1), quantity: z.number({ error: "Stock: ingresá un número" }).finite().min(-10_000_000).max(10_000_000) }))
+    .array(
+      z.object({
+        branchId: z.string().min(1),
+        quantity: z.number({ error: "Stock: ingresá un número" }).finite().min(-10_000_000).max(10_000_000),
+        before: z.number().finite().optional(),
+      }),
+    )
     .max(20),
   priceAdjustmentPct: z.number().finite().min(-50).max(200),
   active: z.boolean(),
@@ -44,3 +51,23 @@ export const stockTransferSchema = z.object({
     .nullable()
     .transform((s) => (s ? s : null)),
 });
+
+export const SCAN_MODES = ["INGRESO", "EGRESO", "CONTEO", "TRANSFERENCIA"] as const;
+export type ScanMode = (typeof SCAN_MODES)[number];
+
+/** Movimiento de stock armado escaneando códigos de barras. */
+export const scanStockSchema = z
+  .object({
+    mode: z.enum(SCAN_MODES),
+    branchId: z.string().min(1, "Elegí el local"),
+    toBranchId: z.string().nullable(),
+    lines: z.array(z.object({ variantId: z.string().min(1), quantity: z.number().int().min(0).max(100_000) })).min(1, "Escaneá al menos un artículo").max(2000),
+    notes: z
+      .string()
+      .trim()
+      .max(300)
+      .nullable()
+      .transform((s) => (s ? s : null)),
+  })
+  .refine((v) => v.mode !== "TRANSFERENCIA" || (v.toBranchId && v.toBranchId !== v.branchId), { message: "Elegí un local de destino distinto", path: ["toBranchId"] });
+export type ScanStockInput = z.infer<typeof scanStockSchema>;

@@ -45,6 +45,8 @@ export interface CatalogItem {
   name: string;
   /** Stock que tiene hoy la tienda (null si no lo controla); lo informa el plugin */
   stock?: number | null;
+  /** Código de barras (GTIN/EAN) cargado en la tienda; también sirve para vincular */
+  gtin?: string;
 }
 
 /** Guarda los artículos de la tienda y los vincula por SKU (los vínculos manuales se respetan). */
@@ -61,7 +63,7 @@ export async function linkCatalog(items: CatalogItem[]) {
   for (const it of items) {
     seen.add(`${it.productId}:${it.variationId}`);
     const existing = await db.wooLink.findUnique({ where: { wooProductId_wooVariationId: { wooProductId: it.productId, wooVariationId: it.variationId } } });
-    const match = it.sku ? (bySku.get(normalizeSku(it.sku)) ?? null) : null;
+    const match = (it.sku ? bySku.get(normalizeSku(it.sku)) : undefined) ?? (it.gtin ? bySku.get(normalizeSku(it.gtin)) : undefined) ?? null;
     const keepManual = existing?.linkedBy === "MANUAL" && existing.variantId;
     const variantId = keepManual ? existing!.variantId : match;
     if (!existing?.variantId && variantId) newlyLinked++;

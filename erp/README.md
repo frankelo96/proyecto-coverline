@@ -204,6 +204,14 @@ Cada variante tiene cuatro stocks:
 
 Las compras de mercadería y la producción para stock (sin cliente) entran al **local principal** (el de punto de venta más bajo, o `STOCK_MAIN_BRANCH`). En **Maestros → Stock por local** se ven los cuatro stocks y se transfiere entre locales y el mayorista (queda en la auditoría). La ficha de cada producto muestra lo mismo en la grilla de variantes.
 
+## Códigos de barras y etiquetas
+
+- Cada variante (talle/color/tela) tiene un **EAN-13**. Si no se carga uno, la base asigna uno interno con prefijo `20` (rango de GS1 para uso dentro del comercio) mediante `next_internal_ean()`; si la empresa tiene códigos GS1 (779…) se pueden cargar a mano o por importación.
+- **Etiquetas** (Maestros → Etiquetas, o desde la ficha del producto y la orden de producción): hojas A4 precortadas (24, 21 o 65 por hoja) o rollo térmico (50×25, 60×40 mm), con o sin precio. Se imprime desde el navegador al 100 % sin márgenes.
+- **POS**: al escanear, el lector escribe el código y Enter, y el artículo se agrega al ticket.
+- **Escanear stock** (Stock por local → Escanear): ingreso, egreso, conteo de inventario o transferencia, con auditoría.
+- **Web**: el plugin (v1.1) carga el código en el campo "GTIN, UPC, EAN o ISBN" de WooCommerce (9.2+) y también vincula artículos por ese código.
+
 ## Tienda web (WooCommerce)
 
 Sincroniza **solo stock** con la tienda WooCommerce (no toca precios ni descripciones). Hay dos formas de conectarla, en **Maestros → Tienda web**:

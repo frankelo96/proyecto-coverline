@@ -1,4 +1,4 @@
-import { ChevronLeft, Receipt, Ruler } from "lucide-react";
+import { Barcode, ChevronLeft, Receipt, Ruler } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -85,6 +85,13 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
           )}
         </div>
         <div className="flex flex-wrap items-start gap-2">
+          {entity === "productos" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/maestros/etiquetas?producto=${id}`}>
+                <Barcode /> Imprimir etiquetas
+              </Link>
+            </Button>
+          )}
           {entity === "productos" && hasPermission(user.permissions, PERMISSIONS.productionRead) && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/produccion/fichas/${id}`}>

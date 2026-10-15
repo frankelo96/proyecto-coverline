@@ -2,7 +2,7 @@ import "server-only";
 
 import JSZip from "jszip";
 
-export const PLUGIN_VERSION = "1.0.0";
+export const PLUGIN_VERSION = "1.1.0";
 export const PLUGIN_SLUG = "coverline-erp-stock";
 
 /**
@@ -109,6 +109,12 @@ function coverline_erp_stock_of($product)
     return $product->get_manage_stock() === true ? (int) $product->get_stock_quantity() : null;
 }
 
+/** Código de barras del campo "GTIN, UPC, EAN o ISBN" de WooCommerce (desde la versión 9.2). */
+function coverline_erp_gtin_of($product)
+{
+    return method_exists($product, 'get_global_unique_id') ? (string) $product->get_global_unique_id() : '';
+}
+
 /** Productos y variaciones con su SKU y el stock que tienen hoy en la tienda. */
 function coverline_erp_catalog()
 {
@@ -127,6 +133,7 @@ function coverline_erp_catalog()
                     'sku' => (string) $variation->get_sku(),
                     'name' => (string) $variation->get_name(),
                     'stock' => coverline_erp_stock_of($variation),
+                    'gtin' => coverline_erp_gtin_of($variation),
                 );
             }
         } else {
@@ -136,6 +143,7 @@ function coverline_erp_catalog()
                 'sku' => (string) $product->get_sku(),
                 'name' => (string) $product->get_name(),
                 'stock' => coverline_erp_stock_of($product),
+                'gtin' => coverline_erp_gtin_of($product),
             );
         }
     }
@@ -165,6 +173,26 @@ function coverline_erp_apply_stock($items)
         $applied[] = $row;
     }
     return $applied;
+}
+
+/** Graba en la tienda el código de barras de cada talle/color (para lectores y Google Shopping). */
+function coverline_erp_apply_gtin($items)
+{
+    $done = 0;
+    foreach ($items as $item) {
+        $id = !empty($item['variation_id']) ? (int) $item['variation_id'] : (int) $item['product_id'];
+        try {
+            $product = wc_get_product($id);
+            if ($product && method_exists($product, 'set_global_unique_id') && coverline_erp_gtin_of($product) !== (string) $item['gtin']) {
+                $product->set_global_unique_id((string) $item['gtin']);
+                $product->save();
+                $done++;
+            }
+        } catch (Throwable $e) {
+            // Código repetido en otro producto de la tienda: se deja como está.
+        }
+    }
+    return $done;
 }
 
 /** Una sincronización completa con el ERP. Devuelve un texto con el resultado. */
@@ -207,9 +235,10 @@ function coverline_erp_sync($manual = false)
         update_option('coverline_erp_applied', array(), false);
         $applied = !empty($data['stock']) ? coverline_erp_apply_stock($data['stock']) : array();
         update_option('coverline_erp_applied', $applied, false);
+        $gtins = !empty($data['gtin']) ? coverline_erp_apply_gtin($data['gtin']) : 0;
         update_option('coverline_erp_need_catalog', !empty($data['need_catalog']) ? 1 : 0, false);
         update_option('coverline_erp_last_ok', $started, false);
-        $message = $data['message'] . (count($applied) ? ' · ' . count($applied) . ' artículos actualizados en la tienda' : '');
+        $message = $data['message'] . (count($applied) ? ' · ' . count($applied) . ' artículos actualizados en la tienda' : '') . ($gtins ? ' · ' . $gtins . ' códigos de barras cargados' : '');
         update_option('coverline_erp_last_result', array('time' => time(), 'ok' => true, 'message' => $message), false);
         return $message;
     } catch (Throwable $e) {

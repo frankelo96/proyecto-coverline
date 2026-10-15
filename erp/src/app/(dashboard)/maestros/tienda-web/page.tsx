@@ -15,6 +15,7 @@ import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { webStockByVariant } from "@/server/services/stock.service";
 import { wooConfig } from "@/server/woo/config";
+import { PLUGIN_VERSION } from "@/server/woo/wordpress-plugin";
 
 export const metadata: Metadata = { title: "Tienda web" };
 export const dynamic = "force-dynamic";
@@ -93,6 +94,11 @@ export default async function WebStorePage({ searchParams }: Props) {
                   Último contacto del plugin: <strong className={stale ? "text-destructive" : "text-foreground"}>{dt(bridge.lastSeenAt)}</strong>
                   {bridge.siteUrl && <> · {bridge.siteUrl}</>}
                   {bridge.pluginVersion && <> · plugin v{bridge.pluginVersion}</>}
+                  {bridge.pluginVersion && bridge.pluginVersion !== PLUGIN_VERSION && (
+                    <strong className="block text-destructive">
+                      Hay una versión nueva del plugin (v{PLUGIN_VERSION}, carga los códigos de barras en la tienda): descargala y subila en WordPress (Plugins → Añadir nuevo → Subir plugin → Reemplazar).
+                    </strong>
+                  )}
                   {stale && " · hace más de media hora que no se conecta: revisá que el plugin esté activo y que el sitio tenga visitas (WordPress ejecuta las tareas automáticas cuando alguien entra)."}
                 </>
               ) : (

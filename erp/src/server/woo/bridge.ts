@@ -5,6 +5,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { Prisma } from "@/generated/prisma/client";
+import { normalizeEan13 } from "@/lib/catalog/barcode";
 import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
 import { webStockByVariant } from "@/server/services/stock.service";
@@ -77,7 +78,16 @@ export const bridgeRequestSchema = z.object({
   version: z.string().max(20).default(""),
   site: z.string().max(300).default(""),
   catalog: z
-    .array(z.object({ product_id: int, variation_id: int.default(0), sku: z.string().default(""), name: z.string().default(""), stock: z.number().nullable().default(null) }))
+    .array(
+      z.object({
+        product_id: int,
+        variation_id: int.default(0),
+        sku: z.string().default(""),
+        name: z.string().default(""),
+        stock: z.number().nullable().default(null),
+        gtin: z.string().max(40).default(""),
+      }),
+    )
     .optional(),
   orders: z.array(orderSchema).default([]),
   applied: z.array(z.object({ product_id: int, variation_id: int.default(0), quantity: int, error: z.string().optional() })).default([]),
@@ -90,13 +100,15 @@ export interface BridgeResponse {
   need_catalog: boolean;
   /** Stock a publicar (solo en modo activo y solo lo que cambió) */
   stock: { product_id: number; variation_id: number; quantity: number }[];
+  /** Códigos de barras a cargar en la tienda (campo GTIN), cuando difieren del ERP */
+  gtin: { product_id: number; variation_id: number; gtin: string }[];
   message: string;
 }
 
 export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<BridgeResponse> {
   const { mode, safetyStock } = wooConfig();
   await db.wooBridge.update({ where: { id: bridgeId }, data: { lastSeenAt: new Date(), pluginVersion: req.version || null, siteUrl: req.site || null } });
-  if (mode === "desactivado") return { ok: true, mode, need_catalog: false, stock: [], message: "Sincronización desactivada en el ERP" };
+  if (mode === "desactivado") return { ok: true, mode, need_catalog: false, stock: [], gtin: [], message: "Sincronización desactivada en el ERP" };
 
   const summary: SyncSummary = { mode, orders: { seen: 0, deducted: 0, restocked: 0, baseline: 0, unmatchedLines: [] }, push: { pending: 0, sent: 0, errors: [], preview: [] } };
   const run = await db.wooSyncRun.create({ data: { trigger: "puente", mode } });
@@ -117,7 +129,7 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
     // 2. Lista de productos (cada una hora o cuando se pide desde el ERP).
     if (req.catalog) {
       summary.catalog = await linkCatalog(
-        req.catalog.map((c) => ({ productId: c.product_id, variationId: c.variation_id, sku: c.sku, name: c.name, stock: c.stock === null ? null : Math.floor(c.stock) })),
+        req.catalog.map((c) => ({ productId: c.product_id, variationId: c.variation_id, sku: c.sku, gtin: c.gtin, name: c.name, stock: c.stock === null ? null : Math.floor(c.stock) })),
       );
       await db.wooBridge.update({ where: { id: bridgeId }, data: { lastCatalogAt: now, catalogRequested: false } });
     }
@@ -126,7 +138,7 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
     await processOrders(mode, req.orders as unknown as WooOrderData[], summary);
 
     // 4. Stock a publicar: lo que difiere de lo que hoy tiene la tienda.
-    const links = await db.wooLink.findMany({ where: { variantId: { not: null } }, include: { variant: { select: { sku: true } } } });
+    const links = await db.wooLink.findMany({ where: { variantId: { not: null } }, include: { variant: { select: { sku: true, barcode: true } } } });
     const stock = await webStockByVariant(db);
     const pending = links
       .map((l) => ({ link: l, total: stock.get(l.variantId!) ?? 0, quantity: webQuantity(stock.get(l.variantId!) ?? 0, safetyStock) }))
@@ -145,6 +157,15 @@ export async function bridgeSync(bridgeId: string, req: BridgeRequest): Promise<
       mode,
       need_catalog: needCatalog,
       stock: mode === "activo" ? pending.map((x) => ({ product_id: x.link.wooProductId, variation_id: x.link.wooVariationId, quantity: x.quantity })) : [],
+      // Solo cuando llegó la lista de productos (se conoce el código que tiene hoy la tienda).
+      gtin:
+        mode === "activo" && req.catalog
+          ? links.flatMap((l) => {
+              const ean = l.variant?.barcode ? normalizeEan13(l.variant.barcode) : null;
+              const current = req.catalog!.find((c) => c.product_id === l.wooProductId && c.variation_id === l.wooVariationId)?.gtin ?? "";
+              return ean && current !== ean ? [{ product_id: l.wooProductId, variation_id: l.wooVariationId, gtin: ean }] : [];
+            })
+          : [],
       message:
         mode === "activo"
           ? `${summary.orders.deducted} pedidos descontados, ${pending.length} artículos para actualizar`

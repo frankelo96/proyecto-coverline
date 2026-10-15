@@ -58,6 +58,8 @@ export function VariantsEditor({
 }) {
   const uid = useId();
   const [rows, setRows] = useState<VariantRow[]>(initial);
+  // Stock que mostraba la pantalla al abrirse: al guardar se manda solo lo que cambió.
+  const [loaded] = useState(() => new Map(initial.filter((r) => r.id).map((r) => [r.id!, r.stocks])));
   const [gen, setGen] = useState({ sizes: "", colors: "", fabrics: "", stock: "0" });
   const router = useRouter();
   const { pending, status, setStatus, execute } = useServerAction();
@@ -109,7 +111,12 @@ export function VariantsEditor({
         fabric: r.fabric.trim() || null,
         sku: r.sku.trim() || null,
         barcode: r.barcode.trim() || null,
-        stocks: stocks.map((s) => ({ branchId: s.branchId, quantity: s.quantity! })),
+        stocks: stocks.flatMap((s) => {
+          const shown = r.id ? loaded.get(r.id) : undefined;
+          if (!shown) return [{ branchId: s.branchId, quantity: s.quantity! }];
+          const before = parseLocaleNumber(shown[s.branchId] || "0") ?? 0;
+          return s.quantity === before ? [] : [{ branchId: s.branchId, quantity: s.quantity!, before }];
+        }),
         priceAdjustmentPct: adj,
         active: r.active,
       });
@@ -234,7 +241,15 @@ export function VariantsEditor({
                     <Input aria-label="SKU" value={r.sku} placeholder="automático" onChange={(e) => update(i, { sku: e.target.value.toUpperCase() })} disabled={!canWrite} className="h-9 font-mono text-xs uppercase" />
                   </TableCell>
                   <TableCell>
-                    <Input aria-label="Código de barras" value={r.barcode} onChange={(e) => update(i, { barcode: e.target.value })} disabled={!canWrite} className="h-9 font-mono text-xs" />
+                    <Input
+                      aria-label="Código de barras"
+                      value={r.barcode}
+                      placeholder="automático"
+                      inputMode="numeric"
+                      onChange={(e) => update(i, { barcode: e.target.value })}
+                      disabled={!canWrite}
+                      className="h-9 font-mono text-xs"
+                    />
                   </TableCell>
                   {branches.map((b) => (
                     <TableCell key={b.id}>

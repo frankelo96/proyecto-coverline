@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { autoVariantSku } from "@/lib/catalog/variants";
 import type { SaveVariantsInput } from "@/lib/validations/catalog";
-import { setBranchStock } from "@/server/services/stock.service";
+import { adjustBranchStock, setBranchStock } from "@/server/services/stock.service";
 
 export class CatalogError extends Error {}
 
@@ -27,7 +27,8 @@ export async function saveVariants(tx: Prisma.TransactionClient, input: SaveVari
       color: row.color || null,
       fabric: row.fabric || null,
       sku,
-      barcode: row.barcode || null,
+      // Vacío: se conserva el que tiene (o, si es nueva, la base le asigna uno interno).
+      barcode: row.barcode || undefined,
       priceAdjustmentPct: new Prisma.Decimal(row.priceAdjustmentPct),
       active: row.active,
     };
@@ -44,8 +45,16 @@ export async function saveVariants(tx: Prisma.TransactionClient, input: SaveVari
       }
       // El stock se fija por local; el total de la variante se recalcula solo.
       for (const s of row.stocks) {
-        const r = await setBranchStock(tx, variantId, s.branchId, s.quantity);
-        if (r.changed) stockChanges.push({ sku, branchId: s.branchId, before: r.before, after: s.quantity });
+        if (s.before !== undefined && row.id) {
+          // Se aplica solo lo que cambió el usuario sobre lo que veía (las ventas del mientras tanto se respetan).
+          const delta = s.quantity - s.before;
+          if (delta === 0) continue;
+          const r = await adjustBranchStock(tx, variantId, s.branchId, delta);
+          stockChanges.push({ sku, branchId: s.branchId, before: r.branch.toNumber() - delta, after: r.branch.toNumber() });
+        } else {
+          const r = await setBranchStock(tx, variantId, s.branchId, s.quantity);
+          if (r.changed) stockChanges.push({ sku, branchId: s.branchId, before: r.before, after: s.quantity });
+        }
       }
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

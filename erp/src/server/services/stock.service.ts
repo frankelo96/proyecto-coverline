@@ -114,3 +114,51 @@ export async function transferStock(tx: Tx, fromBranchId: string, toBranchId: st
   });
   return { from: from.name, to: to.name, units: valid.reduce((a, l) => a + l.quantity, 0), warnings };
 }
+
+const SCAN_LABELS = { INGRESO: "Ingreso", EGRESO: "Egreso", CONTEO: "Conteo de inventario", TRANSFERENCIA: "Transferencia" } as const;
+
+/**
+ * Aplica lo escaneado con el lector: ingreso (+), egreso (−), conteo (fija el
+ * stock contado) o transferencia a otro local. Queda en la auditoría con las diferencias.
+ */
+export async function applyScannedStock(
+  tx: Tx,
+  input: { mode: keyof typeof SCAN_LABELS; branchId: string; toBranchId: string | null; lines: TransferLine[]; notes: string | null },
+  userId: string,
+) {
+  const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
+  if (!branch) throw new StockError("Local inexistente");
+  if (input.mode === "TRANSFERENCIA") {
+    const r = await transferStock(tx, input.branchId, input.toBranchId!, input.lines, userId, input.notes ?? "Transferencia escaneada");
+    return { message: `Transferidas ${r.units} unidades de ${r.from} a ${r.to}`, warnings: r.warnings, variantIds: input.lines.map((l) => l.variantId) };
+  }
+  const detail: { variantId: string; before: number; after: number }[] = [];
+  for (const l of input.lines) {
+    if (input.mode === "CONTEO") {
+      const r = await setBranchStock(tx, l.variantId, branch.id, l.quantity);
+      if (r.changed) detail.push({ variantId: l.variantId, before: r.before, after: l.quantity });
+    } else {
+      if (l.quantity <= 0) continue;
+      const delta = input.mode === "INGRESO" ? l.quantity : -l.quantity;
+      const r = await adjustBranchStock(tx, l.variantId, branch.id, delta);
+      detail.push({ variantId: l.variantId, before: r.branch.toNumber() - delta, after: r.branch.toNumber() });
+    }
+  }
+  await tx.auditLog.create({
+    data: {
+      userId,
+      entity: "BranchStock",
+      entityId: branch.id,
+      action: `SCAN_${input.mode}`,
+      reason: input.notes,
+      data: { branch: branch.name, lines: detail } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  const units = input.lines.reduce((a, l) => a + l.quantity, 0);
+  const negatives = detail.filter((d) => d.after < 0).length;
+  const message =
+    input.mode === "CONTEO"
+      ? `Conteo de ${branch.name}: ${input.lines.length} artículos contados, ${detail.length} con diferencia ajustada`
+      : `${SCAN_LABELS[input.mode]} en ${branch.name}: ${units} unidades`;
+  return { message, warnings: negatives ? [`${negatives} artículos quedaron con stock negativo`] : [], variantIds: input.lines.map((l) => l.variantId) };
+}
