@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { ActiveToggle } from "@/components/masters/active-toggle";
 import { EntityForm } from "@/components/masters/entity-form";
+import { ProductImages } from "@/components/masters/product-images";
 import { VariantsEditor } from "@/components/masters/variants-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
         ]
       : [];
   const product = entity === "productos" ? await db.product.findUnique({ where: { id }, select: { currentCost: true, sourcing: true } }) : null;
+  const images = entity === "productos" ? await db.productImage.findMany({ where: { productId: id }, orderBy: { sortOrder: "asc" }, select: { id: true } }) : [];
   const creditorType = entity === "proveedores" ? "proveedor" : entity === "talleres" ? "taller" : null;
 
   return (
@@ -111,6 +113,7 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
       </div>
       <FlashNotice message={aviso} />
       <EntityForm entity={entity} id={id} fields={formFields(def)} initial={values} refs={refs} basePath={def.basePath} after="stay" readOnly={!canWrite} />
+      {entity === "productos" && <ProductImages productId={id} images={images} canWrite={canWrite} />}
       {entity === "productos" && (
         <VariantsEditor
           key={variants.map((v) => `${v.id}${v.updatedAt.getTime()}${v.branchStocks.map((x) => x.quantity.toString()).join(",")}`).join("|")}

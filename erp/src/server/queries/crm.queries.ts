@@ -399,3 +399,72 @@ export async function listClientTags() {
   for (const r of rows) for (const t of r.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count }));
 }
+
+// ─── Historial de campañas ────────────────────────────────────────────────
+
+const CONVERSION_DAYS = 30;
+
+/** Cuántos de los contactados compraron (venta o pedido) dentro de los 30 días siguientes. */
+async function conversions(contacts: { clientId: string; sentAt: Date | null }[]) {
+  const sent = contacts.filter((c) => c.sentAt);
+  if (sent.length === 0) return new Set<string>();
+  const from = new Date(Math.min(...sent.map((c) => c.sentAt!.getTime())));
+  const to = new Date(Math.max(...sent.map((c) => c.sentAt!.getTime())) + CONVERSION_DAYS * 86_400_000);
+  const ids = sent.map((c) => c.clientId);
+  const [sales, orders] = await Promise.all([
+    db.sale.findMany({ where: { clientId: { in: ids }, kind: "VENTA", status: { not: "ANULADA" }, createdAt: { gte: from, lte: to } }, select: { clientId: true, createdAt: true } }),
+    db.customerOrder.findMany({ where: { clientId: { in: ids }, status: { not: "CANCELADO" }, createdAt: { gte: from, lte: to } }, select: { clientId: true, createdAt: true } }),
+  ]);
+  const bought = new Set<string>();
+  for (const c of sent) {
+    const limit = c.sentAt!.getTime() + CONVERSION_DAYS * 86_400_000;
+    if ([...sales, ...orders].some((s) => s.clientId === c.clientId && s.createdAt >= c.sentAt! && s.createdAt.getTime() <= limit)) bought.add(c.clientId);
+  }
+  return bought;
+}
+
+export async function listCampaigns() {
+  const campaigns = await db.campaign.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { contacts: { select: { clientId: true, sentAt: true } } } });
+  const users = new Map((await db.user.findMany({ where: { id: { in: [...new Set(campaigns.map((c) => c.createdById))] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+  return Promise.all(
+    campaigns.map(async (c) => {
+      const bought = await conversions(c.contacts);
+      const sent = c.contacts.filter((x) => x.sentAt).length;
+      return { id: c.id, name: c.name, channel: c.channel, createdAt: c.createdAt.toISOString(), user: users.get(c.createdById) ?? "", recipients: c.contacts.length, sent, bought: bought.size };
+    }),
+  );
+}
+
+export async function getCampaign(id: string) {
+  const c = await db.campaign.findUnique({
+    where: { id },
+    include: {
+      contacts: {
+        include: { client: { include: { sales: { where: { kind: "VENTA", status: { not: "ANULADA" } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } } } } },
+      },
+    },
+  });
+  if (!c) return null;
+  const bought = await conversions(c.contacts);
+  return {
+    id: c.id,
+    name: c.name,
+    channel: c.channel,
+    subject: c.subject,
+    message: c.message,
+    createdAt: c.createdAt.toISOString(),
+    sent: Object.fromEntries(c.contacts.filter((x) => x.sentAt).map((x) => [x.clientId, x.sentAt!.toISOString()])),
+    bought: [...bought],
+    clients: c.contacts
+      .map((x) => ({
+        id: x.client.id,
+        name: x.client.businessName,
+        contactName: x.client.fantasyName ?? x.client.businessName,
+        email: x.client.email,
+        whatsapp: whatsappNumber(x.client.whatsapp ?? x.client.phone),
+        tags: x.client.tags,
+        lastPurchase: iso(x.client.sales[0]?.createdAt),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es")),
+  };
+}

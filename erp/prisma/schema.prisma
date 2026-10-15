@@ -435,6 +435,7 @@ model Client {
   sales            Sale[]
   storeCredits     StoreCredit[]
   customerOrders   CustomerOrder[]
+  campaignContacts CampaignContact[]
   productionOrders ProductionOrder[]
   receivables      AccountReceivable[]
   cheques          Cheque[]
@@ -742,6 +743,7 @@ model Product {
   quoteItems       QuoteItem[]
   priceListItems   PriceListItem[]
   orderItems       CustomerOrderItem[]
+  images           ProductImage[]
 
   @@index([category])
   @@map("products")
@@ -1901,4 +1903,53 @@ model ExpenseCategory {
   movements CashMovement[]
 
   @@map("expense_categories")
+}
+
+/// Campaña de WhatsApp / email a un segmento de clientes (envío asistido).
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  channel     String
+  subject     String?
+  message     String
+  /// Filtros con que se armó el segmento (para referencia)
+  filters     Json?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  contacts CampaignContact[]
+
+  @@map("campaigns")
+}
+
+model CampaignContact {
+  id          String    @id @default(cuid())
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// WHATSAPP o EMAIL; null mientras no se le envió
+  channel     String?
+  sentAt      DateTime?
+  sentById    String?
+
+  @@unique([campaignId, clientId])
+  @@index([clientId])
+  @@map("campaign_contacts")
+}
+
+/// Foto de producto (se guarda achicada en WebP; la primera es la principal).
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  data      Bytes
+  mime      String   @default("image/webp")
+  width     Int
+  height    Int
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId, sortOrder])
+  @@map("product_images")
 }

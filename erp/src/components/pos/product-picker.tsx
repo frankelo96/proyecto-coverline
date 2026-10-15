@@ -18,6 +18,7 @@ export interface CatalogProduct {
   minPrice: number;
   maxPrice: number;
   stock: number;
+  imageId: string | null;
 }
 
 /** Agrupa las variantes del catálogo por producto (para buscar y elegir por producto). */
@@ -31,7 +32,7 @@ export function groupCatalog(catalog: CatalogItem[]): CatalogProduct[] {
       p.maxPrice = Math.max(p.maxPrice, v.price);
       p.stock += v.stock;
     } else {
-      map.set(v.productId, { productId: v.productId, name: v.productName, sku: v.productSku, category: v.category, variants: [v], minPrice: v.price, maxPrice: v.price, stock: v.stock });
+      map.set(v.productId, { productId: v.productId, name: v.productName, sku: v.productSku, category: v.category, variants: [v], minPrice: v.price, maxPrice: v.price, stock: v.stock, imageId: v.imageId });
     }
   }
   return [...map.values()];
@@ -87,7 +88,11 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
   return (
     <section aria-label={`Elegir variante de ${product.name}`} className="flex flex-col gap-4 rounded-lg border-2 border-primary/40 bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        {product.imageId && (
+          // eslint-disable-next-line @next/next/no-img-element -- foto propia servida por la API con caché
+          <img src={`/api/productos/imagenes/${product.imageId}?w=160`} alt="" className="size-20 shrink-0 rounded-md border object-cover" />
+        )}
+        <div className="flex-1">
           <p className="text-lg font-semibold leading-tight">{product.name}</p>
           <p className="font-mono text-xs text-muted-foreground">
             {product.sku} · {product.variants.length} variantes · stock en este local {formatNumber(product.stock)}

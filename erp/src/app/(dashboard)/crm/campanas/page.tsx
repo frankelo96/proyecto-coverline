@@ -1,4 +1,6 @@
+import { History } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { CampaignComposer } from "@/components/crm/campaign-composer";
 import { Button } from "@/components/ui/button";
@@ -32,7 +34,14 @@ export default async function CampaignsPage({ searchParams }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-bold tracking-tight">Campañas</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Campañas</h1>
+          <Button asChild variant="outline">
+            <Link href="/crm/campanas/historial">
+              <History /> Historial de campañas
+            </Link>
+          </Button>
+        </div>
         <p className="text-sm text-muted-foreground">
           Elegí a quién escribirle (por rubro, etiqueta, mes de compra o clientes que hace tiempo no compran) y enviá el mensaje por WhatsApp o email.
         </p>
@@ -102,7 +111,7 @@ export default async function CampaignsPage({ searchParams }: Props) {
         </CardContent>
       </Card>
 
-      <CampaignComposer clients={clients} />
+      <CampaignComposer key={JSON.stringify(sp)} clients={clients} channel={channel} filters={{ tipos: types, etiquetas: tags, mes: month, inactivo: inactiveDays, canal: channel }} />
     </div>
   );
 }

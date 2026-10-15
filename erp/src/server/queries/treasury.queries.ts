@@ -71,6 +71,8 @@ export interface CatalogItem {
   fabric: string | null;
   /** Precio final minorista (IVA incluido, con ajuste de talle) */
   price: number;
+  /** Foto principal del producto */
+  imageId: string | null;
   /** Para recalcular con una lista de precios */
   netPrice: number;
   vatRate: number;
@@ -106,7 +108,10 @@ export async function getTerminalData(registerId: string) {
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
       orderBy: { name: "asc" },
-      include: { variants: { where: { active: true }, include: { branchStocks: { where: { branch: { kind: "LOCAL" } }, select: { branchId: true, quantity: true } } } } },
+      include: {
+        variants: { where: { active: true }, include: { branchStocks: { where: { branch: { kind: "LOCAL" } }, select: { branchId: true, quantity: true } } } },
+        images: { orderBy: { sortOrder: "asc" }, take: 1, select: { id: true } },
+      },
     }),
     db.client.findMany({ where: { active: true }, orderBy: { businessName: "asc" } }),
     db.accountReceivable.groupBy({ by: ["clientId"], where: { status: { in: [...OPEN] } }, _sum: { balance: true } }),
@@ -129,6 +134,7 @@ export async function getTerminalData(registerId: string) {
         color: v.color,
         fabric: v.fabric,
         price: finalUnitPrice(p.listPrice.toNumber(), p.vatRate.toNumber(), v.priceAdjustmentPct.toNumber()),
+        imageId: p.images[0]?.id ?? null,
         netPrice: p.listPrice.toNumber(),
         vatRate: p.vatRate.toNumber(),
         sizeAdjustmentPct: v.priceAdjustmentPct.toNumber(),

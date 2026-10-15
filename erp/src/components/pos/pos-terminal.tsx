@@ -247,7 +247,11 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                   onClick={() => choose(p)}
                   className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                 >
-                  <span>
+                  {p.imageId && (
+                    // eslint-disable-next-line @next/next/no-img-element -- foto propia servida por la API con caché
+                    <img src={`/api/productos/imagenes/${p.imageId}?w=96`} alt="" loading="lazy" className="size-10 shrink-0 rounded object-cover" />
+                  )}
+                  <span className="flex-1">
                     {p.name}
                     <span className="block text-xs text-muted-foreground">
                       {CATEGORY_LABELS[p.category]} · {p.variants.length} {p.variants.length === 1 ? "variante" : "variantes"}
@@ -300,6 +304,10 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                     onClick={() => choose(p)}
                     className="flex min-h-20 flex-col justify-between gap-1 rounded-md border bg-card p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
+                    {p.imageId && (
+                      // eslint-disable-next-line @next/next/no-img-element -- foto propia servida por la API con caché
+                      <img src={`/api/productos/imagenes/${p.imageId}?w=320`} alt="" loading="lazy" className="aspect-[4/3] w-full rounded object-cover" />
+                    )}
                     <span className="leading-snug font-medium">{p.name}</span>
                     <span className="flex items-end justify-between gap-2 text-xs text-muted-foreground">
                       <span>{p.variants.length} var.</span>
