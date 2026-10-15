@@ -7,6 +7,11 @@ import type { ActionResult } from "@/lib/action-result";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { saveInstallmentPlans } from "@/server/services/settings.service";
+import { confirmReconciliation, previewReconciliation } from "@/server/services/reconciliation.service";
+import { TreasuryError } from "@/lib/treasury/cash";
+import { parseStatementRows } from "@/lib/treasury/reconciliation";
+import { readSpreadsheet, SpreadsheetError } from "@/server/masters/spreadsheet";
 
 const categorySchema = z.object({
   id: z.string().nullable(),
@@ -74,5 +79,67 @@ export async function applyPriceUpdateAction(raw: unknown): Promise<ActionResult
     if (e instanceof AuthorizationError) return { ok: false, error: e.message };
     console.error("[finance.actions] prices", e);
     return { ok: false, error: "No se pudieron actualizar los precios" };
+  }
+}
+
+/** Planes de cuotas con recargo que ofrece el POS. */
+export async function saveInstallmentPlansAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.cashManage);
+    const plans = z
+      .array(z.object({ installments: z.number().int().min(1).max(36), surchargePct: z.number().finite().min(0, "El recargo no puede ser negativo").max(200) }))
+      .max(12)
+      .parse(raw);
+    await saveInstallmentPlans(plans);
+    await db.auditLog.create({ data: { userId: user.id, entity: "AppSetting", entityId: "pos.installmentPlans", action: "UPDATE", data: plans } });
+    revalidatePath("/tesoreria", "layout");
+    revalidatePath("/pos", "layout");
+    return { ok: true, data: undefined, message: "Planes de cuotas guardados" };
+  } catch (e) {
+    if (e instanceof z.ZodError) return { ok: false, error: e.issues[0]?.message ?? "Datos inválidos" };
+    if (e instanceof AuthorizationError) return { ok: false, error: e.message };
+    console.error("[finance.actions] plans", e);
+    return { ok: false, error: "No se pudieron guardar los planes" };
+  }
+}
+
+const statementLineSchema = z.object({ row: z.number().int(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), description: z.string().max(300), amount: z.number().finite() });
+
+/** Lee el extracto (Excel o CSV del banco / Mercado Pago) y lo empareja con los movimientos de la cuenta. */
+export async function previewReconciliationAction(form: FormData): Promise<ActionResult<Awaited<ReturnType<typeof previewReconciliation>>>> {
+  try {
+    await requireActionUser(PERMISSIONS.cashManage);
+    const registerId = z.string().min(1, "Elegí la cuenta").parse(form.get("registerId"));
+    const file = form.get("file");
+    if (!(file instanceof File)) return { ok: false, error: "Elegí el archivo del extracto" };
+    const parsed = parseStatementRows(await readSpreadsheet(file));
+    if (parsed.error) return { ok: false, error: parsed.error };
+    return { ok: true, data: await previewReconciliation(registerId, parsed.lines) };
+  } catch (e) {
+    if (e instanceof z.ZodError) return { ok: false, error: e.issues[0]?.message ?? "Datos inválidos" };
+    if (e instanceof TreasuryError || e instanceof AuthorizationError || e instanceof SpreadsheetError) return { ok: false, error: e.message };
+    console.error("[finance.actions] reconcile preview", e);
+    return { ok: false, error: "No se pudo leer el extracto" };
+  }
+}
+
+export async function confirmReconciliationAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.cashManage);
+    const input = z
+      .object({
+        registerId: z.string().min(1),
+        matches: z.array(z.object({ movementId: z.string().min(1), row: z.number().int(), description: z.string().max(300) })).max(5000),
+        creates: z.array(statementLineSchema.extend({ categoryId: z.string().nullable() })).max(5000),
+      })
+      .parse(raw);
+    const r = await db.$transaction((tx) => confirmReconciliation(tx, input, user.id), { timeout: 60_000 });
+    revalidatePath("/tesoreria", "layout");
+    return { ok: true, data: undefined, message: `${r.name}: ${r.matched} movimientos conciliados${r.created ? ` y ${r.created} registrados desde el extracto` : ""}` };
+  } catch (e) {
+    if (e instanceof z.ZodError) return { ok: false, error: e.issues[0]?.message ?? "Datos inválidos" };
+    if (e instanceof TreasuryError || e instanceof AuthorizationError) return { ok: false, error: e.message };
+    console.error("[finance.actions] reconcile", e);
+    return { ok: false, error: "No se pudo registrar la conciliación" };
   }
 }

@@ -14,6 +14,7 @@ import type {
 import { compareSizes, variantLabel } from "@/lib/catalog/variants";
 import { finalUnitPrice } from "@/lib/pos/sale-math";
 import { activePriceListRules } from "@/server/services/price-lists.service";
+import { getInstallmentPlans } from "@/server/services/settings.service";
 import { agingSummary, type AgingBucket } from "@/lib/purchasing/math";
 import { MOVEMENT_SIGN } from "@/lib/treasury/cash";
 import { chequeLabel } from "@/lib/treasury/cheques";
@@ -104,7 +105,7 @@ export async function getTerminalData(registerId: string) {
       sales: { orderBy: { number: "desc" }, take: 8, select: { id: true, number: true, kind: true, total: true, createdAt: true, client: { select: { businessName: true } } } },
     },
   });
-  const [products, clients, balances, vaults, priceLists] = await Promise.all([
+  const [products, clients, balances, vaults, priceLists, installmentPlans] = await Promise.all([
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
       orderBy: { name: "asc" },
@@ -117,6 +118,7 @@ export async function getTerminalData(registerId: string) {
     db.accountReceivable.groupBy({ by: ["clientId"], where: { status: { in: [...OPEN] } }, _sum: { balance: true } }),
     db.cashRegister.findMany({ where: { active: true, kind: "CAJA_RESGUARDO" }, select: { id: true, name: true } }),
     activePriceListRules(db),
+    getInstallmentPlans(db),
   ]);
   const catalog: CatalogItem[] = products.flatMap((p) =>
     [...p.variants]
@@ -173,6 +175,7 @@ export async function getTerminalData(registerId: string) {
     })),
     vaults,
     priceLists,
+    installmentPlans: installmentPlans.filter((p) => p.installments > 1),
   };
 }
 

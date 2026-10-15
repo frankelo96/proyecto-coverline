@@ -54,6 +54,10 @@ export interface MovementInput {
   chequeId?: string | null;
   transferGroupId?: string | null;
   expenseCategoryId?: string | null;
+  /** Fecha del movimiento si no es ahora (líneas de extracto que se registran al conciliar) */
+  createdAt?: Date;
+  reconciledAt?: Date | null;
+  reconciledNote?: string | null;
 }
 
 /** Registra un movimiento validando turno abierto y saldo de cajas físicas. La caja debe estar bloqueada. */
@@ -86,6 +90,9 @@ export async function addMovement(tx: Tx, m: MovementInput) {
       chequeId: m.chequeId ?? null,
       transferGroupId: m.transferGroupId ?? null,
       expenseCategoryId: m.expenseCategoryId ?? null,
+      reconciledAt: m.reconciledAt ?? null,
+      reconciledNote: m.reconciledNote ?? null,
+      ...(m.createdAt ? { createdAt: m.createdAt } : {}),
       userId: m.userId,
     },
   });

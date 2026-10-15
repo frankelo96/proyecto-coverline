@@ -106,6 +106,8 @@ export const saleSchema = z.object({
     .max(200),
   globalDiscountPct: z.number().finite().min(0).max(100),
   discountReason: optText(200),
+  /** Cuotas con recargo (plan configurado en Tesorería): el servidor agrega la línea de recargo */
+  installments: z.number().int().min(1).max(36).nullable().default(null),
   payments: z.array(collectionPaymentSchema).min(1, "Cargá al menos un medio de pago").max(10),
   deliveryMethod: z.enum(["RETIRO_SUCURSAL", "ENVIO"]),
   shippingAddress: optText(200),

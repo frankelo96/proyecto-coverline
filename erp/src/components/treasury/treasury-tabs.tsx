@@ -11,6 +11,8 @@ const TABS = [
   { href: "/tesoreria/cobranzas", label: "Cobranzas" },
   { href: "/tesoreria/gastos", label: "Gastos" },
   { href: "/tesoreria/flujo", label: "Flujo de fondos" },
+  { href: "/tesoreria/conciliacion", label: "Conciliación" },
+  { href: "/tesoreria/cuotas", label: "Cuotas" },
 ];
 
 export function TreasuryTabs() {

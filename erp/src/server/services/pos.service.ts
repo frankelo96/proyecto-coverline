@@ -13,12 +13,14 @@ import type { InvoiceType } from "@/generated/prisma/enums";
 import { variantLabel } from "@/lib/catalog/variants";
 import { isFiscal } from "@/lib/arca/codes";
 import { formatMoney } from "@/lib/format";
+import { surchargeLabel, surchargeLinePrice } from "@/lib/pos/installments";
 import { listFinalPrice } from "@/lib/pos/price-lists";
 import { addDays, computeSaleTotals, planPayments, SaleError } from "@/lib/pos/sale-math";
 import { TreasuryError } from "@/lib/treasury/cash";
 import type { SaleInput } from "@/lib/validations/treasury";
 import { registerCollections } from "@/server/services/collection.service";
 import { priceListRule } from "@/server/services/price-lists.service";
+import { getInstallmentPlans } from "@/server/services/settings.service";
 import { lockRegister, openSessionOf } from "@/server/services/treasury.service";
 import { adjustBranchStock } from "@/server/services/stock.service";
 
@@ -87,6 +89,18 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
   if (hasDiscount) {
     if (!user.canDiscount) throw new SaleError("Tu usuario no puede aplicar descuentos");
     if (!input.discountReason || input.discountReason.length < 3) throw new SaleError("Indicá el motivo del descuento");
+  }
+
+  // Cuotas con recargo: línea de financiación calculada por el servidor sobre el total ya descontado.
+  if (input.installments && input.installments > 1) {
+    const plan = (await getInstallmentPlans(tx)).find((p) => p.installments === input.installments);
+    if (!plan) throw new SaleError(`No hay un plan de ${input.installments} cuotas configurado`);
+    if (plan.surchargePct > 0) {
+      const base = computeSaleTotals(lines.map((l) => ({ quantity: l.input.quantity, unitPrice: l.unitPrice, discountPct: l.input.discountPct, vatRate: l.vatRate })), input.globalDiscountPct);
+      const price = surchargeLinePrice(base.total, plan.surchargePct, input.globalDiscountPct);
+      const description = surchargeLabel(plan);
+      lines.push({ input: { variantId: null, description, quantity: 1, unitPrice: price, discountPct: 0 }, variant: null, description, unitPrice: price, vatRate: 21, unitCost: new Prisma.Decimal(0) });
+    }
   }
 
   const totals = computeSaleTotals(

@@ -16,6 +16,7 @@ import { StatusMessage } from "@/components/ui/status-message";
 import type { ActionStatus } from "@/hooks/use-server-action";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { CATEGORY_LABELS } from "@/lib/masters/labels";
+import { surchargeLabel, surchargeLinePrice } from "@/lib/pos/installments";
 import { listFinalPrice } from "@/lib/pos/price-lists";
 import { computeSaleTotals, planPayments, SaleError } from "@/lib/pos/sale-math";
 import { UI_COLLECTION_METHODS } from "@/lib/validations/treasury";
@@ -51,6 +52,8 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
   const [clientId, setClientId] = useState("");
   const [invoiceType, setInvoiceType] = useState<"TICKET_INTERNO" | "FACTURA_B" | "FACTURA_A">("TICKET_INTERNO");
   const [globalDiscount, setGlobalDiscount] = useState("0");
+  const [installments, setInstallments] = useState(1);
+  const plan = data.installmentPlans.find((p) => p.installments === installments) ?? null;
   const [discountReason, setDiscountReason] = useState("");
   const [payments, setPayments] = useState<PayRow[]>([]);
   const [delivery, setDelivery] = useState<"RETIRO_SUCURSAL" | "ENVIO">("RETIRO_SUCURSAL");
@@ -112,14 +115,17 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
   const totals = useMemo(() => {
     if (cart.length === 0) return null;
     try {
-      return computeSaleTotals(
-        cart.map((l) => ({ quantity: num(l.quantity), unitPrice: l.unitPrice, discountPct: num(l.discountPct), vatRate: 21 })),
-        num(globalDiscount),
-      );
+      const lines = cart.map((l) => ({ quantity: num(l.quantity), unitPrice: l.unitPrice, discountPct: num(l.discountPct), vatRate: 21 }));
+      const base = computeSaleTotals(lines, num(globalDiscount));
+      // Mismo cálculo que el servidor: la línea de recargo por cuotas va sobre el total ya descontado.
+      if (!plan || plan.surchargePct <= 0) return { ...base, surcharge: 0 };
+      const price = surchargeLinePrice(base.total, plan.surchargePct, num(globalDiscount));
+      const full = computeSaleTotals([...lines, { quantity: 1, unitPrice: price, discountPct: 0, vatRate: 21 }], num(globalDiscount));
+      return { ...full, surcharge: Math.round((full.total - base.total) * 100) / 100 };
     } catch {
       return null;
     }
-  }, [cart, globalDiscount]);
+  }, [cart, globalDiscount, plan]);
 
   const paymentCheck = useMemo(() => {
     if (!totals || payments.length === 0) return null;
@@ -175,6 +181,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     setListChoice("");
     setInvoiceType("TICKET_INTERNO");
     setGlobalDiscount("0");
+    setInstallments(1);
     setDiscountReason("");
     setDelivery("RETIRO_SUCURSAL");
     setAddress("");
@@ -192,6 +199,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
         invoiceType,
         items: cart.map((l) => ({ variantId: l.variantId, description: l.variantId ? null : l.description, quantity: num(l.quantity), unitPrice: l.unitPrice, discountPct: num(l.discountPct) })),
         globalDiscountPct: num(globalDiscount),
+        installments: installments > 1 ? installments : null,
         discountReason: hasDiscount ? discountReason.trim() || null : null,
         payments: toCollectionPayload(payments),
         deliveryMethod: delivery,
@@ -517,6 +525,12 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
               <span className="font-mono">-{formatMoney(totals.discountTotal)}</span>
             </div>
           )}
+          {totals && totals.surcharge > 0 && (
+            <div className="flex justify-between text-sm text-ink-muted">
+              <span>Recargo por {installments} cuotas</span>
+              <span className="font-mono">+{formatMoney(totals.surcharge)}</span>
+            </div>
+          )}
           {totals && invoiceType === "FACTURA_A" && (
             <>
               <div className="flex justify-between text-sm text-ink-muted">
@@ -542,6 +556,31 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
             <CardTitle>Cobro</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            {data.installmentPlans.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-cuotas`}>Cuotas (tarjeta / Mercado Pago)</Label>
+                <NativeSelect
+                  id={`${id}-cuotas`}
+                  value={installments}
+                  onChange={(e) => {
+                    setInstallments(Number(e.target.value));
+                    setPayments([]);
+                  }}
+                >
+                  <option value={1}>1 pago (sin recargo)</option>
+                  {data.installmentPlans.map((p) => (
+                    <option key={p.installments} value={p.installments}>
+                      {p.installments} cuotas{p.surchargePct > 0 ? ` (+${String(p.surchargePct).replace(".", ",")}%)` : " sin interés"}
+                    </option>
+                  ))}
+                </NativeSelect>
+                {plan && totals && totals.surcharge > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Se agrega «{surchargeLabel(plan)}» por {formatMoney(totals.surcharge)}: queda en el comprobante. Cuota aprox. {formatMoney(totals.total / plan.installments)}.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2" role="group" aria-label="Cobro rápido por el total">
               <Button type="button" variant="outline" disabled={!totals} onClick={() => quickPay("EFECTIVO")}>
                 Efectivo

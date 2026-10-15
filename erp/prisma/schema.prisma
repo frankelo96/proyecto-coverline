@@ -1212,6 +1212,9 @@ model CashMovement {
   /// Gasto: categoría para el estado de resultados (alquiler, servicios, impuestos…)
   expenseCategoryId String?
   expenseCategory   ExpenseCategory?   @relation(fields: [expenseCategoryId], references: [id], onDelete: Restrict)
+  /// Conciliado contra el extracto del banco / Mercado Pago
+  reconciledAt    DateTime?
+  reconciledNote  String?
   userId          String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt       DateTime             @default(now())
