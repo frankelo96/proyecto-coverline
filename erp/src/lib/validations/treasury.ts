@@ -31,6 +31,8 @@ export const manualMovementSchema = z.object({
   direction: z.enum(["IN", "OUT"]),
   amount: positive("Importe"),
   concept: z.string().trim().min(3, "Indicá el concepto").max(200),
+  /** Si es un gasto: su categoría (para el estado de resultados) */
+  expenseCategoryId: z.string().nullable().default(null),
 });
 
 // --- Cheques -----------------------------------------------------------------------

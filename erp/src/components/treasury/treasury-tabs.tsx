@@ -9,6 +9,8 @@ const TABS = [
   { href: "/tesoreria", label: "Cajas y cuentas" },
   { href: "/tesoreria/cheques", label: "Cheques" },
   { href: "/tesoreria/cobranzas", label: "Cobranzas" },
+  { href: "/tesoreria/gastos", label: "Gastos" },
+  { href: "/tesoreria/flujo", label: "Flujo de fondos" },
 ];
 
 export function TreasuryTabs() {

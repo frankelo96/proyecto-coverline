@@ -1207,6 +1207,9 @@ model CashMovement {
   receipt         Receipt?             @relation(fields: [receiptId], references: [id], onDelete: SetNull)
   chequeId        String?
   cheque          Cheque?              @relation(fields: [chequeId], references: [id], onDelete: SetNull)
+  /// Gasto: categoría para el estado de resultados (alquiler, servicios, impuestos…)
+  expenseCategoryId String?
+  expenseCategory   ExpenseCategory?   @relation(fields: [expenseCategoryId], references: [id], onDelete: Restrict)
   userId          String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt       DateTime             @default(now())
@@ -1215,6 +1218,7 @@ model CashMovement {
 
   @@index([cashRegisterId, createdAt])
   @@index([sessionId])
+  @@index([expenseCategoryId, createdAt])
   @@map("cash_movements")
 }
 
@@ -1882,4 +1886,19 @@ model CreditorCredit {
   @@index([supplierId])
   @@index([workshopId])
   @@map("creditor_credits")
+}
+
+/// Categoría de gasto (alquiler, servicios, impuestos, honorarios…).
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  /// Fijo (se repite todos los meses: entra en el flujo de fondos proyectado) o variable
+  fixed     Boolean  @default(false)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  movements CashMovement[]
+
+  @@map("expense_categories")
 }

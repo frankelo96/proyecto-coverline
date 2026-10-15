@@ -53,6 +53,7 @@ export interface MovementInput {
   receiptId?: string | null;
   chequeId?: string | null;
   transferGroupId?: string | null;
+  expenseCategoryId?: string | null;
 }
 
 /** Registra un movimiento validando turno abierto y saldo de cajas físicas. La caja debe estar bloqueada. */
@@ -84,6 +85,7 @@ export async function addMovement(tx: Tx, m: MovementInput) {
       receiptId: m.receiptId ?? null,
       chequeId: m.chequeId ?? null,
       transferGroupId: m.transferGroupId ?? null,
+      expenseCategoryId: m.expenseCategoryId ?? null,
       userId: m.userId,
     },
   });
@@ -141,12 +143,22 @@ export async function transferBetween(
 
 export async function manualMovement(
   tx: Tx,
-  input: { registerId: string; direction: "IN" | "OUT"; amount: number; concept: string },
+  input: { registerId: string; direction: "IN" | "OUT"; amount: number; concept: string; expenseCategoryId?: string | null },
   userId: string,
 ) {
   const register = await lockRegister(tx, input.registerId);
   const method: PaymentMethod = PHYSICAL_KINDS.includes(register.kind) ? "EFECTIVO" : "TRANSFERENCIA";
-  await addMovement(tx, { register, type: input.direction === "IN" ? "INGRESO" : "EGRESO", method, amount: input.amount, concept: input.concept, userId });
+  const category = input.direction === "OUT" && input.expenseCategoryId ? await tx.expenseCategory.findUnique({ where: { id: input.expenseCategoryId } }) : null;
+  if (input.direction === "OUT" && input.expenseCategoryId && !category) throw new TreasuryError("Categoría de gasto inexistente");
+  await addMovement(tx, {
+    register,
+    type: input.direction === "IN" ? "INGRESO" : "EGRESO",
+    method,
+    amount: input.amount,
+    concept: input.concept,
+    userId,
+    expenseCategoryId: category?.id ?? null,
+  });
   await tx.auditLog.create({
     data: { userId, entity: "CashRegister", entityId: register.id, action: input.direction === "IN" ? "MANUAL_IN" : "MANUAL_OUT", reason: input.concept, data: { amount: input.amount } },
   });

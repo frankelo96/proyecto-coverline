@@ -12,6 +12,7 @@ import { periodLabel, periodOf, SALARY_CONCEPT_LABELS } from "@/lib/validations/
 import { CREDIT_NOTE_LABELS, PAYMENT_METHOD_LABELS, PURCHASE_INVOICE_LABELS } from "@/lib/validations/purchasing";
 import { webQuantity } from "@/lib/woo/stock";
 import { db } from "@/server/db";
+import { ivaPurchasesBook, ivaSalesBook } from "@/server/queries/finance.queries";
 import { getCreditorStatement, listCreditors } from "@/server/queries/purchasing.queries";
 import { voucherLabel } from "@/server/queries/sales.queries";
 import { getClientAccount, listClientBalances } from "@/server/queries/treasury.queries";
@@ -297,6 +298,65 @@ export const REPORTS: Record<string, ReportDef> = {
             status: s.status === "ANULADA" ? "Anulada" : null,
           };
         }),
+      };
+    },
+  },
+  "iva-ventas": {
+    label: "Libro IVA Ventas",
+    description: "Facturas y notas de crédito autorizadas por ARCA, con neto e IVA por alícuota (las NC restan).",
+    permission: PERMISSIONS.cashRead,
+    params: ["rango"],
+    async build(p) {
+      const r = range(p);
+      const book = await ivaSalesBook(r.from, r.toEnd);
+      return {
+        title: "Libro IVA Ventas",
+        filename: `iva-ventas-${r.label}`,
+        columns: [
+          { key: "date", label: "Fecha", type: "date" },
+          { key: "type", label: "Comprobante" },
+          { key: "number", label: "Número" },
+          { key: "cae", label: "CAE" },
+          { key: "client", label: "Cliente" },
+          { key: "doc", label: "CUIT/DNI" },
+          { key: "net21", label: "Neto 21%", type: "money", total: true },
+          { key: "vat21", label: "IVA 21%", type: "money", total: true },
+          { key: "net105", label: "Neto 10,5%", type: "money", total: true },
+          { key: "vat105", label: "IVA 10,5%", type: "money", total: true },
+          { key: "exempt", label: "Exento", type: "money", total: true },
+          { key: "total", label: "Total", type: "money", total: true },
+        ],
+        rows: book.rows,
+      };
+    },
+  },
+  "iva-compras": {
+    label: "Libro IVA Compras",
+    description: "Facturas y notas de crédito de proveedores y talleres con IVA, percepciones y otros impuestos (las NC restan).",
+    permission: PERMISSIONS.cashRead,
+    params: ["rango"],
+    async build(p) {
+      const r = range(p);
+      const book = await ivaPurchasesBook(r.from, r.toEnd);
+      return {
+        title: "Libro IVA Compras",
+        filename: `iva-compras-${r.label}`,
+        columns: [
+          { key: "date", label: "Fecha", type: "date" },
+          { key: "type", label: "Comprobante" },
+          { key: "number", label: "Número" },
+          { key: "creditor", label: "Proveedor / taller" },
+          { key: "cuit", label: "CUIT" },
+          { key: "net", label: "Neto", type: "money", total: true },
+          { key: "vat21", label: "IVA 21%", type: "money", total: true },
+          { key: "vat105", label: "IVA 10,5%", type: "money", total: true },
+          { key: "vat27", label: "IVA 27%", type: "money", total: true },
+          { key: "perceptionIva", label: "Percep. IVA", type: "money", total: true },
+          { key: "perceptionIibb", label: "Percep. IIBB", type: "money", total: true },
+          { key: "otherTaxes", label: "Otros imp.", type: "money", total: true },
+          { key: "total", label: "Total", type: "money", total: true },
+        ],
+        rows: book.rows,
       };
     },
   },

@@ -11,6 +11,7 @@ import { formatMoney } from "@/lib/format";
 import { REGISTER_KIND_LABELS } from "@/lib/treasury/cash";
 import { cn } from "@/lib/utils";
 import { requirePageUser } from "@/server/auth/session";
+import { db } from "@/server/db";
 import { getChequesSummary, listRegistersOverview } from "@/server/queries/treasury.queries";
 
 export const metadata: Metadata = { title: "Tesorería" };
@@ -26,7 +27,11 @@ const ICONS: Record<CashRegisterKind, typeof Banknote> = {
 
 export default async function TreasuryPage() {
   const user = await requirePageUser(PERMISSIONS.cashRead);
-  const [registers, cheques] = await Promise.all([listRegistersOverview(), getChequesSummary()]);
+  const [registers, cheques, categories] = await Promise.all([
+    listRegistersOverview(),
+    getChequesSummary(),
+    db.expenseCategory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+  ]);
   const canManage = hasPermission(user.permissions, PERMISSIONS.cashManage);
   const options = registers.map((r) => ({ id: r.id, name: r.name, usable: !r.requiresSession || r.openSession !== null }));
   const cash = registers.filter((r) => r.kind !== "BANCO" && r.kind !== "BILLETERA_VIRTUAL").reduce((a, r) => a + r.balance, 0);
@@ -83,7 +88,7 @@ export default async function TreasuryPage() {
       {canManage && (
         <div className="grid gap-4 lg:grid-cols-2">
           <TransferForm registers={options} />
-          <ManualMovementForm registers={options} />
+          <ManualMovementForm registers={options} categories={categories} />
         </div>
       )}
     </div>

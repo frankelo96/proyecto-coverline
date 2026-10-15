@@ -10,6 +10,7 @@ export default async function MastersLayout({ children }: Readonly<{ children: R
     { href: "/maestros/proveedores", label: "Proveedores" },
     { href: "/maestros/talleres", label: "Talleres" },
     { href: "/maestros/listas-precios", label: "Listas de precios" },
+    { href: "/maestros/precios", label: "Aumento de precios" },
     { href: "/maestros/stock", label: "Stock por local" },
     { href: "/maestros/etiquetas", label: "Etiquetas" },
     { href: "/maestros/tienda-web", label: "Tienda web" },

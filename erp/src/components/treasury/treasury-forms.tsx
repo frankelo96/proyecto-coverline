@@ -80,7 +80,7 @@ export function TransferForm({ registers }: { registers: Opt[] }) {
   );
 }
 
-export function ManualMovementForm({ registers }: { registers: Opt[] }) {
+export function ManualMovementForm({ registers, categories = [] }: { registers: Opt[]; categories?: { id: string; name: string }[] }) {
   const id = useId();
   const { pending, status, execute } = useServerAction();
   const usable = registers.filter((r) => r.usable);
@@ -88,6 +88,7 @@ export function ManualMovementForm({ registers }: { registers: Opt[] }) {
   const [direction, setDirection] = useState<"IN" | "OUT">("OUT");
   const [amount, setAmount] = useState("");
   const [concept, setConcept] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   return (
     <Card>
       <CardHeader>
@@ -99,9 +100,10 @@ export function ManualMovementForm({ registers }: { registers: Opt[] }) {
           className="grid gap-3 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            execute(() => manualMovementAction({ registerId, direction, amount: Number(amount), concept: concept.trim() }), () => {
+            execute(() => manualMovementAction({ registerId, direction, amount: Number(amount), concept: concept.trim(), expenseCategoryId: direction === "OUT" ? categoryId || null : null }), () => {
               setAmount("");
               setConcept("");
+              setCategoryId("");
             });
           }}
         >
@@ -130,6 +132,20 @@ export function ManualMovementForm({ registers }: { registers: Opt[] }) {
             <Label htmlFor={`${id}-c`}>Concepto</Label>
             <Input id={`${id}-c`} maxLength={200} value={concept} onChange={(e) => setConcept(e.target.value)} />
           </div>
+          {direction === "OUT" && categories.length > 0 && (
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor={`${id}-g`}>Categoría de gasto</Label>
+              <NativeSelect id={`${id}-g`} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">No es un gasto (retiro, préstamo, ajuste)</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">Los gastos con categoría van al estado de resultados.</p>
+            </div>
+          )}
           <StatusMessage status={status} className="sm:col-span-2" />
           <Button type="submit" disabled={pending || !registerId || amount === "" || concept.trim().length < 3} className="w-fit">
             {pending && <Loader2 className="animate-spin" />} Registrar
