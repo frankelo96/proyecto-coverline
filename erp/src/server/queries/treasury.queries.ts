@@ -226,7 +226,7 @@ export async function getSessionReport(sessionId: string) {
   if (!s) return null;
   const byMethod = new Map<PaymentMethod, number>();
   const sign = (kind: string) => (kind === "DEVOLUCION" ? -1 : 1);
-  for (const x of s.sales) for (const p of x.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + sign(x.kind) * p.amount.toNumber());
+  for (const x of s.sales.filter((v) => v.status !== "ANULADA")) for (const p of x.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + sign(x.kind) * p.amount.toNumber());
   for (const p of s.receipts.flatMap((x) => x.payments)) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount.toNumber());
   const change = s.sales.reduce((a, x) => a + x.changeAmount.toNumber(), 0);
   return {

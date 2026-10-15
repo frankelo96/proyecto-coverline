@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { ARCA_BADGE } from "@/components/sales/arca-badge";
 import { AuthorizeButton } from "@/components/sales/authorize-button";
 import { ReturnForm } from "@/components/sales/return-form";
+import { ExchangeForm, VoidSaleForm } from "@/components/sales/sale-actions";
 import { Badge } from "@/components/ui/badge";
 import { FlashNotice } from "@/components/ui/flash-notice";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,9 @@ import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { METHOD_LABELS } from "@/lib/treasury/cash";
 import { requirePageUser } from "@/server/auth/session";
+import { db } from "@/server/db";
 import { getSaleDetail } from "@/server/queries/sales.queries";
+import { BRANCH_ORDER } from "@/server/services/stock.service";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +40,12 @@ export default async function SaleDetailPage({ params, searchParams }: Props) {
   const { aviso } = await searchParams;
   const isReturn = s.kind === "DEVOLUCION";
   const fiscal = s.invoiceType !== "TICKET_INTERNO";
+  const voided = s.status === "ANULADA";
+  const canExchange = !isReturn && !voided && hasPermission(user.permissions, PERMISSIONS.posReturn) && s.items.some((i) => i.returnable > 0 && i.exchangeOptions.length > 0);
+  const canVoid = !s.voidBlocker && hasPermission(user.permissions, PERMISSIONS.posVoid);
+  const branches = canExchange ? await db.branch.findMany({ where: { active: true }, orderBy: BRANCH_ORDER, select: { id: true, name: true } }) : [];
   const canReturn =
-    !isReturn && hasPermission(user.permissions, PERMISSIONS.posReturn) && s.items.some((i) => i.returnable > 0) && (!fiscal || s.arca.status === "AUTORIZADO");
+    !isReturn && !voided && hasPermission(user.permissions, PERMISSIONS.posReturn) && s.items.some((i) => i.returnable > 0) && (!fiscal || s.arca.status === "AUTORIZADO");
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,7 +58,10 @@ export default async function SaleDetailPage({ params, searchParams }: Props) {
           <p className="font-mono text-sm text-muted-foreground">
             {isReturn ? "Devolución" : "Venta"} #{s.number} · {dt(s.date)} · {s.branchName} · {s.cashier}
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">{s.voucher}</h1>
+          <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight">
+            {s.voucher}
+            {voided && <Badge variant="destructive">Anulada</Badge>}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {s.client ? (
               <Link href={`/tesoreria/cobranzas/${s.client.id}`} className="underline underline-offset-4">
@@ -124,7 +134,30 @@ export default async function SaleDetailPage({ params, searchParams }: Props) {
               <ReturnForm sale={s} />
             </Card>
           )}
-          {!isReturn && fiscal && s.arca.status !== "AUTORIZADO" && (
+          {canExchange && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cambio de talle</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ExchangeForm sale={s} branches={branches} defaultBranchId={user.branchId ?? s.branchId ?? branches[0]?.id ?? ""} lockedBranch={!!user.branchId} />
+              </CardContent>
+            </Card>
+          )}
+          {canVoid && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Anular venta</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <VoidSaleForm saleId={s.id} number={s.number} />
+              </CardContent>
+            </Card>
+          )}
+          {!isReturn && !voided && !canVoid && s.voidBlocker && hasPermission(user.permissions, PERMISSIONS.posVoid) && (
+            <p className="text-sm text-muted-foreground">No se puede anular: {s.voidBlocker.charAt(0).toLowerCase() + s.voidBlocker.slice(1)}.</p>
+          )}
+          {!isReturn && !voided && fiscal && s.arca.status !== "AUTORIZADO" && (
             <p className="text-sm text-muted-foreground">Para devolver mercadería de esta factura primero tiene que estar autorizada por ARCA.</p>
           )}
         </div>
@@ -153,12 +186,17 @@ export default async function SaleDetailPage({ params, searchParams }: Props) {
               <div className="border-t pt-2">
                 <p className="mb-1 text-xs font-semibold uppercase text-muted-foreground">{isReturn ? "Reintegro" : "Cobro"}</p>
                 {s.payments.map((p, i) => (
-                  <div key={i} className="flex justify-between gap-2">
+                  <div key={i} className="flex flex-wrap justify-between gap-x-2">
                     <span>
                       {METHOD_LABELS[p.method]}
                       {p.detail && <span className="text-muted-foreground"> · {p.detail}</span>}
                     </span>
                     <span className="font-mono">{formatMoney(p.amount)}</span>
+                    {p.storeCreditId && isReturn && (
+                      <Link href={`/pos/vales/${p.storeCreditId}`} target="_blank" className="basis-full text-xs underline underline-offset-4">
+                        Imprimir vale
+                      </Link>
+                    )}
                   </div>
                 ))}
                 {s.change > 0 && (

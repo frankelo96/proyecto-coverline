@@ -57,14 +57,14 @@ export type ChequeAction = z.infer<typeof chequeActionSchema>;
 
 // --- Cobros (venta y cobranza) -----------------------------------------------------------
 
-export const COLLECTION_METHODS = ["EFECTIVO", "TARJETA_DEBITO", "TARJETA_CREDITO", "MERCADO_PAGO", "MODO", "TRANSFERENCIA", "CHEQUE", "ECHEQ", "CUENTA_CORRIENTE"] as const;
+export const COLLECTION_METHODS = ["EFECTIVO", "TARJETA_DEBITO", "TARJETA_CREDITO", "MERCADO_PAGO", "MODO", "TRANSFERENCIA", "CHEQUE", "ECHEQ", "CUENTA_CORRIENTE", "VALE"] as const;
 
 /**
  * Medios que ofrece la pantalla (los que usa Coverline): Efectivo, Banco Macro,
  * Mercado Pago y Cheque de terceros (físico o eCheq), más cuenta corriente en el POS.
  * Tarjetas y MODO siguen aceptándose para el historial pero no se ofrecen.
  */
-export const UI_COLLECTION_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "CHEQUE", "CUENTA_CORRIENTE"] as const;
+export const UI_COLLECTION_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "CHEQUE", "VALE", "CUENTA_CORRIENTE"] as const;
 
 export const collectionPaymentSchema = z
   .object({
@@ -75,7 +75,8 @@ export const collectionPaymentSchema = z
     installments: z.number().int().min(1).max(24).nullable(),
     cheque: chequeDataSchema.nullable(),
   })
-  .refine((p) => (p.method === "CHEQUE" || p.method === "ECHEQ" ? p.cheque !== null : true), { message: "Completá los datos del cheque", path: ["cheque"] });
+  .refine((p) => (p.method === "CHEQUE" || p.method === "ECHEQ" ? p.cheque !== null : true), { message: "Completá los datos del cheque", path: ["cheque"] })
+  .refine((p) => (p.method === "VALE" ? !!p.reference && p.reference.replace(/[^0-9A-Za-z]/g, "").length === 8 : true), { message: "Ingresá el código del vale (8 caracteres)", path: ["reference"] });
 export type CollectionPayment = z.infer<typeof collectionPaymentSchema>;
 
 // --- Venta POS ---------------------------------------------------------------------------

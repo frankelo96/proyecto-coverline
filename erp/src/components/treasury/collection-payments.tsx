@@ -1,7 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useId } from "react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/format";
 import { todayIso } from "@/lib/purchasing/labels";
 import { METHOD_LABELS } from "@/lib/treasury/cash";
 import { COLLECTION_METHODS, type CollectionPayment } from "@/lib/validations/treasury";
+import { lookupStoreCreditAction } from "@/server/actions/treasury.actions";
 
 export type CollectionMethod = (typeof COLLECTION_METHODS)[number];
 
@@ -128,6 +129,13 @@ export function CollectionPayments({
             {(r.method === "TRANSFERENCIA" || r.method === "MERCADO_PAGO" || r.method === "MODO") && (
               <Input aria-label="Referencia" placeholder="N° de operación" maxLength={100} value={r.reference} onChange={(e) => update(r.key, { reference: e.target.value })} />
             )}
+            {r.method === "VALE" && (
+              <StoreCreditLookup
+                code={r.reference}
+                onCode={(code) => update(r.key, { reference: code })}
+                onBalance={(balance) => update(r.key, { amount: String(Math.round(Math.min(balance, Math.max(remaining + num(r.amount), 0)) * 100) / 100) })}
+              />
+            )}
             {isCheque && (
               <div className="grid grid-cols-2 gap-2">
                 <NativeSelect
@@ -179,6 +187,54 @@ export function CollectionPayments({
           )}
         </p>
       </div>
+    </div>
+  );
+}
+
+/** Código del vale con consulta de saldo (el importe se ajusta a lo que tiene el vale). */
+function StoreCreditLookup({ code, onCode, onBalance }: { code: string; onCode: (code: string) => void; onBalance: (balance: number) => void }) {
+  const [info, setInfo] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, setPending] = useState(false);
+  async function lookup() {
+    setPending(true);
+    try {
+      const r = await lookupStoreCreditAction({ code });
+      if (r.ok) {
+        onCode(r.data.code);
+        onBalance(r.data.balance);
+        setInfo({ ok: true, text: `Saldo ${formatMoney(r.data.balance)}${r.data.client ? ` · ${r.data.client}` : ""}` });
+      } else setInfo({ ok: false, text: r.error });
+    } catch {
+      setInfo({ ok: false, text: "No se pudo consultar el vale" });
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex gap-2">
+        <Input
+          aria-label="Código del vale"
+          placeholder="Código del vale (ej. 7K3M-9QX2)"
+          maxLength={20}
+          className="font-mono uppercase"
+          value={code}
+          onChange={(e) => {
+            onCode(e.target.value);
+            setInfo(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void lookup();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={() => void lookup()} disabled={pending || code.trim().length < 8}>
+          {pending ? <Loader2 className="animate-spin" /> : <Search />} Saldo
+        </Button>
+      </div>
+      {info && <p className={`text-xs ${info.ok ? "text-success" : "text-destructive"}`}>{info.text}</p>}
     </div>
   );
 }

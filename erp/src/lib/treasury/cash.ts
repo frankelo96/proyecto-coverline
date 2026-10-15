@@ -41,6 +41,7 @@ export const METHOD_LABELS: Record<PaymentMethod, string> = {
   CUENTA_CORRIENTE: "Cuenta corriente",
   CHEQUE: "Cheque de terceros",
   ECHEQ: "eCheq de terceros",
+  VALE: "Vale / saldo a favor",
   MIXTO: "Varios medios",
 };
 
@@ -90,8 +91,8 @@ export const registerAcceptsMethod = (kind: CashRegisterKind, method: PaymentMet
 /** Medios de cobro que van al cajón de la caja diaria del turno. El resto se acredita en su cuenta. */
 export const DRAWER_METHODS: PaymentMethod[] = ["EFECTIVO"];
 
-/** Medios que no mueven caja: generan deuda (cuenta corriente) o un cheque en cartera. */
-export const NON_REGISTER_METHODS: PaymentMethod[] = ["CUENTA_CORRIENTE", "CHEQUE", "ECHEQ"];
+/** Medios que no mueven caja: generan deuda (cuenta corriente), un cheque en cartera o usan un vale. */
+export const NON_REGISTER_METHODS: PaymentMethod[] = ["CUENTA_CORRIENTE", "CHEQUE", "ECHEQ", "VALE"];
 
 /** Resuelve en qué caja/cuenta se acredita un medio de cobro. */
 export function destinationRegister<R extends { id: string; kind: CashRegisterKind; defaultForMethods: PaymentMethod[]; active: boolean }>(

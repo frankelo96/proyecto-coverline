@@ -26,6 +26,8 @@ import { applyChequeAction } from "@/server/services/cheque.service";
 import { createSale } from "@/server/services/pos.service";
 import { createReceipt } from "@/server/services/receivables.service";
 import { createReturn } from "@/server/services/returns.service";
+import { exchangeSaleItem, voidSale } from "@/server/services/sale-void.service";
+import { normalizeStoreCreditCode } from "@/server/services/store-credit.service";
 import { returnSchema } from "@/lib/validations/returns";
 import { closeSession, manualMovement, openSession, transferBetween } from "@/server/services/treasury.service";
 import { scheduleWebStockPushForSale } from "@/server/woo/sync";
@@ -192,7 +194,7 @@ export async function authorizeSaleAction(raw: unknown): Promise<ActionResult<Au
   }
 }
 
-export async function createReturnAction(raw: unknown): Promise<ActionResult<{ id: string; number: number; arca: AuthorizeResult | null }>> {
+export async function createReturnAction(raw: unknown): Promise<ActionResult<{ id: string; number: number; arca: AuthorizeResult | null; storeCreditId: string | null }>> {
   try {
     const user = await requireActionUser(PERMISSIONS.posReturn);
     const input = returnSchema.parse(raw);
@@ -204,9 +206,60 @@ export async function createReturnAction(raw: unknown): Promise<ActionResult<{ i
     revalidatePath("/ventas", "layout");
     return {
       ok: true,
-      data: { id: r.id, number: r.number, arca },
-      message: `Devolución #${r.number} por ${formatMoney(r.total)} registrada${arca ? ` · ${arca.message}` : ""}`,
+      data: { id: r.id, number: r.number, arca, storeCreditId: r.storeCredit?.id ?? null },
+      message: `Devolución #${r.number} por ${formatMoney(r.total)} registrada${r.storeCredit ? ` · vale ${r.storeCredit.code}` : ""}${arca ? ` · ${arca.message}` : ""}`,
     };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+/** Anula una venta sin CAE: devuelve el stock, revierte los cobros y la deuda. */
+export async function voidSaleAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.posVoid);
+    const input = z
+      .object({ saleId: z.string().min(1), reason: z.string().trim().min(5, "Indicá el motivo de la anulación (mínimo 5 caracteres)").max(300) })
+      .parse(raw);
+    const r = await db.$transaction((tx) => voidSale(tx, input, { id: user.id }), TX);
+    await scheduleWebStockPushForSale(input.saleId).catch(() => undefined);
+    revalidateTreasury();
+    revalidatePath("/ventas", "layout");
+    revalidatePath("/maestros", "layout");
+    return { ok: true, data: undefined, message: `Venta #${r.number} anulada: se devolvió el stock y se revirtieron los cobros` };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+/** Cambio de talle de la misma prenda al mismo precio, sin comprobantes. */
+export async function exchangeSaleItemAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.posReturn);
+    const input = z
+      .object({ saleId: z.string().min(1), itemId: z.string().min(1), newVariantId: z.string().min(1, "Elegí el talle nuevo"), quantity: z.number().finite().positive().max(100000), branchId: z.string().min(1, "Elegí el local") })
+      .parse(raw);
+    if (user.branchId && user.branchId !== input.branchId) return { ok: false, error: "Solo podés hacer cambios en tu local" };
+    const r = await db.$transaction((tx) => exchangeSaleItem(tx, input, { id: user.id }), TX);
+    await scheduleWebStockPushForSale(input.saleId).catch(() => undefined);
+    revalidatePath("/ventas", "layout");
+    revalidatePath("/maestros", "layout");
+    return { ok: true, data: undefined, message: r.warning ? `${r.message}. Atención: ${r.warning}` : r.message };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+/** Saldo de un vale para mostrarlo en el POS antes de cobrar. */
+export async function lookupStoreCreditAction(raw: unknown): Promise<ActionResult<{ code: string; balance: number; client: string | null }>> {
+  try {
+    await requireActionUser(PERMISSIONS.posSell);
+    const { code } = z.object({ code: z.string().trim().min(1).max(20) }).parse(raw);
+    const c = await db.storeCredit.findUnique({ where: { code: normalizeStoreCreditCode(code) }, include: { client: { select: { businessName: true } } } });
+    if (!c) return { ok: false, error: "No existe un vale con ese código" };
+    if (c.status !== "ACTIVO") return { ok: false, error: `El vale ${c.code} está ${c.status === "USADO" ? "usado" : "anulado"}` };
+    if (c.expiresAt && c.expiresAt < new Date()) return { ok: false, error: `El vale ${c.code} está vencido` };
+    return { ok: true, data: { code: c.code, balance: c.balance.toNumber(), client: c.client?.businessName ?? null } };
   } catch (e) {
     return toError(e);
   }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const REFUND_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "CUENTA_CORRIENTE"] as const;
+export const REFUND_METHODS = ["EFECTIVO", "TRANSFERENCIA", "MERCADO_PAGO", "CUENTA_CORRIENTE", "VALE"] as const;
 
 export const returnSchema = z.object({
   originalSaleId: z.string().min(1),

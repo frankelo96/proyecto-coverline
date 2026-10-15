@@ -71,7 +71,8 @@ export type StockMoveReason =
   | "INGRESO"
   | "EGRESO"
   | "IMPORTACION"
-  | "PEDIDO";
+  | "PEDIDO"
+  | "CAMBIO";
 
 export const STOCK_MOVE_LABELS: Record<StockMoveReason, string> = {
   VENTA: "Venta",
@@ -89,6 +90,7 @@ export const STOCK_MOVE_LABELS: Record<StockMoveReason, string> = {
   EGRESO: "Egreso escaneado",
   IMPORTACION: "Importación",
   PEDIDO: "Entrega de pedido",
+  CAMBIO: "Cambio de talle",
 };
 
 /** De dónde viene el movimiento (queda en el kardex). */

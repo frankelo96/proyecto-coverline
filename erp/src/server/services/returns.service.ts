@@ -4,7 +4,8 @@
  *  - Ticket interno → devolución interna.
  *  - Importe por línea proporcional a lo cobrado (respeta los descuentos de la venta).
  *  - Reintegro: efectivo del cajón del turno, transferencia/Mercado Pago desde su
- *    cuenta, o crédito contra la deuda en cuenta corriente de esa venta.
+ *    cuenta, crédito contra la deuda en cuenta corriente de esa venta, o un vale
+ *    de saldo a favor para usar en otra compra (cambio de talle o de prenda).
  */
 import Decimal from "decimal.js";
 
@@ -18,6 +19,7 @@ import type { ReturnInput } from "@/lib/validations/returns";
 import { nextInternalNumber } from "@/server/services/pos.service";
 import { addMovement, lockRegister, openSessionOf } from "@/server/services/treasury.service";
 import { adjustBranchStock } from "@/server/services/stock.service";
+import { issueStoreCredit } from "@/server/services/store-credit.service";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Decimal.Value) => new Prisma.Decimal(v.toString());
@@ -121,7 +123,8 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
   }
 
   // --- Reintegro: solo por un medio con que se cobró la venta (no se puede sacar efectivo de una venta cobrada por transferencia).
-  if (input.refundMethod !== "CUENTA_CORRIENTE") {
+  // El vale se puede dar siempre (no sale dinero).
+  if (input.refundMethod !== "CUENTA_CORRIENTE" && input.refundMethod !== "VALE") {
     const [paid, refunded] = await Promise.all([
       tx.payment.aggregate({ where: { saleId: original.id, method: input.refundMethod }, _sum: { amount: true } }),
       tx.payment.aggregate({
@@ -141,7 +144,10 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
   const concept = `Devolución #${nc.number} (venta #${original.number})`;
   let cashRegisterId: string | null = null;
   let movementId: string | null = null;
-  if (input.refundMethod === "CUENTA_CORRIENTE") {
+  let storeCredit: { id: string; code: string } | null = null;
+  if (input.refundMethod === "VALE") {
+    storeCredit = await issueStoreCredit(tx, { amount: totalReturned, clientId: original.clientId, originSaleId: nc.id, userId: user.id, notes: concept });
+  } else if (input.refundMethod === "CUENTA_CORRIENTE") {
     const debt = original.receivables[0];
     if (!debt || debt.balance.lt(totalReturned)) {
       throw new SaleError(`La deuda pendiente de la venta #${original.number} es ${formatMoney(debt?.balance.toNumber() ?? 0)}: reintegrá la diferencia por otro medio`);
@@ -171,8 +177,9 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
     data: {
       method: input.refundMethod,
       amount: D(totalReturned),
-      reference: input.reference,
+      reference: storeCredit?.code ?? input.reference,
       saleId: nc.id,
+      storeCreditId: storeCredit?.id ?? null,
       cashRegisterId,
       cashMovementId: movementId,
       createdById: user.id,
@@ -190,5 +197,5 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
     },
   });
 
-  return { ...nc, total: totalReturned, fiscal: isFiscal(invoiceType) };
+  return { ...nc, total: totalReturned, fiscal: isFiscal(invoiceType), storeCredit };
 }

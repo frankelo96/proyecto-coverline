@@ -173,6 +173,8 @@ enum PaymentMethod {
   /// Cheque físico (de terceros o propio según Cheque.kind)
   CHEQUE
   ECHEQ
+  /// Vale / saldo a favor del cliente (cambios y devoluciones)
+  VALE
   /// Solo para imputaciones de una orden de pago con varios instrumentos
   MIXTO
 }
@@ -420,6 +422,7 @@ model Client {
   leads            Lead[]
   quotes           Quote[]
   sales            Sale[]
+  storeCredits     StoreCredit[]
   productionOrders ProductionOrder[]
   receivables      AccountReceivable[]
   cheques          Cheque[]
@@ -988,6 +991,8 @@ model Sale {
   originalSaleId      String?
   originalSale        Sale?                @relation("SaleReturns", fields: [originalSaleId], references: [id], onDelete: Restrict)
   returns             Sale[]               @relation("SaleReturns")
+  /// Vales emitidos por esta devolución
+  storeCredits        StoreCredit[]
   returnReason        String?
   // --- ARCA ---
   arcaStatus          ArcaStatus           @default(NO_APLICA)
@@ -1338,11 +1343,15 @@ model Payment {
   cashRegister        CashRegister?      @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
   cashMovementId      String?            @unique
   cashMovement        CashMovement?      @relation(fields: [cashMovementId], references: [id], onDelete: SetNull)
+  /// Vale emitido (devolución) o usado (venta) con este pago
+  storeCreditId       String?
+  storeCredit         StoreCredit?       @relation(fields: [storeCreditId], references: [id], onDelete: Restrict)
   createdById         String
   createdBy           User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt           DateTime           @default(now())
 
   @@index([saleId])
+  @@index([storeCreditId])
   @@index([createdAt, method])
   @@map("payments")
 }
@@ -1615,4 +1624,32 @@ model StockMovement {
   @@index([branchId, createdAt])
   @@index([refType, refId])
   @@map("stock_movements")
+}
+
+/// Vale de cambio / saldo a favor: se emite en una devolución y se usa como medio de pago en el POS.
+model StoreCredit {
+  id           String    @id @default(cuid())
+  number       Int       @unique @default(autoincrement())
+  /// Código impreso en el vale (número + dígitos al azar para que no se pueda adivinar)
+  code         String    @unique
+  clientId     String?
+  client       Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Devolución que lo generó
+  originSaleId String?
+  originSale   Sale?     @relation(fields: [originSaleId], references: [id], onDelete: SetNull)
+  amount       Decimal   @db.Decimal(14, 2)
+  balance      Decimal   @db.Decimal(14, 2)
+  /// ACTIVO, USADO, ANULADO
+  status       String    @default("ACTIVO")
+  expiresAt    DateTime?
+  notes        String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  payments Payment[]
+
+  @@index([clientId])
+  @@index([status])
+  @@map("store_credits")
 }

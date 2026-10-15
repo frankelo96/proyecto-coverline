@@ -16,6 +16,8 @@ export const PERMISSIONS = {
   posSell: "pos:sell",
   posDiscount: "pos:discount",
   posReturn: "pos:return",
+  /** Anular ventas sin CAE (revierte stock y cobros): solo encargados / administración */
+  posVoid: "pos:void",
   cashSession: "cash:session",
   cashRead: "cash:read",
   cashManage: "cash:manage",

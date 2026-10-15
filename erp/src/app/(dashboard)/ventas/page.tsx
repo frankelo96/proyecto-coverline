@@ -1,4 +1,4 @@
-import { FileSpreadsheet, Search } from "lucide-react";
+import { FileSpreadsheet, Search, Ticket } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -41,7 +41,14 @@ export default async function SalesPage({ searchParams }: Props) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-3xl font-bold tracking-tight">Ventas y comprobantes</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">Ventas y comprobantes</h1>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/ventas/vales">
+                <Ticket /> Vales
+              </Link>
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
             {arcaEnabled() ? "Facturación electrónica ARCA activa." : "Facturación electrónica ARCA no configurada: las facturas quedan pendientes de CAE."}
             {pending > 0 && <span className="font-semibold text-accent-strong"> {pending} comprobantes sin CAE.</span>}
@@ -113,12 +120,17 @@ export default async function SalesPage({ searchParams }: Props) {
                       <Badge variant="destructive">Devolución</Badge>
                     </span>
                   )}
+                  {r.voided && (
+                    <span className="ml-2">
+                      <Badge variant="outline">Anulada</Badge>
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{new Date(r.date).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</TableCell>
                 <TableCell>{r.branchName ?? "—"}</TableCell>
                 <TableCell>{r.clientName ?? <span className="text-muted-foreground">Consumidor final</span>}</TableCell>
                 <TableCell className="font-mono text-xs">{r.voucher}</TableCell>
-                <TableCell className={cn("text-right font-mono tabular-nums", r.kind === "DEVOLUCION" && "text-destructive")}>
+                <TableCell className={cn("text-right font-mono tabular-nums", r.kind === "DEVOLUCION" && "text-destructive", r.voided && "text-muted-foreground line-through")}>
                   {formatMoney(r.kind === "DEVOLUCION" ? -r.total : r.total)}
                 </TableCell>
                 <TableCell className="pr-5">

@@ -147,7 +147,7 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
   for (const l of lines) {
     if (!l.variant) continue;
     // Sale del stock del local de la caja.
-    const updated = await adjustBranchStock(tx, l.variant.id, branch.id, D(l.input.quantity).neg(), { reason: "VENTA", refType: "VENTA", refId: sale.id, userId: user.id });
+    const updated = await adjustBranchStock(tx, l.variant.id, branch.id, D(l.input.quantity).neg(), { reason: "VENTA", refType: "VENTA", refId: sale.id, userId: user.id, notes: `Venta #${sale.number}` });
     if (updated.branch.lt(0)) warnings.push(`${l.description}: stock negativo en ${branch.name} (${updated.branch.toNumber()})`);
   }
 

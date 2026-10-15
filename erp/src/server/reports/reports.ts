@@ -277,7 +277,8 @@ export const REPORTS: Record<string, ReportDef> = {
           { key: "status", label: "Estado" },
         ],
         rows: sales.map((s) => {
-          const sign = s.kind === "DEVOLUCION" ? -1 : 1;
+          // Una venta anulada figura con importe 0 (queda el registro).
+          const sign = s.status === "ANULADA" ? 0 : s.kind === "DEVOLUCION" ? -1 : 1;
           return {
             date: s.createdAt,
             number: s.number,

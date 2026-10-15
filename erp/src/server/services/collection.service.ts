@@ -9,6 +9,7 @@ import type { CashRegisterKind, PaymentMethod } from "@/generated/prisma/enums";
 import { destinationRegister, METHOD_LABELS } from "@/lib/treasury/cash";
 import type { CollectionPayment } from "@/lib/validations/treasury";
 import { receiveThirdPartyCheque } from "@/server/services/cheque.service";
+import { redeemStoreCredit } from "@/server/services/store-credit.service";
 import { addMovement, lockRegister } from "@/server/services/treasury.service";
 
 type Tx = Prisma.TransactionClient;
@@ -44,6 +45,8 @@ export async function registerCollections(tx: Tx, payments: CollectionPayment[],
     let chequeId: string | null = null;
     let registerId: string | null = null;
     let movementId: string | null = null;
+    let storeCreditId: string | null = null;
+    let reference = p.reference;
     if (p.method === "EFECTIVO") {
       registerId = drawer.id;
       movementId = cashMovementId;
@@ -51,6 +54,10 @@ export async function registerCollections(tx: Tx, payments: CollectionPayment[],
     } else if (p.method === "CHEQUE" || p.method === "ECHEQ") {
       const cheque = await receiveThirdPartyCheque(tx, { ...p.cheque!, format: p.method === "ECHEQ" ? "ECHEQ" : p.cheque!.format }, p.amount, ctx.clientId, ctx.userId);
       chequeId = cheque.id;
+    } else if (p.method === "VALE") {
+      const credit = await redeemStoreCredit(tx, p.reference ?? "", p.amount);
+      storeCreditId = credit.id;
+      reference = credit.code;
     } else if (p.method !== "CUENTA_CORRIENTE") {
       const dest = destinationRegister(p.method, asDest(drawer), registers.map(asDest))!;
       const register = await lockRegister(tx, dest.id);
@@ -64,7 +71,7 @@ export async function registerCollections(tx: Tx, payments: CollectionPayment[],
         data: {
           method: p.method,
           amount: D(p.amount),
-          reference: p.reference,
+          reference,
           cardBrand: p.cardBrand,
           installments: p.installments,
           saleId: ctx.link.saleId ?? null,
@@ -72,6 +79,7 @@ export async function registerCollections(tx: Tx, payments: CollectionPayment[],
           chequeId,
           cashRegisterId: registerId,
           cashMovementId: movementId,
+          storeCreditId,
           createdById: ctx.userId,
         },
       }),
