@@ -49,10 +49,10 @@ export async function saveVariants(tx: Prisma.TransactionClient, input: SaveVari
           // Se aplica solo lo que cambió el usuario sobre lo que veía (las ventas del mientras tanto se respetan).
           const delta = s.quantity - s.before;
           if (delta === 0) continue;
-          const r = await adjustBranchStock(tx, variantId, s.branchId, delta);
+          const r = await adjustBranchStock(tx, variantId, s.branchId, delta, { reason: "AJUSTE", refType: "PRODUCTO", refId: product.id, userId });
           stockChanges.push({ sku, branchId: s.branchId, before: r.branch.toNumber() - delta, after: r.branch.toNumber() });
         } else {
-          const r = await setBranchStock(tx, variantId, s.branchId, s.quantity);
+          const r = await setBranchStock(tx, variantId, s.branchId, s.quantity, { reason: "AJUSTE", refType: "PRODUCTO", refId: product.id, userId });
           if (r.changed) stockChanges.push({ sku, branchId: s.branchId, before: r.before, after: s.quantity });
         }
       }

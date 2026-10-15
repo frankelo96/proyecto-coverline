@@ -1,7 +1,8 @@
-import { ScanBarcode } from "lucide-react";
+import { History, PackageSearch, ScanBarcode } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { StockMinimums } from "@/components/masters/stock-minimums";
 import { StockTransfer } from "@/components/masters/stock-transfer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,13 +39,25 @@ export default async function StockByBranchPage({ searchParams }: Props) {
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-3xl font-bold tracking-tight">Stock por local</h1>
-          {canWrite && (
-            <Button asChild>
-              <Link href="/maestros/stock/escanear">
-                <ScanBarcode /> Escanear (ingreso, egreso, conteo)
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/maestros/stock/movimientos${selected ? `?producto=${selected.id}` : ""}`}>
+                <History /> Movimientos
               </Link>
             </Button>
-          )}
+            <Button asChild variant="outline">
+              <Link href="/maestros/stock/reposicion">
+                <PackageSearch /> Reposición
+              </Link>
+            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href="/maestros/stock/escanear">
+                  <ScanBarcode /> Escanear (ingreso, egreso, conteo)
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           Cada local vende de su propio stock. Las compras y la producción para stock ingresan a {branches[0]?.name ?? "el local principal"}; la producción de pedidos personalizados
@@ -92,6 +105,27 @@ export default async function StockByBranchPage({ searchParams }: Props) {
                 sku: v.sku,
                 label: `T.${v.size}${variantAttrs(v) ? ` · ${variantAttrs(v)}` : ""}`,
                 stocks: Object.fromEntries(v.branchStocks.map((s) => [s.branchId, s.quantity.toNumber()])),
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
+      {selected && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Stock mínimo por local</CardTitle>
+            <CardDescription>Cuando el stock de un talle queda por debajo del mínimo, aparece en Reposición para pedir producción o transferir. Dejá 0 para no controlarlo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <StockMinimums
+              key={selected.id}
+              branches={branches}
+              canWrite={canWrite}
+              variants={variants.map((v) => ({
+                id: v.id,
+                label: `T.${v.size}${variantAttrs(v) ? ` · ${variantAttrs(v)}` : ""}`,
+                stocks: Object.fromEntries(v.branchStocks.map((s) => [s.branchId, s.quantity.toNumber()])),
+                minimums: Object.fromEntries(v.branchStocks.map((s) => [s.branchId, s.minQty.toNumber()])),
               }))}
             />
           </CardContent>

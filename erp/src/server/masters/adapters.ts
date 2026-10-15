@@ -330,7 +330,7 @@ const products: Adapter = {
         variantId = (await tx.productVariant.create({ data: { ...variantData, sku, productId: saved.id }, select: { id: true } })).id;
       }
       // El stock de la planilla es el del local principal (los demás se cargan en la ficha o por transferencia).
-      if (typeof v.stockQty === "number") await setBranchStock(tx, variantId, await mainBranchId(tx), v.stockQty);
+      if (typeof v.stockQty === "number") await setBranchStock(tx, variantId, await mainBranchId(tx), v.stockQty, { reason: "IMPORTACION", refType: "PRODUCTO", refId: saved.id, userId });
     }
     await audit(tx, userId, "Product", saved.id, id ? "UPDATE" : "CREATE", v);
     return saved.id;

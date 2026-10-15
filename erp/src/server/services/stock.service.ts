@@ -56,11 +56,56 @@ export async function webOrderBranchId(tx: Tx, variantId: string): Promise<strin
   return best.id;
 }
 
+export type StockMoveReason =
+  | "VENTA"
+  | "DEVOLUCION"
+  | "ANULACION_VENTA"
+  | "COMPRA"
+  | "ANULACION_COMPRA"
+  | "PRODUCCION"
+  | "WEB"
+  | "WEB_DEVOLUCION"
+  | "TRANSFERENCIA"
+  | "AJUSTE"
+  | "CONTEO"
+  | "INGRESO"
+  | "EGRESO"
+  | "IMPORTACION"
+  | "PEDIDO";
+
+export const STOCK_MOVE_LABELS: Record<StockMoveReason, string> = {
+  VENTA: "Venta",
+  DEVOLUCION: "Devolución de cliente",
+  ANULACION_VENTA: "Anulación de venta",
+  COMPRA: "Compra",
+  ANULACION_COMPRA: "Anulación de compra",
+  PRODUCCION: "Ingreso de producción",
+  WEB: "Pedido web",
+  WEB_DEVOLUCION: "Pedido web cancelado",
+  TRANSFERENCIA: "Transferencia",
+  AJUSTE: "Ajuste manual",
+  CONTEO: "Conteo de inventario",
+  INGRESO: "Ingreso escaneado",
+  EGRESO: "Egreso escaneado",
+  IMPORTACION: "Importación",
+  PEDIDO: "Entrega de pedido",
+};
+
+/** De dónde viene el movimiento (queda en el kardex). */
+export interface StockMove {
+  reason: StockMoveReason;
+  refType?: string | null;
+  refId?: string | null;
+  userId?: string | null;
+  notes?: string | null;
+}
+
 /**
- * Suma (o resta, con delta negativo) stock de una variante en un local y
- * mantiene el total de la variante. Devuelve el stock del local y el total.
+ * Suma (o resta, con delta negativo) stock de una variante en un local,
+ * mantiene el total de la variante y registra el movimiento en el kardex.
+ * Devuelve el stock del local y el total.
  */
-export async function adjustBranchStock(tx: Tx, variantId: string, branchId: string, delta: number | Prisma.Decimal) {
+export async function adjustBranchStock(tx: Tx, variantId: string, branchId: string, delta: number | Prisma.Decimal, move: StockMove) {
   const d = D(delta);
   const row = await tx.branchStock.upsert({
     where: { variantId_branchId: { variantId, branchId } },
@@ -69,15 +114,30 @@ export async function adjustBranchStock(tx: Tx, variantId: string, branchId: str
     select: { quantity: true },
   });
   const variant = await tx.productVariant.update({ where: { id: variantId }, data: { stockQty: { increment: d } }, select: { stockQty: true } });
+  if (!d.isZero()) {
+    await tx.stockMovement.create({
+      data: {
+        variantId,
+        branchId,
+        delta: d,
+        balanceAfter: row.quantity,
+        reason: move.reason,
+        refType: move.refType ?? null,
+        refId: move.refId ?? null,
+        userId: move.userId ?? null,
+        notes: move.notes ?? null,
+      },
+    });
+  }
   return { branch: row.quantity, total: variant.stockQty };
 }
 
 /** Fija el stock de un local (inventario / carga manual). */
-export async function setBranchStock(tx: Tx, variantId: string, branchId: string, quantity: number) {
+export async function setBranchStock(tx: Tx, variantId: string, branchId: string, quantity: number, move: StockMove) {
   const current = await tx.branchStock.findUnique({ where: { variantId_branchId: { variantId, branchId } }, select: { quantity: true } });
   const delta = D(quantity).minus(current?.quantity ?? 0);
   if (delta.isZero()) return { changed: false, before: current?.quantity.toNumber() ?? 0 };
-  await adjustBranchStock(tx, variantId, branchId, delta);
+  await adjustBranchStock(tx, variantId, branchId, delta, move);
   return { changed: true, before: current?.quantity.toNumber() ?? 0 };
 }
 
@@ -95,8 +155,9 @@ export async function transferStock(tx: Tx, fromBranchId: string, toBranchId: st
   if (!from || !to) throw new StockError("Local inexistente");
   const warnings: string[] = [];
   for (const l of valid) {
-    const r = await adjustBranchStock(tx, l.variantId, fromBranchId, -l.quantity);
-    await adjustBranchStock(tx, l.variantId, toBranchId, l.quantity);
+    const move = { reason: "TRANSFERENCIA" as const, refType: "TRANSFERENCIA", userId, notes: `${from.name} → ${to.name}${notes ? ` · ${notes}` : ""}` };
+    const r = await adjustBranchStock(tx, l.variantId, fromBranchId, -l.quantity, move);
+    await adjustBranchStock(tx, l.variantId, toBranchId, l.quantity, move);
     if (r.branch.lt(0)) {
       const v = await tx.productVariant.findUnique({ where: { id: l.variantId }, select: { sku: true } });
       warnings.push(`${v?.sku}: ${from.name} queda con stock negativo (${r.branch.toNumber()})`);
@@ -135,12 +196,12 @@ export async function applyScannedStock(
   const detail: { variantId: string; before: number; after: number }[] = [];
   for (const l of input.lines) {
     if (input.mode === "CONTEO") {
-      const r = await setBranchStock(tx, l.variantId, branch.id, l.quantity);
+      const r = await setBranchStock(tx, l.variantId, branch.id, l.quantity, { reason: "CONTEO", userId, notes: input.notes });
       if (r.changed) detail.push({ variantId: l.variantId, before: r.before, after: l.quantity });
     } else {
       if (l.quantity <= 0) continue;
       const delta = input.mode === "INGRESO" ? l.quantity : -l.quantity;
-      const r = await adjustBranchStock(tx, l.variantId, branch.id, delta);
+      const r = await adjustBranchStock(tx, l.variantId, branch.id, delta, { reason: input.mode === "INGRESO" ? "INGRESO" : "EGRESO", userId, notes: input.notes });
       detail.push({ variantId: l.variantId, before: r.branch.toNumber() - delta, after: r.branch.toNumber() });
     }
   }
@@ -161,4 +222,19 @@ export async function applyScannedStock(
       ? `Conteo de ${branch.name}: ${input.lines.length} artículos contados, ${detail.length} con diferencia ajustada`
       : `${SCAN_LABELS[input.mode]} en ${branch.name}: ${units} unidades`;
   return { message, warnings: negatives ? [`${negatives} artículos quedaron con stock negativo`] : [], variantIds: input.lines.map((l) => l.variantId) };
+}
+
+/** Guarda el stock mínimo de cada variante en cada local (crea la fila de stock en 0 si no existía). */
+export async function saveStockMinimums(tx: Tx, items: { variantId: string; branchId: string; minQty: number }[], userId: string) {
+  for (const i of items) {
+    await tx.branchStock.upsert({
+      where: { variantId_branchId: { variantId: i.variantId, branchId: i.branchId } },
+      update: { minQty: D(i.minQty) },
+      create: { variantId: i.variantId, branchId: i.branchId, quantity: D(0), minQty: D(i.minQty) },
+    });
+  }
+  await tx.auditLog.create({
+    data: { userId, entity: "BranchStock", entityId: "minimos", action: "UPDATE", data: { items } as unknown as Prisma.InputJsonValue },
+  });
+  return items.length;
 }

@@ -5,11 +5,11 @@ import { z } from "zod";
 
 import type { ActionResult } from "@/lib/action-result";
 import { PERMISSIONS } from "@/lib/auth/permissions";
-import { saveVariantsSchema, scanStockSchema, stockTransferSchema } from "@/lib/validations/catalog";
+import { saveVariantsSchema, scanStockSchema, stockMinimumsSchema, stockTransferSchema } from "@/lib/validations/catalog";
 import { AuthorizationError, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { CatalogError, saveVariants } from "@/server/services/catalog.service";
-import { applyScannedStock, StockError, transferStock } from "@/server/services/stock.service";
+import { applyScannedStock, saveStockMinimums, StockError, transferStock } from "@/server/services/stock.service";
 import { scheduleWebStockPush } from "@/server/woo/sync";
 
 export async function saveVariantsAction(raw: unknown): Promise<ActionResult<{ created: number; updated: number }>> {
@@ -62,5 +62,21 @@ export async function scanStockAction(raw: unknown): Promise<ActionResult<{ warn
     if (e instanceof StockError || e instanceof AuthorizationError) return { ok: false, error: e.message };
     console.error("[catalog.actions] scan", e);
     return { ok: false, error: "No se pudo registrar el movimiento" };
+  }
+}
+
+/** Stock mínimo por local: lo que esté por debajo aparece en Reposición. */
+export async function saveStockMinimumsAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.mastersWrite);
+    const input = stockMinimumsSchema.parse(raw);
+    const n = await db.$transaction((tx) => saveStockMinimums(tx, input.items, user.id), { timeout: 60_000 });
+    revalidatePath("/maestros", "layout");
+    return { ok: true, data: undefined, message: `Mínimos guardados (${n})` };
+  } catch (e) {
+    if (e instanceof z.ZodError) return { ok: false, error: e.issues[0]?.message ?? "Datos inválidos" };
+    if (e instanceof AuthorizationError) return { ok: false, error: e.message };
+    console.error("[catalog.actions] minimums", e);
+    return { ok: false, error: "No se pudieron guardar los mínimos" };
   }
 }

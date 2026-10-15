@@ -214,7 +214,7 @@ export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurcha
       }
     } else if (r.variant) {
       // La mercadería comprada ingresa al local principal (después se puede transferir).
-      await adjustBranchStock(tx, r.variant.id, await mainBranchId(tx), D(r.stockQuantity));
+      await adjustBranchStock(tx, r.variant.id, await mainBranchId(tx), D(r.stockQuantity), { reason: "COMPRA", refType: "COMPRA", refId: purchase.id, userId, notes: `Compra #${purchase.number}` });
       const product = r.variant.product;
       if (r.item.updateCost && product.sourcing === "REVENTA" && r.stockUnitCost !== r.previous) {
         const change = costChange(r.previous, r.stockUnitCost);
@@ -393,7 +393,8 @@ export async function annulPurchase(tx: Tx, input: { purchaseId: string; reason:
     for (const it of purchase.items) {
       const qty = it.stockQuantity ?? it.quantity;
       if (it.rawMaterialId) await moveRawMaterial(tx, { rawMaterialId: it.rawMaterialId, delta: qty.neg(), reason: "ANULACION_COMPRA", refType: "COMPRA", refId: purchase.id, userId });
-      if (it.productVariantId) await adjustBranchStock(tx, it.productVariantId, await mainBranchId(tx), qty.neg());
+      if (it.productVariantId)
+        await adjustBranchStock(tx, it.productVariantId, await mainBranchId(tx), qty.neg(), { reason: "ANULACION_COMPRA", refType: "COMPRA", refId: purchase.id, userId, notes: `Anulación compra #${purchase.number}` });
     }
   } else {
     const remitIds = purchase.invoicedRemits.map((r) => r.id);

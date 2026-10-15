@@ -71,3 +71,12 @@ export const scanStockSchema = z
   })
   .refine((v) => v.mode !== "TRANSFERENCIA" || (v.toBranchId && v.toBranchId !== v.branchId), { message: "Elegí un local de destino distinto", path: ["toBranchId"] });
 export type ScanStockInput = z.infer<typeof scanStockSchema>;
+
+/** Stock mínimo por variante y local (debajo de ese número aparece en Reposición). */
+export const stockMinimumsSchema = z.object({
+  items: z
+    .array(z.object({ variantId: z.string().min(1), branchId: z.string().min(1), minQty: z.number().finite().min(0, "El mínimo no puede ser negativo").max(100_000) }))
+    .min(1, "No hay cambios para guardar")
+    .max(5000),
+});
+export type StockMinimumsInput = z.infer<typeof stockMinimumsSchema>;

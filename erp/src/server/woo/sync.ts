@@ -129,7 +129,7 @@ async function resolveLines(order: WooOrderData): Promise<StoredLine[]> {
 }
 
 /** Descuenta cada artículo del local fijo o del local que más stock tiene de esa variante. */
-async function deductLines(tx: Tx, lines: StoredLine[], fixedBranchId: string | null): Promise<StoredLine[]> {
+async function deductLines(tx: Tx, lines: StoredLine[], fixedBranchId: string | null, orderRef: string): Promise<StoredLine[]> {
   const out: StoredLine[] = [];
   for (const l of lines) {
     if (!l.variantId || l.quantity <= 0) {
@@ -137,7 +137,7 @@ async function deductLines(tx: Tx, lines: StoredLine[], fixedBranchId: string | 
       continue;
     }
     const branchId = fixedBranchId ?? (await webOrderBranchId(tx, l.variantId));
-    await adjustBranchStock(tx, l.variantId, branchId, -l.quantity);
+    await adjustBranchStock(tx, l.variantId, branchId, -l.quantity, { reason: "WEB", refType: "WEB", refId: orderRef, notes: `Pedido web ${orderRef}` });
     out.push({ ...l, branchId });
   }
   return out;
@@ -153,8 +153,10 @@ function linesSignature(lines: StoredLine[]) {
     .join("|");
 }
 
-async function restockLines(tx: Tx, lines: StoredLine[], fallbackBranchId: string) {
-  for (const l of lines) if (l.variantId && l.quantity > 0) await adjustBranchStock(tx, l.variantId, l.branchId ?? fallbackBranchId, l.quantity);
+async function restockLines(tx: Tx, lines: StoredLine[], fallbackBranchId: string, orderRef: string) {
+  for (const l of lines)
+    if (l.variantId && l.quantity > 0)
+      await adjustBranchStock(tx, l.variantId, l.branchId ?? fallbackBranchId, l.quantity, { reason: "WEB_DEVOLUCION", refType: "WEB", refId: orderRef, notes: `Pedido web ${orderRef}` });
 }
 
 /**
@@ -196,18 +198,18 @@ export async function processOrders(mode: WooMode, orders: WooOrderData[], summa
       if (isBaseline) {
         if (!existing) summary.orders.baseline++;
       } else if (shouldDeduct && !deducted) {
-        storedLines = await deductLines(tx, lines, fixed);
+        storedLines = await deductLines(tx, lines, fixed, String(o.number));
         branchId = storedLines.find((l) => l.branchId)?.branchId ?? branchId;
         deducted = true;
         summary.orders.deducted++;
       } else if (!shouldDeduct && deducted) {
-        await restockLines(tx, storedLines, branchId);
+        await restockLines(tx, storedLines, branchId, String(o.number));
         deducted = false;
         summary.orders.restocked++;
       } else if (shouldDeduct && deducted && linesSignature(storedLines) !== linesSignature(lines)) {
         // Pedido editado después de descontado (otro talle, otra cantidad): se devuelve lo anterior y se descuenta lo nuevo.
-        await restockLines(tx, storedLines, branchId);
-        storedLines = await deductLines(tx, lines, fixed);
+        await restockLines(tx, storedLines, branchId, String(o.number));
+        storedLines = await deductLines(tx, lines, fixed, String(o.number));
         summary.orders.deducted++;
       }
       const data = {

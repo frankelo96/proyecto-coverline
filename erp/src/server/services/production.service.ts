@@ -340,7 +340,7 @@ export async function closeQuality(
     const item = order.items.find((i) => i.variantId === a.variantId)!;
     await tx.productionOrderItem.update({ where: { id: item.id }, data: { quantityFinished: a.quantity } });
     if (a.quantity > 0) {
-      await adjustBranchStock(tx, a.variantId, destination, a.quantity);
+      await adjustBranchStock(tx, a.variantId, destination, a.quantity, { reason: "PRODUCCION", refType: "OP", refId: order.id, userId, notes: `OP #${order.number}` });
     }
   }
   await tx.productionOrder.update({

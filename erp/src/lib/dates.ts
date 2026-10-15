@@ -12,3 +12,13 @@ export function isoLocalDate(d: Date = new Date()) {
 export function isoLocalDateIn(days: number, from: Date = new Date()) {
   return isoLocalDate(new Date(from.getTime() + days * 86_400_000));
 }
+
+/** Inicio del día AAAA-MM-DD en hora argentina (UTC−3, sin horario de verano). */
+export function startOfLocalDay(iso: string) {
+  return new Date(`${iso}T00:00:00-03:00`);
+}
+
+/** Último instante del día AAAA-MM-DD en hora argentina. */
+export function endOfLocalDay(iso: string) {
+  return new Date(`${iso}T23:59:59.999-03:00`);
+}
