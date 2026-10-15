@@ -1,4 +1,4 @@
-import { ArrowRight, Barcode, ChevronLeft, Printer } from "lucide-react";
+import { ArrowRight, Barcode, ChevronLeft, Printer, Scissors } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -66,6 +66,13 @@ export default async function OrderDetailPage({ params }: Props) {
           <p className="text-sm text-muted-foreground">{order.client ? `Pedido de ${order.client.name}` : "Producción para stock"}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {order.status !== "CANCELADA" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/produccion/ordenes/${order.id}/corte`} target="_blank">
+                <Scissors /> Orden de corte
+              </Link>
+            </Button>
+          )}
           {order.quantityFinished > 0 && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/maestros/etiquetas?items=${encodeLabelItems(order.items.map((i) => ({ variantId: i.variantId, qty: i.quantityFinished })))}`}>

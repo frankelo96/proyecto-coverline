@@ -144,6 +144,8 @@ export interface OrderDetail {
   completedAt: string | null;
   createdBy: string | null;
   items: { variantId: string; size: string; color: string | null; fabric: string | null; quantity: number; quantityFinished: number }[];
+  /** Materiales descontados para la orden (para cargar la tela real al cerrar el corte) */
+  consumedMaterials: { rawMaterialId: string; code: string; name: string; type: string; uom: string; consumed: number }[];
   balance: { sent: number; received: number; waste: number; atWorkshops: number; unsent: number } | null;
   workshops: WorkshopOption[];
   logs: {
@@ -216,7 +218,19 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     });
   }
 
+  const consumedRows = await db.rawMaterialMovement.groupBy({ by: ["rawMaterialId"], where: { refType: "OP", refId: o.id }, _sum: { delta: true } });
+  const consumedMats = consumedRows.length
+    ? await db.rawMaterial.findMany({ where: { id: { in: consumedRows.map((r) => r.rawMaterialId) } }, select: { id: true, code: true, name: true, type: true, uom: true } })
+    : [];
+  const consumedMaterials = consumedRows
+    .map((r) => {
+      const m = consumedMats.find((x) => x.id === r.rawMaterialId);
+      return m ? { rawMaterialId: m.id, code: m.code, name: m.name, type: m.type, uom: m.uom, consumed: -(r._sum.delta?.toNumber() ?? 0) } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null && x.consumed > 0)
+    .sort((a, b) => Number(b.type === "TELA") - Number(a.type === "TELA") || a.name.localeCompare(b.name, "es"));
   return {
+    consumedMaterials,
     id: o.id,
     number: o.number,
     status: o.status,

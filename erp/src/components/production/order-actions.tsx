@@ -301,12 +301,19 @@ function CutForm({ order, run }: RunnerProps) {
   const { pending, execute } = run;
   const [cut, setCut] = useState(String(order.quantityInProcess));
   const [notes, setNotes] = useState("");
+  const fabrics = order.consumedMaterials.filter((m) => m.type === "TELA");
+  const fmt = (v: number) => String(Math.round(v * 100) / 100).replace(".", ",");
+  const [used, setUsed] = useState<Record<string, string>>(() => Object.fromEntries(fabrics.map((m) => [m.rawMaterialId, fmt(m.consumed)])));
+  const parse = (v: string) => Number(v.replace(",", "."));
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        execute(() => closeCutAction({ orderId: order.id, cutPieces: int(cut), notes: notes || null }));
+        const materialsUsed = fabrics
+          .filter((m) => used[m.rawMaterialId] !== fmt(m.consumed) && Number.isFinite(parse(used[m.rawMaterialId] ?? "")))
+          .map((m) => ({ rawMaterialId: m.rawMaterialId, quantity: parse(used[m.rawMaterialId]) }));
+        execute(() => closeCutAction({ orderId: order.id, cutPieces: int(cut), notes: notes || null, materialsUsed }));
       }}
     >
       <p className="text-sm text-muted-foreground">
@@ -316,6 +323,26 @@ function CutForm({ order, run }: RunnerProps) {
         <NumberField id={`${id}-c`} label="Prendas cortadas" value={cut} onChange={setCut} min={1} hint={`Planificadas: ${order.quantityInProcess}`} />
         <NotesField id={`${id}-n`} value={notes} onChange={setNotes} />
       </div>
+      {fabrics.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border p-3">
+          <p className="text-sm font-medium">Tela realmente usada</p>
+          <p className="text-xs text-muted-foreground">Viene cargado lo teórico de la ficha. Si sobró tela vuelve al stock; si se usó más, se descuenta y sube el costo real de la orden.</p>
+          {fabrics.map((m) => (
+            <div key={m.rawMaterialId} className="grid items-center gap-2 sm:grid-cols-[2fr_1fr]">
+              <label htmlFor={`${id}-m-${m.rawMaterialId}`} className="text-sm">
+                {m.code} · {m.name} <span className="text-muted-foreground">(teórico {fmt(m.consumed)} {m.uom.toLowerCase()})</span>
+              </label>
+              <Input
+                id={`${id}-m-${m.rawMaterialId}`}
+                inputMode="decimal"
+                className="text-right"
+                value={used[m.rawMaterialId] ?? ""}
+                onChange={(e) => setUsed((u) => ({ ...u, [m.rawMaterialId]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <Button type="submit" disabled={pending} className="w-fit">
         {pending && <Loader2 className="animate-spin" />} Cerrar corte
       </Button>

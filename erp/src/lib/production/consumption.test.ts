@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatSizeQuantities, materialFor, orderConsumption, parseSizeQuantities } from "./consumption";
+import { cutBreakdown, formatSizeQuantities, materialFor, orderConsumption, parseSizeQuantities } from "./consumption";
 
 const bom = [
   { rawMaterialId: "tela-azul", quantity: 1.2, wastePct: 10 },
@@ -45,5 +45,27 @@ describe("consumo de materiales por variante", () => {
     expect(parseSizeQuantities("xl=1,6; 4: 0.9")).toEqual({ XL: 1.6, "4": 0.9 });
     expect(typeof parseSizeQuantities("XL 1,6")).toBe("string");
     expect(formatSizeQuantities({ XL: 1.6 })).toBe("XL=1,6");
+  });
+});
+
+describe("orden de corte", () => {
+  it("desglosa por material y talle con merma, igual que el consumo total", () => {
+    const bom = [{ rawMaterialId: "pique", quantity: 1, wastePct: 10 }];
+    const rules = new Map([["pique", { sizeQuantities: { XL: 1.5 }, alternatives: [{ color: "Azul", fabric: null, rawMaterialId: "pique-azul" }] }]]);
+    const items = [
+      { size: "M", color: "Blanco", fabric: null, quantity: 10 },
+      { size: "XL", color: "Blanco", fabric: null, quantity: 4 },
+      { size: "M", color: "Azul", fabric: null, quantity: 2 },
+    ];
+    const cut = cutBreakdown(bom, rules, items);
+    const blanco = cut.find((c) => c.rawMaterialId === "pique")!;
+    expect(blanco.lines.map((l) => [l.size, l.perUnit, l.total])).toEqual([
+      ["M", 1.1, 11],
+      ["XL", 1.65, 6.6],
+    ]);
+    expect(blanco.total).toBe(17.6);
+    expect(cut.find((c) => c.rawMaterialId === "pique-azul")!.total).toBe(2.2);
+    const totals = orderConsumption(bom, rules, items);
+    for (const c of cut) expect(c.total).toBeCloseTo(totals.get(c.rawMaterialId)!, 4);
   });
 });

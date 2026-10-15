@@ -89,3 +89,33 @@ export const formatSizeQuantities = (q: Record<string, number> | null | undefine
   Object.entries(q ?? {})
     .map(([k, v]) => `${k}=${String(v).replace(".", ",")}`)
     .join(", ");
+
+export interface CutLine {
+  size: string;
+  color: string | null;
+  fabric: string | null;
+  quantity: number;
+  /** Consumo por prenda con merma */
+  perUnit: number;
+  total: number;
+}
+
+/**
+ * Desglose para la orden de corte: por material, cuánto lleva cada talle/color
+ * (consumo por prenda con merma × cantidad) y el total teórico.
+ */
+export function cutBreakdown(bom: BomLine[], rules: Map<string, MaterialRule>, items: OrderLine[]): { rawMaterialId: string; total: number; lines: CutLine[] }[] {
+  const byMaterial = new Map<string, CutLine[]>();
+  for (const line of bom) {
+    const rule = rules.get(line.rawMaterialId);
+    for (const it of items) {
+      if (it.quantity <= 0) continue;
+      const materialId = materialFor(line, rule, it);
+      const perUnit = Math.round(quantityForSize(line, rule, it.size) * (1 + line.wastePct / 100) * 10_000) / 10_000;
+      const list = byMaterial.get(materialId) ?? [];
+      list.push({ size: it.size, color: it.color, fabric: it.fabric, quantity: it.quantity, perUnit, total: Math.round(perUnit * it.quantity * 10_000) / 10_000 });
+      byMaterial.set(materialId, list);
+    }
+  }
+  return [...byMaterial].map(([rawMaterialId, lines]) => ({ rawMaterialId, lines, total: Math.round(lines.reduce((a, l) => a + l.total, 0) * 10_000) / 10_000 }));
+}

@@ -23,7 +23,7 @@ import {
   WorkflowError,
   type OrderLike,
 } from "@/lib/production/workflow";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatNumber } from "@/lib/format";
 import type { CreateOrderInput } from "@/lib/validations/production";
 import { type MaterialAlternative, orderConsumption } from "@/lib/production/consumption";
 import { moveRawMaterial, netConsumptionOfOrder } from "@/server/services/materials.service";
@@ -185,13 +185,37 @@ export async function startProductionOrder(tx: Tx, orderId: string, userId: stri
   return { shortages };
 }
 
-export async function closeCut(tx: Tx, input: { orderId: string; cutPieces: number; notes: string | null }, userId: string) {
+export async function closeCut(
+  tx: Tx,
+  input: { orderId: string; cutPieces: number; notes: string | null; materialsUsed?: { rawMaterialId: string; quantity: number }[] },
+  userId: string,
+) {
   const order = await lockOrder(tx, input.orderId);
   assertCanCloseCut(asOrderLike(order), input.cutPieces);
   const waste = order.quantityInProcess - input.cutPieces;
+
+  // Tela real vs. teórica: lo que sobró vuelve al stock y lo que faltó se descuenta (ajuste de corte).
+  const adjustments: string[] = [];
+  let costDelta = new Decimal(0);
+  if (input.materialsUsed?.length) {
+    const consumed = new Map((await netConsumptionOfOrder(tx, order.id)).map((c) => [c.rawMaterialId, c.consumed]));
+    const materials = new Map((await tx.rawMaterial.findMany({ where: { id: { in: input.materialsUsed.map((m) => m.rawMaterialId) } } })).map((m) => [m.id, m]));
+    for (const used of input.materialsUsed) {
+      const theoretical = consumed.get(used.rawMaterialId);
+      const m = materials.get(used.rawMaterialId);
+      if (!theoretical || !m) throw new WorkflowError("Ese material no se consumió en esta orden");
+      const leftover = theoretical.minus(used.quantity); // positivo: sobró; negativo: se usó de más
+      if (leftover.abs().lt(0.0001)) continue;
+      const last = await tx.rawMaterialMovement.findFirst({ where: { refType: "OP", refId: order.id, rawMaterialId: m.id, reason: "CONSUMO_OP" }, orderBy: { createdAt: "desc" } });
+      const unitCost = last?.unitCost ?? m.currentCost;
+      await moveRawMaterial(tx, { rawMaterialId: m.id, delta: leftover, reason: "AJUSTE_CORTE", refType: "OP", refId: order.id, unitCost, userId, notes: `Corte OP #${order.number}: teórico ${theoretical.toNumber()}, real ${used.quantity}` });
+      costDelta = costDelta.minus(leftover.mul(unitCost.toString()));
+      adjustments.push(`${m.name}: ${leftover.gt(0) ? "sobraron" : "faltaron"} ${formatNumber(leftover.abs().toDecimalPlaces(2).toNumber())} ${m.uom.toLowerCase()}`);
+    }
+  }
   await tx.productionOrder.update({
     where: { id: order.id },
-    data: { quantityInProcess: input.cutPieces, currentStage: "EN_TALLER_CONFECCION" },
+    data: { quantityInProcess: input.cutPieces, currentStage: "EN_TALLER_CONFECCION", ...(costDelta.isZero() ? {} : { actualCost: { increment: D(costDelta.toDecimalPlaces(2)) } }) },
   });
   await logStage(tx, {
     orderId: order.id,
@@ -201,7 +225,7 @@ export async function closeCut(tx: Tx, input: { orderId: string; cutPieces: numb
     quantityOut: input.cutPieces,
     wasteQty: waste,
     userId,
-    notes: input.notes,
+    notes: [input.notes, adjustments.length ? `Ajuste de tela: ${adjustments.join("; ")}` : null].filter(Boolean).join(" · ") || null,
   });
 }
 

@@ -21,7 +21,13 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdSchema = z.object({ orderId: id });
 
-export const closeCutSchema = z.object({ orderId: id, cutPieces: int("Piezas cortadas").min(1), notes });
+export const closeCutSchema = z.object({
+  orderId: id,
+  cutPieces: int("Piezas cortadas").min(1),
+  notes,
+  /** Tela (u otro material) realmente usada en el corte; la diferencia con lo teórico ajusta el stock */
+  materialsUsed: z.array(z.object({ rawMaterialId: id, quantity: z.number().finite().min(0).max(10_000_000) })).max(50).default([]),
+});
 
 export const sendSchema = z.object({ orderId: id, workshopId: id, pieces: int("Piezas").min(1), notes });
 
