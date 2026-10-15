@@ -53,10 +53,12 @@ export function companyInfo() {
     taxCondition: "Responsable Inscripto",
     iibb: process.env.COMPANY_IIBB || "280552097",
     startDate: process.env.COMPANY_START_DATE || "12/12/2011",
-    address: process.env.COMPANY_ADDRESS || "Pasaje Emilio Huespe 75 - 5000 - Centro - Córdoba",
+    address: process.env.COMPANY_ADDRESS || "Pasaje Emilio Huespe 75, Piso 1 Dpto. A - Barrio Centro - 5000 Córdoba",
     phone: process.env.COMPANY_PHONE || "3515512455",
     email: process.env.COMPANY_EMAIL || "admin@uniformescoverline.com",
     web: process.env.COMPANY_WEB || "www.uniformescoverline.com",
+    /** CBU informado en la Factura de Crédito Electrónica MiPyME (cta. cte. Banco Macro, suc. 322 Recta Martinoli) */
+    cbu: (process.env.COMPANY_CBU || "2850322430094172941581").replace(/\D/g, ""),
   };
 }
 
