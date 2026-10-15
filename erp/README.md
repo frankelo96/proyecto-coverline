@@ -255,6 +255,34 @@ Menú **Personal** (permiso `payroll:read` / `payroll:write`; lo tienen Admin y 
 - **Cron externo**: `GET /api/tienda-web/sync` con `Authorization: Bearer WOO_CRON_TOKEN`.
 - **Base de datos**: la base gratuita de Render vence a los 30 días y no tiene copias de seguridad. Para producción crear una base **paga nueva** (arranca limpia, con el catálogo y sin datos de ejemplo) y apuntar `DATABASE_URL` a ella.
 
-## Pendiente para los próximos módulos
+## Ventas: anulaciones, cambios, vales y pedidos
 
-Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).
+- **Anular venta** (permiso `pos:void`): solo sin CAE. Revierte cada movimiento de stock en su local, el dinero en cada caja/cuenta, cheques en cartera, vales y deuda en cuenta corriente. Con CAE se hace nota de crédito.
+- **Cambio de talle** (misma prenda, mismo precio): sin comprobantes, movimiento de stock `CAMBIO`.
+- **Vales / saldo a favor**: la devolución puede reintegrar con vale (código impreso); el POS lo acepta como medio de pago. Ventas > Vales.
+- **Pedidos con seña** (Ventas > Pedidos): precio acordado, señas por caja, órdenes de producción ligadas, entrega que genera la venta con la seña aplicada (`SENA`) y cancelación (devolver, vale o retener). Se convierten desde un presupuesto.
+- **Listas de precios** por cliente (Maestros > Listas de precios): ajuste % y precios fijos; el POS y los presupuestos las aplican. Factura A sugerida para responsables inscriptos.
+- **Cuotas con recargo** (Tesorería > Cuotas): el servidor agrega la línea «Recargo financiación».
+
+## Stock y producción
+
+- **Movimientos (kardex)** por variante y local con saldo, usuario y referencia; **stock mínimo** por local e informe de **reposición**.
+- **Orden de corte** imprimible por OP y carga de la **tela real usada** al cerrar el corte (ajuste de stock y costo).
+
+## Compras
+
+- **Órdenes de compra** con precio pactado, impresión y WhatsApp; **recepción** contra la orden con aviso de diferencias.
+- **Notas de crédito** de proveedores (devolución y/o bonificación) y **saldo a favor** (anticipos, NC, pagos de más) usable en la orden de pago.
+
+## Finanzas
+
+- **Gastos** con categoría (Tesorería > Gastos), **estado de resultados**, **flujo de fondos** proyectado a 8 semanas, **Libro IVA** ventas/compras (Excel), **panel** de indicadores, **auditoría**, **aumento masivo de precios** (Maestros > Aumento de precios) y **conciliación** de banco/Mercado Pago con el extracto.
+
+## CRM y tienda web
+
+- **Historial de campañas**: contactados y compras dentro de los 30 días. **Fotos de producto** (se ven en el POS).
+- **Precios en la tienda web** (opcional, Maestros > Tienda web): requiere el plugin **1.3.0**.
+
+## Pendiente
+
+Configuración de ARCA para facturar (certificado, punto de venta), reintento de CAE y notas de crédito asociadas, Factura de Crédito Electrónica MiPyME. Envío automático de campañas (WhatsApp Business API / proveedor de email).
