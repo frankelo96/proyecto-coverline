@@ -119,7 +119,24 @@ export async function createReturn(tx: Tx, input: ReturnInput, user: { id: strin
     if (l.restock) await adjustBranchStock(tx, l.item.variantId!, branch.id, D(l.quantity));
   }
 
-  // --- Reintegro
+  // --- Reintegro: solo por un medio con que se cobró la venta (no se puede sacar efectivo de una venta cobrada por transferencia).
+  if (input.refundMethod !== "CUENTA_CORRIENTE") {
+    const [paid, refunded] = await Promise.all([
+      tx.payment.aggregate({ where: { saleId: original.id, method: input.refundMethod }, _sum: { amount: true } }),
+      tx.payment.aggregate({
+        where: { method: input.refundMethod, sale: { originalSaleId: original.id, kind: "DEVOLUCION", status: { not: "ANULADA" }, id: { not: nc.id } } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const available = (paid._sum.amount?.toNumber() ?? 0) - (refunded._sum.amount?.toNumber() ?? 0);
+    if (available + 0.005 < totalReturned) {
+      throw new SaleError(
+        available > 0
+          ? `Por ${METHOD_LABELS[input.refundMethod]} se pueden reintegrar hasta ${formatMoney(available)} (lo cobrado por ese medio): el resto, por el medio con que pagó`
+          : `La venta #${original.number} no se cobró con ${METHOD_LABELS[input.refundMethod]}: reintegrá por el medio con que pagó`,
+      );
+    }
+  }
   const concept = `Devolución #${nc.number} (venta #${original.number})`;
   let cashRegisterId: string | null = null;
   let movementId: string | null = null;

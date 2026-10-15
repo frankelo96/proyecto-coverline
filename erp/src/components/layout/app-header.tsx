@@ -45,10 +45,10 @@ export function AppHeader({ items, userName, roleName }: { items: NavItem[]; use
           })}
         </nav>
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden text-right leading-tight sm:block">
+          <Link href="/cambiar-clave" title="Cambiar mi contraseña" className="hidden rounded-md px-1 text-right leading-tight hover:bg-white/10 sm:block">
             <span className="block">{userName}</span>
             <span className="block text-xs text-ink-muted">{roleName}</span>
-          </span>
+          </Link>
           <form action={logoutAction}>
             <button
               type="submit"

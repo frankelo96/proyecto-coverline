@@ -298,19 +298,24 @@ model Role {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String
-  passwordHash String
-  active       Boolean   @default(true)
-  roleId       String
-  role         Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  lastLoginAt  DateTime?
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String
+  passwordHash       String
+  active             Boolean   @default(true)
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  lastLoginAt        DateTime?
   /// Intentos fallidos consecutivos; al superar el límite se bloquea temporalmente
-  failedLogins Int       @default(0)
-  lockedUntil  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  failedLogins       Int       @default(0)
+  lockedUntil        DateTime?
+  /// Debe cambiar la contraseña al ingresar (clave inicial o reseteada)
+  mustChangePassword Boolean   @default(false)
+  /// Local en el que trabaja: si está cargado, solo opera las cajas de ese local
+  branchId           String?
+  branch             Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   authSessions         Session[]
   chequesCreated       Cheque[]
@@ -551,26 +556,28 @@ model Supplier {
 
 /// Telas (por metro o kg) y avíos (botones, cierres, elásticos, abrojos, hilos, etiquetas...).
 model RawMaterial {
-  id          String          @id @default(cuid())
-  code        String          @unique
-  name        String
-  type        RawMaterialType
-  uom         UnitOfMeasure
+  materialRules ProductMaterialRule[]
+  movements     RawMaterialMovement[]
+  id            String                @id @default(cuid())
+  code          String                @unique
+  name          String
+  type          RawMaterialType
+  uom           UnitOfMeasure
   /// Composición o descripción técnica (ej. "50% algodón 50% poliéster")
-  composition String?
-  color       String?
-  widthCm     Decimal?        @db.Decimal(8, 2)
+  composition   String?
+  color         String?
+  widthCm       Decimal?              @db.Decimal(8, 2)
   /// Rendimiento metros por kg, para convertir compras en kg a consumo en metros
-  metersPerKg Decimal?        @db.Decimal(10, 4)
+  metersPerKg   Decimal?              @db.Decimal(10, 4)
   /// Costo de reposición vigente por unidad de medida (base del escandallo)
-  currentCost Decimal         @db.Decimal(14, 4)
-  stockQty    Decimal         @default(0) @db.Decimal(14, 4)
-  minStock    Decimal         @default(0) @db.Decimal(14, 4)
-  supplierId  String?
-  supplier    Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  active      Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  currentCost   Decimal               @db.Decimal(14, 4)
+  stockQty      Decimal               @default(0) @db.Decimal(14, 4)
+  minStock      Decimal               @default(0) @db.Decimal(14, 4)
+  supplierId    String?
+  supplier      Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  active        Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   bomLines      ProductBOM[]
   priceHistory  RawMaterialPriceHistory[]
@@ -676,27 +683,28 @@ model PurchaseItem {
 // -----------------------------------------------------------------------------
 
 model Product {
-  id            String          @id @default(cuid())
-  sku           String          @unique
+  materialRules ProductMaterialRule[]
+  id            String                @id @default(cuid())
+  sku           String                @unique
   name          String
   category      ProductCategory
   /// FABRICADO: costo por escandallo. REVENTA: costo = último precio de compra.
-  sourcing      ProductSourcing @default(FABRICADO)
+  sourcing      ProductSourcing       @default(FABRICADO)
   description   String?
-  pricingMode   PricingMode     @default(MARKUP)
+  pricingMode   PricingMode           @default(MARKUP)
   /// Markup sobre costo (MARKUP) o margen sobre precio (MARGIN), en %
-  pricingPct    Decimal         @default(100) @db.Decimal(6, 2)
+  pricingPct    Decimal               @default(100) @db.Decimal(6, 2)
   /// Gastos generales prorrateados sobre el costo directo, en %
-  overheadPct   Decimal         @default(0) @db.Decimal(6, 2)
-  vatRate       Decimal         @default(21) @db.Decimal(6, 2)
+  overheadPct   Decimal               @default(0) @db.Decimal(6, 2)
+  vatRate       Decimal               @default(21) @db.Decimal(6, 2)
   /// Precio de lista neto vigente (sin IVA)
-  listPrice     Decimal         @default(0) @db.Decimal(14, 2)
+  listPrice     Decimal               @default(0) @db.Decimal(14, 2)
   /// Costo unitario calculado por el último escandallo (cache desnormalizado)
-  currentCost   Decimal         @default(0) @db.Decimal(14, 4)
+  currentCost   Decimal               @default(0) @db.Decimal(14, 4)
   costUpdatedAt DateTime?
-  active        Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  active        Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   variants         ProductVariant[]
   bom              ProductBOM[]
@@ -1067,6 +1075,7 @@ model Branch {
   sales         Sale[]
   stocks        BranchStock[]
   employees     Employee[]
+  users         User[]
 
   @@map("branches")
 }
@@ -1522,4 +1531,59 @@ model Employee {
   paymentOrders PaymentOrder[]
 
   @@map("employees")
+}
+
+/// Configuración general y marcas internas (ej. qué partes del seed ya se cargaron).
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+/**
+ * Reglas de consumo de un material de la ficha técnica (independientes de los
+ * renglones de la ficha, que se recrean al guardarla):
+ * - consumo distinto por talle (el de la ficha es el del talle de referencia);
+ * - material alternativo según el color o la tela de la variante (ej. tela bordó en vez de azul).
+ */
+model ProductMaterialRule {
+  id             String      @id @default(cuid())
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Material de referencia de la ficha (el que se costea)
+  rawMaterialId  String
+  rawMaterial    RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  /// { "XL": 1.6, "4": 0.9 }: consumo neto por prenda para esos talles
+  sizeQuantities Json?
+  /// [{ color, fabric, rawMaterialId }]: material que reemplaza al de referencia en esas variantes
+  alternatives   Json?
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([productId, rawMaterialId])
+  @@map("product_material_rules")
+}
+
+/// Movimiento de stock de una materia prima (kardex): compras, consumo de producción, devoluciones y ajustes.
+model RawMaterialMovement {
+  id            String      @id @default(cuid())
+  rawMaterialId String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  /// Positivo entra, negativo sale (en la unidad de medida del material)
+  delta         Decimal     @db.Decimal(14, 4)
+  /// COMPRA, ANULACION_COMPRA, CONSUMO_OP, DEVOLUCION_OP, AJUSTE_CORTE, AJUSTE, IMPORTACION
+  reason        String
+  /// Origen: "OP" (orden de producción), "COMPRA", etc.
+  refType       String?
+  refId         String?
+  /// Costo unitario al momento del movimiento (para valuar y revertir)
+  unitCost      Decimal?    @db.Decimal(14, 4)
+  notes         String?
+  userId        String?
+  createdAt     DateTime    @default(now())
+
+  @@index([rawMaterialId, createdAt])
+  @@index([refType, refId])
+  @@map("raw_material_movements")
 }

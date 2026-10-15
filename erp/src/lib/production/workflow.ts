@@ -193,9 +193,16 @@ export function assertCanCloseQuality(
   assertInProcess(order);
   if (order.currentStage !== "CONTROL_CALIDAD_PLANCHADO") throw new WorkflowError("La orden no está en control de calidad");
   let total = 0;
+  const seen = new Set<string>();
   for (const a of approved) {
     positiveInt(a.quantity, "Las piezas aprobadas");
     if (!plannedByVariant.has(a.variantId)) throw new WorkflowError("Talle inexistente en la orden");
+    if (seen.has(a.variantId)) throw new WorkflowError("Hay un talle repetido en el cierre de calidad");
+    seen.add(a.variantId);
+    // Por talle no se puede aprobar más de lo que se planificó (evita sumar stock de un talle que no se hizo).
+    if (a.quantity > plannedByVariant.get(a.variantId)!) {
+      throw new WorkflowError(`Se aprobaron ${a.quantity} piezas de un talle planificado en ${plannedByVariant.get(a.variantId)}`);
+    }
     total += a.quantity;
   }
   if (total > order.quantityInProcess) {

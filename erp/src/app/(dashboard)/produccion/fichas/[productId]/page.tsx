@@ -4,9 +4,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CostSheetEditor } from "@/components/production/cost-sheet-editor";
+import { MaterialRulesEditor, type RuleLine } from "@/components/production/material-rules-editor";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
+import { compareSizes } from "@/lib/catalog/variants";
 import { requirePageUser } from "@/server/auth/session";
+import { db } from "@/server/db";
 import { getCostSheetEditorData } from "@/server/queries/production.queries";
 import { CostingServiceError } from "@/server/services/costing.service";
 
@@ -34,6 +38,12 @@ export default async function CostSheetPage({ params }: Props) {
   const { productId } = await params;
   const data = await loadData(productId);
   const canEdit = hasPermission(user.permissions, PERMISSIONS.productionCostWrite);
+  const [bom, rules, materials, variants] = await Promise.all([
+    db.productBOM.findMany({ where: { productId }, include: { rawMaterial: true }, orderBy: { sortOrder: "asc" } }),
+    db.productMaterialRule.findMany({ where: { productId } }),
+    db.rawMaterial.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true, type: true } }),
+    db.productVariant.findMany({ where: { productId, active: true }, select: { size: true, color: true, fabric: true } }),
+  ]);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -57,6 +67,38 @@ export default async function CostSheetPage({ params }: Props) {
         </div>
       </div>
       <CostSheetEditor key={data.product.id} data={data} canEdit={canEdit} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Consumo por talle y material según color o tela</CardTitle>
+          <CardDescription>
+            El costo de la ficha usa el material y el consumo de referencia. Al lanzar una orden de producción se descuenta lo que corresponde a cada talle, color y tela
+            (por ejemplo, la tela bordó para las prendas bordó y más metros para los talles grandes).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MaterialRulesEditor
+            key={rules.map((r) => r.updatedAt.getTime()).join(",")}
+            productId={productId}
+            canEdit={hasPermission(user.permissions, PERMISSIONS.productionWrite)}
+            lines={bom.map((b) => {
+              const rule = rules.find((r) => r.rawMaterialId === b.rawMaterialId);
+              return {
+                rawMaterialId: b.rawMaterialId,
+                name: b.rawMaterial.name,
+                type: b.rawMaterial.type,
+                uom: b.rawMaterial.uom,
+                quantity: b.quantity.toNumber(),
+                sizeQuantities: (rule?.sizeQuantities as Record<string, number> | null) ?? {},
+                alternatives: (rule?.alternatives as RuleLine["alternatives"] | null) ?? [],
+              };
+            })}
+            materials={materials}
+            colors={[...new Set(variants.map((v) => v.color).filter((c): c is string => !!c))]}
+            fabrics={[...new Set(variants.map((v) => v.fabric).filter((f): f is string => !!f))]}
+            sizes={[...new Set(variants.sort((a, b) => compareSizes(a.size, b.size)).map((v) => v.size))]}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

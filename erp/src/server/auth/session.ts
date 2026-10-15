@@ -15,6 +15,10 @@ export interface CurrentUser {
   email: string;
   roleName: string;
   permissions: string[];
+  /** Tiene que cambiar la contraseña antes de seguir (clave inicial o reseteada) */
+  mustChangePassword: boolean;
+  /** Local asignado: solo opera las cajas de ese local (null = todos) */
+  branchId: string | null;
 }
 
 export class AuthorizationError extends Error {
@@ -71,7 +75,15 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     await db.session.update({ where: { id: session.id }, data: { expiresAt: new Date(renewed) } }).catch(() => undefined);
   }
   const { user } = session;
-  return { id: user.id, name: user.name, email: user.email, roleName: user.role.name, permissions: user.role.permissions };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    roleName: user.role.name,
+    permissions: user.role.permissions,
+    mustChangePassword: user.mustChangePassword,
+    branchId: user.branchId,
+  };
 });
 
 /** Para páginas: redirige a /login sin sesión y a /sin-acceso sin permiso. */

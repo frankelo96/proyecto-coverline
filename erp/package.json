@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "TZ=America/Argentina/Buenos_Aires next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "TZ=America/Argentina/Buenos_Aires next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "TZ=America/Argentina/Buenos_Aires tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

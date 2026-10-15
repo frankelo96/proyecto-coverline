@@ -9,7 +9,7 @@ import { ADAPTERS, MasterError, UNIQUE_LABELS, uniqueMessage } from "./adapters"
 export type SaveResult = { ok: true; id: string } | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
 
 /** Alta o edición desde el formulario. */
-export async function saveMaster(entity: EntityKey, id: string | null, raw: Record<string, unknown>, userId: string): Promise<SaveResult> {
+export async function saveMaster(entity: EntityKey, id: string | null, raw: Record<string, unknown>, userId: string, permissions: string[] = []): Promise<SaveResult> {
   const def = ENTITIES[entity];
   const adapter = ADAPTERS[entity];
   const refs = await adapter.refs();
@@ -23,7 +23,7 @@ export async function saveMaster(entity: EntityKey, id: string | null, raw: Reco
   }
   try {
     const values = adapter.normalize(parsed.values);
-    const savedId = await db.$transaction((tx) => adapter.save(tx, id, values, userId), { timeout: 30_000 });
+    const savedId = await db.$transaction((tx) => adapter.save(tx, id, values, userId, { permissions }), { timeout: 30_000 });
     return { ok: true, id: savedId };
   } catch (e) {
     if (e instanceof MasterError) return { ok: false, error: e.message, fieldErrors: e.field ? { [e.field]: [e.message] } : undefined };
@@ -146,7 +146,7 @@ export async function previewImport(entity: EntityKey, rows: unknown[][]): Promi
 }
 
 /** Importa las filas válidas; cada fila va en su propia transacción y los errores se informan por línea. */
-export async function commitImport(entity: EntityKey, rows: unknown[][], userId: string): Promise<ImportOutcome> {
+export async function commitImport(entity: EntityKey, rows: unknown[][], userId: string, permissions: string[] = []): Promise<ImportOutcome> {
   const adapter = ADAPTERS[entity];
   const { missingRequired, prepared, presentKeys } = await prepare(entity, rows);
   if (missingRequired.length) return { created: 0, updated: 0, failed: [{ line: 1, error: `Faltan columnas obligatorias: ${missingRequired.join(", ")}` }] };
@@ -169,7 +169,7 @@ export async function commitImport(entity: EntityKey, rows: unknown[][], userId:
         async (tx) => {
           const existing = await adapter.findExisting(tx, values);
           const data = existing ? await mergeWithExisting(entity, existing, values, presentKeys) : values;
-          await adapter.save(tx, existing, data, userId, { fromImport: true });
+          await adapter.save(tx, existing, data, userId, { fromImport: true, permissions });
           if (existing) outcome.updated++;
           else outcome.created++;
         },

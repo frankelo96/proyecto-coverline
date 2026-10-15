@@ -99,9 +99,12 @@ describe("validaciones", () => {
 
   it("calidad: aprobadas ≤ en proceso", () => {
     const o = order({ currentStage: "CONTROL_CALIDAD_PLANCHADO", quantityInProcess: 10 });
-    const planned = new Map([["S", 5], ["M", 5]]);
+    const planned = new Map([["S", 6], ["M", 5]]);
     expect(() => assertCanCloseQuality(o, [{ variantId: "S", quantity: 6 }, { variantId: "M", quantity: 5 }], planned)).toThrow(/10 en proceso/);
     expect(() => assertCanCloseQuality(o, [{ variantId: "S", quantity: 5 }, { variantId: "M", quantity: 4 }], planned)).not.toThrow();
+    // Por talle no se aprueba más de lo planificado, ni se repite un talle.
+    expect(() => assertCanCloseQuality(o, [{ variantId: "M", quantity: 6 }], planned)).toThrow(/planificado en 5/);
+    expect(() => assertCanCloseQuality(o, [{ variantId: "S", quantity: 2 }, { variantId: "S", quantity: 2 }], planned)).toThrow(/repetido/);
   });
 
   it("no cancela con piezas en talleres", () => {

@@ -20,7 +20,7 @@ import {
   transferSchema,
 } from "@/lib/validations/treasury";
 import { authorizeSale, type AuthorizeResult } from "@/server/arca/authorize";
-import { AuthorizationError, requireActionUser } from "@/server/auth/session";
+import { AuthorizationError, type CurrentUser, requireActionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { applyChequeAction } from "@/server/services/cheque.service";
 import { createSale } from "@/server/services/pos.service";
@@ -53,17 +53,26 @@ function revalidateTreasury() {
   revalidatePath("/compras/cuentas", "layout");
 }
 
-/** Las cajas diarias se operan con permiso de turno; la caja negra y los bancos, con permiso de tesorería. */
-async function requireForRegister(registerId: string, permissions: string[]) {
-  const register = await db.cashRegister.findUnique({ where: { id: registerId }, select: { kind: true } });
-  const needed = register?.kind === "CAJA_DIARIA" ? PERMISSIONS.cashSession : PERMISSIONS.cashManage;
-  if (!hasPermission(permissions, needed)) throw new AuthorizationError();
+/**
+ * Las cajas diarias se operan con permiso de turno; la caja negra y los bancos, con permiso de tesorería.
+ * Quien tiene un local asignado solo opera las cajas de ese local.
+ */
+async function requireForRegister(registerId: string, user: CurrentUser) {
+  const register = await db.cashRegister.findUnique({ where: { id: registerId }, select: { kind: true, branchId: true, name: true } });
+  if (!register) throw new AuthorizationError("Caja inexistente");
+  const needed = register.kind === "CAJA_DIARIA" ? PERMISSIONS.cashSession : PERMISSIONS.cashManage;
+  if (!hasPermission(user.permissions, needed)) throw new AuthorizationError();
+  if (user.branchId && register.branchId && register.branchId !== user.branchId) {
+    throw new AuthorizationError(`"${register.name}" es de otro local: solo podés operar las cajas de tu local`);
+  }
+  return register;
 }
 
 export async function openSessionAction(raw: unknown): Promise<ActionResult<{ difference: number }>> {
   try {
     const user = await requireActionUser(PERMISSIONS.cashSession);
     const input = openSessionSchema.parse(raw);
+    await requireForRegister(input.registerId, user);
     const r = await db.$transaction((tx) => openSession(tx, input, user.id), TX);
     revalidateTreasury();
     const diff = r.difference === 0 ? "" : ` Diferencia con el cierre anterior: ${r.difference > 0 ? "sobran" : "faltan"} ${formatMoney(Math.abs(r.difference))}.`;
@@ -77,6 +86,8 @@ export async function closeSessionAction(raw: unknown): Promise<ActionResult<{ s
   try {
     const user = await requireActionUser(PERMISSIONS.cashSession);
     const input = closeSessionSchema.parse(raw);
+    const session = await db.cashRegisterSession.findUnique({ where: { id: input.sessionId }, select: { cashRegisterId: true } });
+    if (session) await requireForRegister(session.cashRegisterId, user);
     const r = await db.$transaction((tx) => closeSession(tx, input, user.id), TX);
     revalidateTreasury();
     const diff = r.difference === 0 ? "Sin diferencias." : `${r.difference > 0 ? "Sobrante" : "Faltante"} de ${formatMoney(Math.abs(r.difference))}.`;
@@ -90,7 +101,7 @@ export async function transferAction(raw: unknown): Promise<ActionResult> {
   try {
     const user = await requireActionUser();
     const input = transferSchema.parse(raw);
-    await requireForRegister(input.fromId, user.permissions);
+    await requireForRegister(input.fromId, user);
     const r = await db.$transaction((tx) => transferBetween(tx, input, user.id), TX);
     revalidateTreasury();
     return { ok: true, data: undefined, message: `${formatMoney(input.amount)} de ${r.from} a ${r.to}` };
@@ -103,7 +114,11 @@ export async function manualMovementAction(raw: unknown): Promise<ActionResult> 
   try {
     const user = await requireActionUser();
     const input = manualMovementSchema.parse(raw);
-    await requireForRegister(input.registerId, user.permissions);
+    const register = await requireForRegister(input.registerId, user);
+    // Un egreso manual del cajón antes del cierre ciego podría tapar un faltante: lo hace un supervisor.
+    if (register.kind === "CAJA_DIARIA" && input.direction === "OUT" && !hasPermission(user.permissions, PERMISSIONS.cashManage)) {
+      throw new AuthorizationError("Los egresos manuales de una caja diaria los registra un supervisor (permiso de tesorería)");
+    }
     const reg = await db.$transaction((tx) => manualMovement(tx, input, user.id), TX);
     revalidateTreasury();
     return { ok: true, data: undefined, message: `${input.direction === "IN" ? "Ingreso" : "Egreso"} de ${formatMoney(input.amount)} en ${reg.name}` };
@@ -131,6 +146,7 @@ export async function createSaleAction(
   try {
     const user = await requireActionUser(PERMISSIONS.posSell);
     const input = saleSchema.parse(raw);
+    await requireForRegister(input.registerId, user);
     const r = await db.$transaction(
       (tx) => createSale(tx, input, { id: user.id, name: user.name, canDiscount: hasPermission(user.permissions, PERMISSIONS.posDiscount) }),
       TX,
@@ -154,7 +170,7 @@ export async function createReceiptAction(raw: unknown): Promise<ActionResult<{ 
   try {
     const user = await requireActionUser(PERMISSIONS.receivablesCollect);
     const input = receiptSchema.parse(raw);
-    await requireForRegister(input.registerId, user.permissions);
+    await requireForRegister(input.registerId, user);
     const r = await db.$transaction((tx) => createReceipt(tx, input, user.id), TX);
     revalidateTreasury();
     revalidatePath("/tesoreria/cobranzas", "layout");
@@ -180,6 +196,7 @@ export async function createReturnAction(raw: unknown): Promise<ActionResult<{ i
   try {
     const user = await requireActionUser(PERMISSIONS.posReturn);
     const input = returnSchema.parse(raw);
+    await requireForRegister(input.registerId, user);
     const r = await db.$transaction((tx) => createReturn(tx, input, { id: user.id }), TX);
     const arca = r.fiscal ? await authorizeSale(r.id) : null;
     await scheduleWebStockPushForSale(r.id).catch(() => undefined);

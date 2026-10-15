@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { AppHeader, type NavItem } from "@/components/layout/app-header";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
@@ -20,6 +22,8 @@ const NAV: (NavItem & { permission: string | null; hideIf?: string })[] = [
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await requirePageUser();
+  // Clave inicial o reseteada por un administrador: hay que cambiarla antes de usar el sistema.
+  if (user.mustChangePassword) redirect("/cambiar-clave");
   const items = NAV.filter((n) => (n.permission === null || hasPermission(user.permissions, n.permission)) && !(n.hideIf && hasPermission(user.permissions, n.hideIf))).map(({ href, label }) => ({
     href,
     label,

@@ -181,9 +181,16 @@ async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@coverline.local";
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
-    const password = process.env.SEED_ADMIN_PASSWORD ?? "cambiar-esta-clave";
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    // Sin clave configurada se usa una provisoria que hay que cambiar en el primer ingreso.
     await prisma.user.create({
-      data: { email: adminEmail, name: "Administrador", passwordHash: await hashPassword(password), roleId: adminRole.id },
+      data: {
+        email: adminEmail,
+        name: "Administrador",
+        passwordHash: await hashPassword(password ?? "cambiar-esta-clave"),
+        roleId: adminRole.id,
+        mustChangePassword: !password,
+      },
     });
   }
 
@@ -223,14 +230,37 @@ async function main() {
       defaultForMethods: ["TRANSFERENCIA" as const, "TARJETA_DEBITO" as const, "TARJETA_CREDITO" as const],
     },
   ];
+  // Solo se crean las que faltan: lo que se configure desde la app (desactivar, renombrar) no se pisa.
   for (const r of registers) {
-    await prisma.cashRegister.upsert({
-      where: { name: r.name },
-      update: { kind: r.kind, requiresSession: r.requiresSession, branchId: r.branchId, defaultForMethods: r.defaultForMethods, active: true },
-      create: r,
-    });
+    await prisma.cashRegister.upsert({ where: { name: r.name }, update: {}, create: r });
   }
 
+  // El catálogo base (proveedores, materiales, talleres, prendas clásicas) se carga una sola vez:
+  // si después se borra o se vacía la base, no vuelve a aparecer en cada arranque.
+  const catalogDone = (await prisma.appSetting.findUnique({ where: { key: "seed.catalog" } })) !== null || (await prisma.product.count()) > 0;
+  if (!catalogDone) await seedCatalog();
+  await prisma.appSetting.upsert({ where: { key: "seed.catalog" }, update: {}, create: { key: "seed.catalog", value: { at: new Date().toISOString() } } });
+
+  // Datos de ejemplo (clientes, presupuestos, oportunidades): solo para una instancia de prueba.
+  if (process.env.SEED_DEMO === "true" && !(await prisma.appSetting.findUnique({ where: { key: "seed.demo" } }))) {
+    await seedDemoClients();
+    await seedCrmDemo();
+    await seedVariantDemo();
+    await prisma.appSetting.create({ data: { key: "seed.demo", value: { at: new Date().toISOString() } } });
+  }
+
+  // Continuar la numeración de presupuestos del sistema anterior (nunca retrocede).
+  const nextQuote = Number(process.env.QUOTE_NEXT_NUMBER);
+  if (Number.isInteger(nextQuote) && nextQuote > 1) {
+    await prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('quotes', 'number'), GREATEST($1::int - 1, (SELECT COALESCE(MAX(number), 0) FROM quotes), 1))`,
+      nextQuote,
+    );
+    console.log(`  Presupuestos: el próximo número es ${nextQuote} (o el siguiente al último existente)`);
+  }
+}
+
+async function seedCatalog() {
   // --- Proveedores y materias primas ----------------------------------------
   const supplierIds = new Map<string, string>();
   for (const s of SUPPLIERS) {
@@ -284,36 +314,6 @@ async function main() {
   }
 
   await seedBaseCatalog(supplierIds, workshopIds, materialIds, serviceIds);
-
-  // --- Cliente de ejemplo --------------------------------------------------------
-  await prisma.client.upsert({
-    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-70000000-8" } },
-    update: {},
-    create: {
-      type: "ESCUELA",
-      businessName: "Instituto San Martín (ejemplo)",
-      documentType: "CUIT",
-      documentNumber: "30-70000000-8",
-      taxCondition: "EXENTO",
-      tags: ["colegio", "reposicion-anual"],
-      purchaseMonths: [11, 12, 2],
-      creditLimit: D(10_000_000),
-      paymentTermDays: 30,
-    },
-  });
-  await prisma.client.upsert({
-    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-71555555-3" } },
-    update: {},
-    create: {
-      type: "GASTRONOMICO",
-      businessName: "Gastronómica del Centro S.A. (ejemplo)",
-      documentType: "CUIT",
-      documentNumber: "30-71555555-3",
-      taxCondition: "RESPONSABLE_INSCRIPTO",
-      creditLimit: D(3_000_000),
-      paymentTermDays: 30,
-    },
-  });
 
   // --- Productos, variantes y fichas técnicas --------------------------------
   for (const p of PRODUCTS) {
@@ -371,18 +371,38 @@ async function main() {
     console.log(`  ${p.sku.padEnd(12)} costo ${result.newCost.toFixed(2).padStart(10)}  sugerido neto ${result.breakdown.suggestedNetPrice.toFixed(2)}`);
   }
 
-  await seedCrmDemo();
-  await seedVariantDemo();
+}
 
-  // Continuar la numeración de presupuestos del sistema anterior (nunca retrocede).
-  const nextQuote = Number(process.env.QUOTE_NEXT_NUMBER);
-  if (Number.isInteger(nextQuote) && nextQuote > 1) {
-    await prisma.$executeRawUnsafe(
-      `SELECT setval(pg_get_serial_sequence('quotes', 'number'), GREATEST($1::int - 1, (SELECT COALESCE(MAX(number), 0) FROM quotes), 1))`,
-      nextQuote,
-    );
-    console.log(`  Presupuestos: el próximo número es ${nextQuote} (o el siguiente al último existente)`);
-  }
+async function seedDemoClients() {
+  await prisma.client.upsert({
+    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-70000000-8" } },
+    update: {},
+    create: {
+      type: "ESCUELA",
+      businessName: "Instituto San Martín (ejemplo)",
+      documentType: "CUIT",
+      documentNumber: "30-70000000-8",
+      taxCondition: "EXENTO",
+      tags: ["colegio", "reposicion-anual"],
+      purchaseMonths: [11, 12, 2],
+      creditLimit: D(10_000_000),
+      paymentTermDays: 30,
+    },
+  });
+  await prisma.client.upsert({
+    where: { documentType_documentNumber: { documentType: "CUIT", documentNumber: "30-71555555-3" } },
+    update: {},
+    create: {
+      type: "GASTRONOMICO",
+      businessName: "Gastronómica del Centro S.A. (ejemplo)",
+      documentType: "CUIT",
+      documentNumber: "30-71555555-3",
+      taxCondition: "RESPONSABLE_INSCRIPTO",
+      creditLimit: D(3_000_000),
+      paymentTermDays: 30,
+    },
+  });
+
 }
 
 /**

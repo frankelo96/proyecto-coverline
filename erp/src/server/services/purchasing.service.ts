@@ -33,6 +33,7 @@ import type { MerchandisePurchaseInput, PaymentInstrument, PaymentOrderInput, Wo
 import { periodLabel, SALARY_CONCEPT_LABELS, type SalaryPaymentInput } from "@/lib/validations/payroll";
 import { priceFromCost } from "@/lib/costing/escandallo";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
+import { moveRawMaterial } from "@/server/services/materials.service";
 import { adjustBranchStock, mainBranchId } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
@@ -50,6 +51,9 @@ async function assertNotDuplicated(
   input: { invoiceType: string; pointOfSale: number | null; invoiceNumber: string | null },
 ) {
   if (input.invoiceType === "TICKET_INTERNO" || !input.invoiceNumber) return;
+  // Bloqueo por comprobante: un doble envío del formulario espera al primero y ve que ya está cargado.
+  const key = `purchase:${where.supplierId ?? where.workshopId}:${input.invoiceType}:${input.pointOfSale ?? 0}:${input.invoiceNumber}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
   const dup = await tx.purchase.findFirst({
     where: {
       ...where,
@@ -186,7 +190,7 @@ export async function createMerchandisePurchase(tx: Tx, input: MerchandisePurcha
   const affected = new Map<string, AffectedProduct>();
   for (const r of resolved) {
     if (r.material) {
-      await tx.rawMaterial.update({ where: { id: r.material.id }, data: { stockQty: { increment: D(r.stockQuantity) } } });
+      await moveRawMaterial(tx, { rawMaterialId: r.material.id, delta: D(r.stockQuantity), reason: "COMPRA", refType: "COMPRA", refId: purchase.id, unitCost: r.stockUnitCost, userId });
       if (r.item.updateCost && r.stockUnitCost !== r.previous) {
         const change = costChange(r.previous, r.stockUnitCost);
         if (change.increased) costAlerts.push({ code: r.material.code, name: r.material.name, previous: r.previous, next: r.stockUnitCost, deltaPct: change.deltaPct });
@@ -342,6 +346,8 @@ export async function createWorkshopInvoice(tx: Tx, input: WorkshopInvoiceInput,
   await tx.workshopRemit.updateMany({ where: { id: { in: remitIds } }, data: { purchaseId: purchase.id } });
 
   // La factura reemplaza la deuda provisoria de cada recepción. Los pagos ya hechos se reimputan a la factura.
+  // Se bloquean esas deudas: una orden de pago simultánea espera y después ve la deuda ya reemplazada.
+  await tx.$queryRaw`SELECT id FROM accounts_payable WHERE "workshopRemitId" IN (${Prisma.join(remitIds)}) FOR UPDATE`;
   const provisional = await tx.accountPayable.findMany({
     where: { workshopRemitId: { in: remitIds }, status: { not: "ANULADO" } },
     include: { payments: { select: { id: true, amount: true } } },
@@ -386,7 +392,7 @@ export async function annulPurchase(tx: Tx, input: { purchaseId: string; reason:
   if (purchase.kind === "MERCADERIA") {
     for (const it of purchase.items) {
       const qty = it.stockQuantity ?? it.quantity;
-      if (it.rawMaterialId) await tx.rawMaterial.update({ where: { id: it.rawMaterialId }, data: { stockQty: { decrement: qty } } });
+      if (it.rawMaterialId) await moveRawMaterial(tx, { rawMaterialId: it.rawMaterialId, delta: qty.neg(), reason: "ANULACION_COMPRA", refType: "COMPRA", refId: purchase.id, userId });
       if (it.productVariantId) await adjustBranchStock(tx, it.productVariantId, await mainBranchId(tx), qty.neg());
     }
   } else {

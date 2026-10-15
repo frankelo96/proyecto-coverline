@@ -81,7 +81,7 @@ export function EntityForm({ entity, id, fields, initial, refs, basePath, after 
     const fid = `${uid}-${f.key}`;
     const invalid = !!errors[f.key];
     const describedBy = [f.help ? `${fid}-help` : null, invalid ? `${fid}-err` : null].filter(Boolean).join(" ") || undefined;
-    const common = { id: fid, "aria-invalid": invalid || undefined, "aria-describedby": describedBy, disabled: readOnly };
+    const common = { id: fid, "aria-invalid": invalid || undefined, "aria-describedby": describedBy, disabled: readOnly || (f.createOnly && !!id) };
     const v = values[f.key];
 
     if (f.type === "bool") {

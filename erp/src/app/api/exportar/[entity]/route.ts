@@ -5,6 +5,7 @@ import { ENTITIES, isEntityKey } from "@/lib/masters/definitions";
 import { getCurrentUser } from "@/server/auth/session";
 import { ADAPTERS } from "@/server/masters/adapters";
 import { buildCsv, buildXlsx } from "@/server/masters/spreadsheet";
+import { isoLocalDate } from "@/lib/dates";
 
 /**
  * Exporta un maestro a Excel o CSV.  ?formato=csv  ?plantilla=1 (solo encabezados + instrucciones)
@@ -24,7 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ entity: 
   const adapter = ADAPTERS[entity];
   const [rows, refs] = await Promise.all([template ? Promise.resolve([]) : adapter.exportRows(), adapter.refs()]);
   const spec = { title: def.title, fields: def.fields, rows, refs, notes: [def.matchHelp, "Los encabezados terminados en * son obligatorios."] };
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = isoLocalDate();
   const base = template ? `plantilla-${entity}` : `${entity}-${stamp}`;
 
   if (csv) {

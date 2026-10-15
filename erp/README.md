@@ -244,6 +244,17 @@ Menú **Personal** (permiso `payroll:read` / `payroll:write`; lo tienen Admin y 
 - **Sueldos del mes**: por empleado, sueldo, lo pagado (sueldo + adelantos), lo que falta y los extras (aguinaldo, vacaciones, premios, horas extra, otros). Navegación por mes y exportación a Excel (también en Informes → Sueldos pagados).
 - **Registrar pago**: mismo circuito que una orden de pago (efectivo de caja, Banco Macro, Mercado Pago, cheque propio o de terceros): genera el egreso en tesorería y un comprobante imprimible con el logo. Es un comprobante interno, no reemplaza el recibo de sueldo legal.
 
+## Puesta en producción y seguridad
+
+- **Seed**: en cada arranque solo asegura roles, locales y cajas (crea lo que falta, no pisa lo configurado). El catálogo base se carga una única vez (marca `seed.catalog` en `app_settings`). Los datos de ejemplo (clientes, presupuestos, oportunidades) solo con `SEED_DEMO=true`.
+- **Primer ingreso**: si no se configuró `SEED_ADMIN_PASSWORD`, el admin entra con una clave provisoria y el sistema le exige cambiarla. Toda clave que pone un administrador es provisoria (se cambia en el primer ingreso). Cada usuario cambia la suya tocando su nombre arriba a la derecha.
+- **Login**: bloqueo de la cuenta a los 5 intentos (contador atómico), límite de 20 intentos fallidos por IP cada 15 minutos, y el mismo mensaje para email inexistente, clave incorrecta o cuenta bloqueada.
+- **Local por usuario**: un usuario con local asignado solo ve y opera las cajas de ese local (ventas, devoluciones, turnos, cobranzas). Los egresos manuales de una caja diaria los registra un supervisor (`cash:manage`).
+- **Devoluciones**: se reintegran solo por los medios con que se cobró la venta (hasta lo cobrado por cada medio). Los ítems libres (precio a mano) requieren permiso de descuento.
+- **Hora**: el servidor trabaja en hora argentina (`TZ=America/Argentina/Buenos_Aires`).
+- **Cron externo**: `GET /api/tienda-web/sync` con `Authorization: Bearer WOO_CRON_TOKEN`.
+- **Base de datos**: la base gratuita de Render vence a los 30 días y no tiene copias de seguridad. Para producción crear una base **paga nueva** (arranca limpia, con el catálogo y sin datos de ejemplo) y apuntar `DATABASE_URL` a ella.
+
 ## Pendiente para los próximos módulos
 
 Cambios con vale/saldo a favor del cliente, liquidación de tarjetas (comisiones y acreditación diferida), Libro IVA y reportes (flujo de caja, rentabilidad), envío automático de campañas (WhatsApp Business API / proveedor de email).

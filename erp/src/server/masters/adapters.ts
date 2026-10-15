@@ -12,11 +12,13 @@ import type {
   UnitOfMeasure,
   WorkshopType,
 } from "@/generated/prisma/enums";
+import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { autoVariantSku, variantKey } from "@/lib/catalog/variants";
 import { DEFAULT_POSITIONS, type EntityKey } from "@/lib/masters/definitions";
 import { formatCuit, isValidCuit, type RefOptions, type Values } from "@/lib/masters/fields";
 import { db } from "@/server/db";
 import { updateRawMaterialCost } from "@/server/services/costing.service";
+import { moveRawMaterial } from "@/server/services/materials.service";
 import { BRANCH_ORDER, mainBranchId, setBranchStock } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
@@ -49,7 +51,7 @@ export interface Adapter {
   batchKey(values: Values): string | null;
   /** Normaliza y valida reglas de negocio. Lanza MasterError. */
   normalize(values: Values): Values;
-  save(tx: Tx, id: string | null, values: Values, userId: string, opts?: { fromImport?: boolean }): Promise<string>;
+  save(tx: Tx, id: string | null, values: Values, userId: string, opts?: { fromImport?: boolean; permissions?: string[] }): Promise<string>;
   setActive(id: string, active: boolean): Promise<void>;
   exportRows(): Promise<Values[]>;
   /** Columnas extra de la tabla del listado */
@@ -423,24 +425,37 @@ const materials: Adapter = {
       color: str(v.color),
       widthCm: decOrNull(v.widthCm),
       metersPerKg: decOrNull(v.metersPerKg),
-      stockQty: dec(v.stockQty),
       minStock: dec(v.minStock),
       supplierId: str(v.supplierId),
       active: v.active !== false,
     };
+    const canCost = !opts?.permissions || hasPermission(opts.permissions, PERMISSIONS.productionCostWrite);
     if (!id) {
       const created = await tx.rawMaterial.create({ data: { ...data, currentCost: dec(v.currentCost) } });
+      await moveRawMaterial(tx, { rawMaterialId: created.id, delta: dec(v.stockQty), reason: opts?.fromImport ? "IMPORTACION" : "AJUSTE", notes: "Stock inicial", userId });
       await audit(tx, userId, "RawMaterial", created.id, "CREATE", v);
       return created.id;
     }
     const before = await tx.rawMaterial.findUniqueOrThrow({ where: { id } });
+    if (before.uom !== data.uom) {
+      const usedInSheets = await tx.productBOM.count({ where: { rawMaterialId: id } });
+      if (!before.stockQty.isZero() || usedInSheets > 0) {
+        throw new MasterError("No se puede cambiar la unidad de medida de un material con stock o usado en fichas (se mezclarían metros y kilos). Creá un material nuevo.", "uom");
+      }
+    }
+    if (!canCost && !before.currentCost.equals(dec(v.currentCost))) {
+      throw new MasterError("Cambiar el costo de reposición requiere el permiso de costos", "currentCost");
+    }
     await tx.rawMaterial.update({ where: { id }, data });
+    // El stock no se pisa desde el formulario (borraría compras y consumos del mientras tanto):
+    // solo una importación lo fija como inventario contado, y queda el movimiento.
+    if (opts?.fromImport && typeof v.stockQty === "number") {
+      const delta = dec(v.stockQty).minus(before.stockQty);
+      await moveRawMaterial(tx, { rawMaterialId: id, delta, reason: "IMPORTACION", notes: "Inventario importado", userId });
+    }
     // El costo pasa por el servicio de costos: historial + recálculo de fichas.
     await updateRawMaterialCost(tx, { rawMaterialId: id, newCost: num(v.currentCost), userId, source: opts?.fromImport ? "IMPORTACION" : "MANUAL" });
-    await audit(tx, userId, "RawMaterial", id, "UPDATE", {
-      ...v,
-      ...(before.stockQty.equals(data.stockQty) ? {} : { stockBefore: before.stockQty.toNumber() }),
-    });
+    await audit(tx, userId, "RawMaterial", id, "UPDATE", v);
     return id;
   },
   async setActive(id, active) {

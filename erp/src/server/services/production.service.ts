@@ -25,6 +25,8 @@ import {
 } from "@/lib/production/workflow";
 import { formatMoney } from "@/lib/format";
 import type { CreateOrderInput } from "@/lib/validations/production";
+import { type MaterialAlternative, orderConsumption } from "@/lib/production/consumption";
+import { moveRawMaterial, netConsumptionOfOrder } from "@/server/services/materials.service";
 import { adjustBranchStock, mainBranchId, wholesaleBranchId } from "@/server/services/stock.service";
 
 type Tx = Prisma.TransactionClient;
@@ -132,22 +134,33 @@ export interface MaterialShortage {
 export async function startProductionOrder(tx: Tx, orderId: string, userId: string) {
   const order = await lockOrder(tx, orderId);
   assertCanStart(order);
-  const bom = await tx.productBOM.findMany({ where: { productId: order.productId }, include: { rawMaterial: true } });
+  const [bom, rules, variants] = await Promise.all([
+    tx.productBOM.findMany({ where: { productId: order.productId } }),
+    tx.productMaterialRule.findMany({ where: { productId: order.productId } }),
+    tx.productVariant.findMany({ where: { id: { in: order.items.map((i) => i.variantId) } }, select: { id: true, size: true, color: true, fabric: true } }),
+  ]);
   if (bom.length === 0) throw new WorkflowError("El producto no tiene ficha técnica cargada");
+
+  // Consumo por talle, color y tela de cada variante (tela alternativa según el color, consumo según el talle).
+  const byVariant = new Map(variants.map((v) => [v.id, v]));
+  const consumption = orderConsumption(
+    bom.map((b) => ({ rawMaterialId: b.rawMaterialId, quantity: b.quantity.toNumber(), wastePct: b.wastePct.toNumber() })),
+    new Map(rules.map((r) => [r.rawMaterialId, { sizeQuantities: r.sizeQuantities as Record<string, number> | null, alternatives: r.alternatives as MaterialAlternative[] | null }])),
+    order.items.map((i) => ({ size: byVariant.get(i.variantId)?.size ?? "", color: byVariant.get(i.variantId)?.color ?? null, fabric: byVariant.get(i.variantId)?.fabric ?? null, quantity: i.quantity })),
+  );
+  const materials = await tx.rawMaterial.findMany({ where: { id: { in: [...consumption.keys()] } } });
 
   let materialsCost = new Decimal(0);
   const shortages: MaterialShortage[] = [];
-  for (const line of bom) {
-    const required = new Decimal(line.quantity.toString())
-      .mul(new Decimal(100).plus(line.wastePct.toString()).div(100))
-      .mul(order.quantityPlanned)
-      .toDecimalPlaces(4);
-    const available = new Decimal(line.rawMaterial.stockQty.toString());
+  for (const m of materials) {
+    const required = new Decimal(consumption.get(m.id) ?? 0);
+    if (required.lte(0)) continue;
+    const available = new Decimal(m.stockQty.toString());
     if (available.lt(required)) {
-      shortages.push({ code: line.rawMaterial.code, name: line.rawMaterial.name, required: required.toNumber(), available: available.toNumber() });
+      shortages.push({ code: m.code, name: m.name, required: required.toNumber(), available: available.toNumber() });
     }
-    materialsCost = materialsCost.plus(required.mul(line.rawMaterial.currentCost.toString()));
-    await tx.rawMaterial.update({ where: { id: line.rawMaterialId }, data: { stockQty: { decrement: D(required) } } });
+    materialsCost = materialsCost.plus(required.mul(m.currentCost.toString()));
+    await moveRawMaterial(tx, { rawMaterialId: m.id, delta: D(required.neg()), reason: "CONSUMO_OP", refType: "OP", refId: order.id, unitCost: m.currentCost, userId, notes: `OP #${order.number}` });
   }
 
   await tx.productionOrder.update({
@@ -248,7 +261,8 @@ export async function receiveFromWorkshop(
 
   if (laborTotal.gt(0)) {
     const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + WORKSHOP_PAYMENT_TERM_DAYS);
+    // Plazo de pago del taller (si no tiene uno cargado, el general).
+    dueDate.setDate(dueDate.getDate() + (workshop.paymentTermDays > 0 ? workshop.paymentTermDays : WORKSHOP_PAYMENT_TERM_DAYS));
     await tx.accountPayable.create({
       data: {
         workshopId: workshop.id,
@@ -352,10 +366,23 @@ export async function closeQuality(
   return { finished: total };
 }
 
-export async function cancelOrder(tx: Tx, input: { orderId: string; reason: string }, userId: string) {
+export async function cancelOrder(tx: Tx, input: { orderId: string; reason: string; returnMaterials: boolean }, userId: string) {
   const order = await lockOrder(tx, input.orderId);
   assertCanCancel(asOrderLike(order));
-  await tx.productionOrder.update({ where: { id: order.id }, data: { status: "CANCELADA" } });
+  // Si la tela/avíos no se llegaron a usar (ej. se cancela antes de cortar), vuelven al stock y se descuentan del costo real.
+  let returned = new Decimal(0);
+  if (input.returnMaterials) {
+    for (const r of await netConsumptionOfOrder(tx, order.id)) {
+      const last = await tx.rawMaterialMovement.findFirst({ where: { refType: "OP", refId: order.id, rawMaterialId: r.rawMaterialId, reason: "CONSUMO_OP" }, orderBy: { createdAt: "desc" } });
+      const unitCost = last?.unitCost ?? new Prisma.Decimal(0);
+      await moveRawMaterial(tx, { rawMaterialId: r.rawMaterialId, delta: r.consumed, reason: "DEVOLUCION_OP", refType: "OP", refId: order.id, unitCost, userId, notes: `Cancelación OP #${order.number}` });
+      returned = returned.plus(new Decimal(r.consumed.toString()).mul(unitCost.toString()));
+    }
+  }
+  await tx.productionOrder.update({
+    where: { id: order.id },
+    data: { status: "CANCELADA", ...(returned.gt(0) ? { actualCost: { decrement: D(returned.toDecimalPlaces(2)) } } : {}) },
+  });
   await tx.auditLog.create({
     data: {
       userId,
@@ -363,7 +390,7 @@ export async function cancelOrder(tx: Tx, input: { orderId: string; reason: stri
       entityId: order.id,
       action: "CANCEL",
       reason: input.reason,
-      data: { number: order.number, stage: order.currentStage, quantityInProcess: order.quantityInProcess },
+      data: { number: order.number, stage: order.currentStage, quantityInProcess: order.quantityInProcess, materialsReturned: returned.toNumber() },
     },
   });
 }

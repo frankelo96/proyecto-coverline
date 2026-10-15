@@ -15,7 +15,15 @@ export interface UserRow extends UserFormValues {
   locked: boolean;
 }
 
-export function UsersTable({ users, roles }: { users: UserRow[]; roles: { id: string; name: string; description: string | null }[] }) {
+export function UsersTable({
+  users,
+  roles,
+  branches,
+}: {
+  users: UserRow[];
+  roles: { id: string; name: string; description: string | null }[];
+  branches: { id: string; name: string }[];
+}) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
@@ -52,7 +60,7 @@ export function UsersTable({ users, roles }: { users: UserRow[]; roles: { id: st
               {editing === u.id && (
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
                   <TableCell colSpan={5} className="px-5 py-4">
-                    <UserForm initial={u} roles={roles} />
+                    <UserForm initial={u} roles={roles} branches={branches} />
                   </TableCell>
                 </TableRow>
               )}

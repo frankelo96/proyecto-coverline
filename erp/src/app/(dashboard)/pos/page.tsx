@@ -1,6 +1,7 @@
 import { Store } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +13,10 @@ export const metadata: Metadata = { title: "Punto de venta" };
 export const dynamic = "force-dynamic";
 
 export default async function PosHomePage() {
-  await requirePageUser(PERMISSIONS.posSell);
-  const registers = await getPosHome();
+  const user = await requirePageUser(PERMISSIONS.posSell);
+  const registers = await getPosHome(user.branchId);
+  // Quien trabaja en un solo local entra directo a su caja.
+  if (user.branchId && registers.length === 1) redirect(`/pos/${registers[0].id}`);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">

@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/server/auth/session";
 import { ADAPTERS } from "@/server/masters/adapters";
 import { type Report, REPORTS } from "@/server/reports/reports";
 import { reportsToXlsx, XLSX_TYPE } from "@/server/reports/writer";
+import { isoLocalDate } from "@/lib/dates";
 
 /**
  * Respaldo completo en un solo Excel: todos los maestros (re-importables) y
@@ -39,7 +40,7 @@ export async function GET() {
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": XLSX_TYPE,
-      "Content-Disposition": `attachment; filename="respaldo-coverline-${new Date().toISOString().slice(0, 10)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="respaldo-coverline-${isoLocalDate()}.xlsx"`,
       "Cache-Control": "no-store",
     },
   });

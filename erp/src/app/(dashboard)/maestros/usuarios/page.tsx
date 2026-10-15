@@ -6,15 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 import { db } from "@/server/db";
+import { BRANCH_ORDER } from "@/server/services/stock.service";
 
 export const metadata: Metadata = { title: "Usuarios" };
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
   await requirePageUser(PERMISSIONS.usersManage);
-  const [users, roles] = await Promise.all([
+  const [users, roles, branches] = await Promise.all([
     db.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }], include: { role: { select: { name: true } } } }),
     db.role.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, description: true } }),
+    db.branch.findMany({ where: { active: true, kind: "LOCAL" }, orderBy: BRANCH_ORDER, select: { id: true, name: true } }),
   ]);
   const now = new Date();
   return (
@@ -27,6 +29,7 @@ export default async function UsersPage() {
       </div>
       <UsersTable
         roles={roles}
+        branches={branches}
         users={users.map((u) => ({
           id: u.id,
           name: u.name,
@@ -34,6 +37,7 @@ export default async function UsersPage() {
           roleId: u.roleId,
           roleName: u.role.name,
           active: u.active,
+          branchId: u.branchId,
           lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
           locked: !!u.lockedUntil && u.lockedUntil > now,
         }))}
@@ -41,10 +45,10 @@ export default async function UsersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Nuevo usuario</CardTitle>
-          <CardDescription>Compartile el email y la contraseña inicial; puede pedirte que se la cambies cuando quiera.</CardDescription>
+          <CardDescription>Compartile el email y la contraseña inicial: es provisoria, el sistema le pide cambiarla la primera vez que ingresa.</CardDescription>
         </CardHeader>
         <CardContent>
-          <UserForm initial={{ id: null, name: "", email: "", roleId: "", active: true }} roles={roles} />
+          <UserForm initial={{ id: null, name: "", email: "", roleId: "", active: true, branchId: null }} roles={roles} branches={branches} />
         </CardContent>
       </Card>
     </div>

@@ -73,6 +73,8 @@ export async function createSale(tx: Tx, input: SaleInput, user: { id: string; n
     return { input: i, variant: null, description: i.description!, unitPrice: i.unitPrice, vatRate: 21, unitCost: new Prisma.Decimal(0) };
   });
 
+  // Un ítem libre lleva precio a mano: lo carga quien puede hacer descuentos (si no, cualquier prenda se cobraría al precio que se quiera).
+  if (!user.canDiscount && input.items.some((i) => !i.variantId)) throw new SaleError("Los ítems libres (precio a mano) los carga un usuario con permiso de descuento");
   const hasDiscount = input.globalDiscountPct > 0 || input.items.some((i) => i.discountPct > 0);
   if (hasDiscount) {
     if (!user.canDiscount) throw new SaleError("Tu usuario no puede aplicar descuentos");

@@ -58,6 +58,8 @@ export interface FieldDef {
   defaultValue?: FieldValue;
   /** Fuerza mayúsculas (códigos, SKU) */
   upper?: boolean;
+  /** Solo se carga al crear; después se ve pero no se edita desde el formulario */
+  createOnly?: boolean;
 }
 
 export type FieldValue = string | number | boolean | string[] | number[] | null;

@@ -1,7 +1,7 @@
 import { ChevronLeft, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PosTerminal } from "@/components/pos/pos-terminal";
 import { DrawerActions, OpenSessionForm } from "@/components/pos/session-forms";
@@ -26,6 +26,7 @@ export default async function TerminalPage({ params, searchParams }: Props) {
   const { registerId } = await params;
   const data = await getTerminalData(registerId);
   if (!data) notFound();
+  if (user.branchId && data.register.branchId !== user.branchId) redirect("/pos");
   const canSession = hasPermission(user.permissions, PERMISSIONS.cashSession);
   const { aviso } = await searchParams;
 

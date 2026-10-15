@@ -27,7 +27,7 @@ export async function saveMasterAction(entity: string, id: string | null, raw: R
     if (!isEntityKey(entity)) return { ok: false, error: "Sección inexistente" };
     const def = ENTITIES[entity];
     const user = await requireActionUser(def.writePermission);
-    const r = await saveMaster(entity, id, raw, user.id);
+    const r = await saveMaster(entity, id, raw, user.id, user.permissions);
     if (!r.ok) return r;
     revalidate(entity);
     return { ok: true, data: { id: r.id }, message: `${def.singular[0].toUpperCase()}${def.singular.slice(1)} ${id ? "actualizado" : "creado"}` };
@@ -60,7 +60,7 @@ export async function importMasterAction(
     if (!(file instanceof File)) return { ok: false, error: "Elegí un archivo" };
     const rows = await readSpreadsheet(file);
     if (formData.get("commit") !== "1") return { ok: true, data: { preview: await previewImport(entity, rows) } };
-    const outcome = await commitImport(entity, rows, user.id);
+    const outcome = await commitImport(entity, rows, user.id, user.permissions);
     revalidate(entity);
     const msg = `Importación terminada: ${outcome.created} nuevos, ${outcome.updated} actualizados${outcome.failed.length ? `, ${outcome.failed.length} filas con error` : ""}`;
     return { ok: true, data: { outcome }, message: msg };

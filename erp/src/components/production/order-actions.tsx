@@ -244,6 +244,8 @@ function CancelForm({ order }: { order: OrderDetail }) {
   const id = useId();
   const { pending, status, execute } = useServerAction();
   const [reason, setReason] = useState("");
+  // Antes de cortar, la tela sigue entera: por defecto vuelve al stock.
+  const [returnMaterials, setReturnMaterials] = useState(order.status === "EN_PROCESO" && order.stage === "CORTE_INTERNO");
   return (
     <details className="group rounded-lg border bg-card">
       <summary className="flex min-h-11 cursor-pointer items-center px-5 text-sm font-medium text-destructive">Cancelar orden</summary>
@@ -251,11 +253,17 @@ function CancelForm({ order }: { order: OrderDetail }) {
         className="flex flex-col gap-3 border-t px-5 py-4"
         onSubmit={(e) => {
           e.preventDefault();
-          execute(() => cancelOrderAction({ orderId: order.id, reason }));
+          execute(() => cancelOrderAction({ orderId: order.id, reason, returnMaterials }));
         }}
       >
         {order.status === "EN_PROCESO" && (
-          <p className="text-sm text-muted-foreground">Los materiales ya descontados al lanzar el corte no se reintegran al stock automáticamente.</p>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={returnMaterials} onChange={(e) => setReturnMaterials(e.target.checked)} />
+            <span>
+              Devolver al stock los materiales descontados al lanzar la orden
+              <span className="block text-xs text-muted-foreground">Marcalo si la tela y los avíos no se llegaron a cortar ni usar.</span>
+            </span>
+          </label>
         )}
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-r`}>Motivo (queda auditado)</Label>

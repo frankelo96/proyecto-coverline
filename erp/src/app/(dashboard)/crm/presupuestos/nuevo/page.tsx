@@ -6,13 +6,14 @@ import { QuoteForm } from "@/components/crm/quote-form";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 import { getQuoteFormData } from "@/server/queries/crm.queries";
+import { isoLocalDateIn } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Nuevo presupuesto" };
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ cliente?: string; oportunidad?: string }> };
 
-const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+const inDays = (d: number) => isoLocalDateIn(d);
 
 export default async function NewQuotePage({ searchParams }: Props) {
   await requirePageUser(PERMISSIONS.quotesWrite);

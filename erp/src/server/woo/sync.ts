@@ -143,6 +143,16 @@ async function deductLines(tx: Tx, lines: StoredLine[], fixedBranchId: string | 
   return out;
 }
 
+/** Firma de los renglones (variante y cantidad) para detectar pedidos editados. */
+function linesSignature(lines: StoredLine[]) {
+  const totals = new Map<string, number>();
+  for (const l of lines) if (l.variantId) totals.set(l.variantId, (totals.get(l.variantId) ?? 0) + l.quantity);
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([v, q]) => `${v}:${q}`)
+    .join("|");
+}
+
 async function restockLines(tx: Tx, lines: StoredLine[], fallbackBranchId: string) {
   for (const l of lines) if (l.variantId && l.quantity > 0) await adjustBranchStock(tx, l.variantId, l.branchId ?? fallbackBranchId, l.quantity);
 }
@@ -174,8 +184,10 @@ export async function processOrders(mode: WooMode, orders: WooOrderData[], summa
     if (mode !== "activo") continue;
 
     const shouldDeduct = orderDeductsStock(o.status);
-    const existing = await db.wooOrder.findUnique({ where: { wooOrderId: o.id } });
     await db.$transaction(async (tx) => {
+      // Un pedido a la vez: si llegan dos avisos del mismo pedido juntos, el segundo espera y ve lo que hizo el primero.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`woo-order:${o.id}`}))`;
+      const existing = await tx.wooOrder.findUnique({ where: { wooOrderId: o.id } });
       const fixed = await fixedOrdersBranchId(tx);
       let branchId = existing?.branchId ?? fixed ?? (await mainBranchId(tx));
       let deducted = existing?.deducted ?? false;
@@ -192,6 +204,11 @@ export async function processOrders(mode: WooMode, orders: WooOrderData[], summa
         await restockLines(tx, storedLines, branchId);
         deducted = false;
         summary.orders.restocked++;
+      } else if (shouldDeduct && deducted && linesSignature(storedLines) !== linesSignature(lines)) {
+        // Pedido editado después de descontado (otro talle, otra cantidad): se devuelve lo anterior y se descuenta lo nuevo.
+        await restockLines(tx, storedLines, branchId);
+        storedLines = await deductLines(tx, lines, fixed);
+        summary.orders.deducted++;
       }
       const data = {
         number: o.number,

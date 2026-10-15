@@ -19,18 +19,25 @@ export async function saveUserAction(raw: unknown): Promise<ActionResult<{ id: s
     // Nadie puede otorgar más permisos de los que tiene (solo un administrador total crea administradores).
     if (role.permissions.some((p) => !hasPermission(me.permissions, p))) return { ok: false, error: "No podés asignar un rol con más permisos que el tuyo" };
     if (input.id === me.id && !input.active) return { ok: false, error: "No podés desactivar tu propio usuario" };
+    // Tampoco se puede editar (ni cambiarle la clave) a alguien con más permisos.
+    if (input.id) {
+      const current = await db.user.findUnique({ where: { id: input.id }, include: { role: true } });
+      if (current && current.role.permissions.some((p) => !hasPermission(me.permissions, p))) return { ok: false, error: "No podés modificar a un usuario con más permisos que el tuyo" };
+    }
 
     const data = {
       name: input.name,
       email: input.email,
       roleId: input.roleId,
       active: input.active,
-      ...(input.password ? { passwordHash: await hashPassword(input.password), failedLogins: 0, lockedUntil: null } : {}),
+      branchId: input.branchId || null,
+      // La clave que pone un administrador es provisoria: la persona la cambia al ingresar.
+      ...(input.password ? { passwordHash: await hashPassword(input.password), failedLogins: 0, lockedUntil: null, mustChangePassword: input.id !== me.id } : {}),
     };
     const user = await db.$transaction(async (tx) => {
       const u = input.id
         ? await tx.user.update({ where: { id: input.id }, data })
-        : await tx.user.create({ data: { ...data, passwordHash: data.passwordHash ?? (await hashPassword(input.password)) } });
+        : await tx.user.create({ data: { ...data, passwordHash: data.passwordHash ?? (await hashPassword(input.password)), mustChangePassword: true } });
       // Al desactivar o cambiar la contraseña se cierran sus sesiones abiertas.
       if (input.id && (!input.active || input.password)) await tx.session.deleteMany({ where: { userId: u.id } });
       await tx.auditLog.create({

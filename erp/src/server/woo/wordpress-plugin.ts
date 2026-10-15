@@ -2,7 +2,7 @@ import "server-only";
 
 import JSZip from "jszip";
 
-export const PLUGIN_VERSION = "1.1.0";
+export const PLUGIN_VERSION = "1.2.0";
 export const PLUGIN_SLUG = "coverline-erp-stock";
 
 /**
@@ -65,14 +65,23 @@ function coverline_erp_orders()
 {
     $last = (int) get_option('coverline_erp_last_ok', 0);
     $since = $last > 0 ? $last - 3600 : time() - 30 * DAY_IN_SECONDS;
-    $orders = wc_get_orders(array(
-        'type' => 'shop_order',
-        'status' => 'any',
-        'limit' => 500,
-        'orderby' => 'modified',
-        'order' => 'ASC',
-        'date_modified' => '>' . $since,
-    ));
+    // Por páginas: no se pierde ningún pedido aunque haya muchos en el período.
+    $orders = array();
+    for ($page = 1; $page <= 100; $page++) {
+        $batch = wc_get_orders(array(
+            'type' => 'shop_order',
+            'status' => 'any',
+            'limit' => 200,
+            'paged' => $page,
+            'orderby' => 'modified',
+            'order' => 'ASC',
+            'date_modified' => '>' . $since,
+        ));
+        $orders = array_merge($orders, $batch);
+        if (count($batch) < 200) {
+            break;
+        }
+    }
     $out = array();
     foreach ($orders as $order) {
         $lines = array();
@@ -201,10 +210,18 @@ function coverline_erp_sync($manual = false)
     if (!function_exists('wc_get_orders')) {
         return 'WooCommerce no está activo';
     }
-    if (get_transient('coverline_erp_lock')) {
-        return 'Ya hay una sincronización en curso';
+    // Bloqueo atómico: add_option falla si ya existe (dos sincronizaciones nunca corren juntas).
+    if (!add_option('coverline_erp_lock', time(), '', 'no')) {
+        $since = (int) get_option('coverline_erp_lock', 0);
+        if (time() - $since < 300) {
+            return 'Ya hay una sincronización en curso';
+        }
+        // Bloqueo viejo (una corrida que se cortó): se libera y se toma.
+        delete_option('coverline_erp_lock');
+        if (!add_option('coverline_erp_lock', time(), '', 'no')) {
+            return 'Ya hay una sincronización en curso';
+        }
     }
-    set_transient('coverline_erp_lock', 1, 120);
     $started = time();
     try {
         $payload = array(
@@ -245,7 +262,7 @@ function coverline_erp_sync($manual = false)
         update_option('coverline_erp_last_result', array('time' => time(), 'ok' => false, 'message' => $e->getMessage()), false);
         return $e->getMessage();
     } finally {
-        delete_transient('coverline_erp_lock');
+        delete_option('coverline_erp_lock');
     }
 }
 
@@ -259,8 +276,10 @@ add_action('admin_post_coverline_erp_sync_now', function () {
         wp_die('Sin permiso');
     }
     check_admin_referer('coverline_erp_sync_now');
-    delete_transient('coverline_erp_lock');
-    coverline_erp_sync(true);
+    $result = coverline_erp_sync(true);
+    if ($result === 'Ya hay una sincronización en curso') {
+        update_option('coverline_erp_last_result', array('time' => time(), 'ok' => false, 'message' => 'Ya había una sincronización en curso: probá de nuevo en un minuto.'), false);
+    }
     wp_safe_redirect(admin_url('options-general.php?page=coverline-erp'));
     exit;
 });

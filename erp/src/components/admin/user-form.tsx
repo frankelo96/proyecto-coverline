@@ -17,9 +17,20 @@ export interface UserFormValues {
   email: string;
   roleId: string;
   active: boolean;
+  branchId: string | null;
 }
 
-export function UserForm({ initial, roles, onDone }: { initial: UserFormValues; roles: { id: string; name: string; description: string | null }[]; onDone?: () => void }) {
+export function UserForm({
+  initial,
+  roles,
+  branches,
+  onDone,
+}: {
+  initial: UserFormValues;
+  roles: { id: string; name: string; description: string | null }[];
+  branches: { id: string; name: string }[];
+  onDone?: () => void;
+}) {
   const uid = useId();
   const [v, setV] = useState({ ...initial, password: "" });
   const { pending, status, execute } = useServerAction();
@@ -58,6 +69,18 @@ export function UserForm({ initial, roles, onDone }: { initial: UserFormValues; 
         </NativeSelect>
       </div>
       <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${uid}-branch`}>Local donde trabaja</Label>
+        <NativeSelect id={`${uid}-branch`} value={v.branchId ?? ""} onChange={(e) => set("branchId", e.target.value || null)}>
+          <option value="">Todos los locales</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="text-xs text-muted-foreground">Si se elige un local, solo puede vender y abrir/cerrar las cajas de ese local.</p>
+      </div>
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${uid}-pass`}>{initial.id ? "Nueva contraseña (opcional)" : "Contraseña inicial"}</Label>
         <Input
           id={`${uid}-pass`}
@@ -65,7 +88,7 @@ export function UserForm({ initial, roles, onDone }: { initial: UserFormValues; 
           value={v.password}
           onChange={(e) => set("password", e.target.value)}
           autoComplete="new-password"
-          placeholder={initial.id ? "Dejar vacío para no cambiarla" : "Mínimo 10 caracteres"}
+          placeholder={initial.id ? "Dejar vacío para no cambiarla" : "Mínimo 10 caracteres (provisoria)"}
         />
       </div>
       <label className="flex items-center gap-2 text-sm">

@@ -12,6 +12,7 @@ import {
   closeCutSchema,
   closeQualitySchema,
   createOrderSchema,
+  materialRulesSchema,
   orderIdSchema,
   receiveSchema,
   sendSchema,
@@ -129,6 +130,33 @@ export async function cancelOrderAction(raw: unknown): Promise<ActionResult> {
     const { input } = await run(cancelSchema, raw, (tx, i, userId) => production.cancelOrder(tx, i, userId));
     revalidateOrder(input.orderId);
     return { ok: true, data: undefined, message: "Orden cancelada" };
+  } catch (e) {
+    return toError(e);
+  }
+}
+
+/** Guarda el consumo por talle y los materiales alternativos por color/tela de la ficha técnica. */
+export async function saveMaterialRulesAction(raw: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireActionUser(PERMISSIONS.productionWrite);
+    const input = materialRulesSchema.parse(raw);
+    await db.$transaction(async (tx) => {
+      const bom = await tx.productBOM.findMany({ where: { productId: input.productId }, select: { rawMaterialId: true } });
+      const inBom = new Set(bom.map((b) => b.rawMaterialId));
+      if (input.rules.some((r) => !inBom.has(r.rawMaterialId))) throw new WorkflowError("Hay reglas de materiales que ya no están en la ficha");
+      const altIds = [...new Set(input.rules.flatMap((r) => r.alternatives.map((a) => a.rawMaterialId)))];
+      if ((await tx.rawMaterial.count({ where: { id: { in: altIds } } })) !== altIds.length) throw new WorkflowError("Algún material alternativo no existe");
+      await tx.productMaterialRule.deleteMany({ where: { productId: input.productId } });
+      const useful = input.rules.filter((r) => Object.keys(r.sizeQuantities).length > 0 || r.alternatives.length > 0);
+      for (const r of useful) {
+        await tx.productMaterialRule.create({
+          data: { productId: input.productId, rawMaterialId: r.rawMaterialId, sizeQuantities: r.sizeQuantities, alternatives: r.alternatives },
+        });
+      }
+      await tx.auditLog.create({ data: { userId: user.id, entity: "Product", entityId: input.productId, action: "MATERIAL_RULES", data: useful } });
+    });
+    revalidatePath(`/produccion/fichas/${input.productId}`);
+    return { ok: true, data: undefined, message: "Consumo por talle y materiales por color guardados" };
   } catch (e) {
     return toError(e);
   }

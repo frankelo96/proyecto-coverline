@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { fillTemplate } from "@/lib/crm/quote-math";
 import { toCsv } from "@/lib/masters/csv";
 import type { SegmentClient } from "@/server/queries/crm.queries";
+import { isoLocalDate } from "@/lib/dates";
 
 const DEFAULT_MESSAGE =
   "Hola {nombre}! Te escribimos de Coverline Uniformes 👋 Se acerca la temporada de reposición: tenemos stock de todos los talles y podemos personalizar con tu logo. ¿Querés que te pasemos un presupuesto?";
@@ -41,7 +42,7 @@ export function CampaignComposer({ clients }: { clients: SegmentClient[] }) {
   function exportCsv() {
     const csv = toCsv([["Cliente", "Email", "WhatsApp", "Etiquetas", "Última compra"], ...clients.map((c) => [c.name, c.email, c.whatsapp, c.tags.join(", "), c.lastPurchase?.slice(0, 10) ?? ""])]);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: `segmento-${new Date().toISOString().slice(0, 10)}.csv` });
+    const a = Object.assign(document.createElement("a"), { href: url, download: `segmento-${isoLocalDate()}.csv` });
     a.click();
     URL.revokeObjectURL(url);
   }

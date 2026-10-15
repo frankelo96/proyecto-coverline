@@ -7,6 +7,8 @@ export const userSchema = z
     email: z.string().trim().toLowerCase().email("Email inválido"),
     roleId: z.string().min(1, "Elegí el rol"),
     active: z.boolean(),
+    /** Local en el que trabaja (solo opera sus cajas); null = todos */
+    branchId: z.string().nullable(),
     /** Vacío al editar = no cambia la contraseña */
     password: z.string().max(200),
   })

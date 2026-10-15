@@ -17,6 +17,7 @@ import { voucherLabel } from "@/server/queries/sales.queries";
 import { getClientAccount, listClientBalances } from "@/server/queries/treasury.queries";
 import { BRANCH_ORDER } from "@/server/services/stock.service";
 import { wooConfig } from "@/server/woo/config";
+import { isoLocalDate } from "@/lib/dates";
 
 export type CellValue = string | number | Date | null;
 
@@ -38,7 +39,7 @@ export interface Report {
 export class ReportError extends Error {}
 
 const parseDate = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00`) : null);
-const stamp = (d = new Date()) => d.toISOString().slice(0, 10);
+const stamp = (d = new Date()) => isoLocalDate(d);
 
 /** Rango ?desde=&hasta= (por defecto: del 1° del mes a hoy). */
 function range(p: URLSearchParams) {
@@ -245,7 +246,8 @@ export const REPORTS: Record<string, ReportDef> = {
   ventas: {
     label: "Ventas y devoluciones",
     description: "Comprobantes del período con cliente, neto, IVA y medios de cobro.",
-    permission: PERMISSIONS.posSell,
+    // Datos de todos los locales con CUIT de clientes: lo descarga tesorería/administración, no cada vendedor.
+    permission: PERMISSIONS.cashRead,
     params: ["rango"],
     async build(p) {
       const r = range(p);

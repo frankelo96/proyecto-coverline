@@ -35,9 +35,10 @@ export const INVOICE_LABELS: Record<InvoiceType, string> = {
 // POS
 // ---------------------------------------------------------------------------
 
-export async function getPosHome() {
+/** Cajas del POS; con `branchId` (usuario asignado a un local) solo las de ese local. */
+export async function getPosHome(branchId: string | null = null) {
   const registers = await db.cashRegister.findMany({
-    where: { active: true, kind: "CAJA_DIARIA" },
+    where: { active: true, kind: "CAJA_DIARIA", ...(branchId ? { branchId } : {}) },
     orderBy: { name: "asc" },
     include: {
       branch: { select: { name: true } },
@@ -127,7 +128,7 @@ export async function getTerminalData(registerId: string) {
   );
   const balanceOf = new Map(balances.map((b) => [b.clientId, b._sum.balance?.toNumber() ?? 0]));
   return {
-    register: { id: register.id, name: register.name, branchName: register.branch?.name ?? "", branchAddress: register.branch?.address ?? null },
+    register: { id: register.id, name: register.name, branchId: register.branchId, branchName: register.branch?.name ?? "", branchAddress: register.branch?.address ?? null },
     session: session
       ? {
           id: session.id,
