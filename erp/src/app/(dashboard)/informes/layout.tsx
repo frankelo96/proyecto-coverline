@@ -3,7 +3,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 
 export default async function ReportsLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const user = await requirePageUser();
+  const user = await requirePageUser(PERMISSIONS.reportsRead);
   const can = (p: string) => hasPermission(user.permissions, p);
   const tabs = [
     ...(can(PERMISSIONS.cashRead) ? [{ href: "/informes/panel", label: "Panel" }] : []),

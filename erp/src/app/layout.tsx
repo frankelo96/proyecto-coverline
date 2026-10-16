@@ -1,11 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Coverline ERP", template: "%s · Coverline ERP" },
   description: "ERP, CRM, producción y punto de venta de Coverline Uniformes",
+  appleWebApp: { capable: true, title: "Coverline", statusBarStyle: "black-translucent" },
+  icons: { apple: "/icons/icon-192.png" },
 };
+
+export const viewport: Viewport = { themeColor: "#17202B", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

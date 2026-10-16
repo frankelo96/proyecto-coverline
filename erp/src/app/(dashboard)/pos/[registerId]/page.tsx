@@ -7,6 +7,7 @@ import { PosTerminal } from "@/components/pos/pos-terminal";
 import { DrawerActions, OpenSessionForm } from "@/components/pos/session-forms";
 import { Button } from "@/components/ui/button";
 import { FlashNotice } from "@/components/ui/flash-notice";
+import { formatMoney } from "@/lib/format";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePageUser } from "@/server/auth/session";
 import { getTerminalData } from "@/server/queries/treasury.queries";
@@ -45,6 +46,18 @@ export default async function TerminalPage({ params, searchParams }: Props) {
             </p>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Lo único de caja que ve el puesto de atención al público: el total del día del local. */}
+          <div className="flex gap-4 rounded-lg border bg-card px-4 py-2 text-sm" aria-label="Resumen del día">
+            <div>
+              <p className="text-xs text-muted-foreground">Vendido hoy ({data.today.salesCount})</p>
+              <p className="font-mono font-semibold tabular-nums">{formatMoney(data.today.sold)}</p>
+            </div>
+            <div className="border-l pl-4">
+              <p className="text-xs text-muted-foreground">Gastos del cajón hoy</p>
+              <p className="font-mono font-semibold tabular-nums">{formatMoney(data.today.spent)}</p>
+            </div>
+          </div>
         {data.session && canSession && (
           <Button asChild variant="outline">
             <Link href={`/pos/${data.register.id}/cierre`}>
@@ -52,6 +65,7 @@ export default async function TerminalPage({ params, searchParams }: Props) {
             </Link>
           </Button>
         )}
+        </div>
       </div>
 
       {!data.session ? (

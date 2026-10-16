@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   mastersRead: "masters:read",
   mastersWrite: "masters:write",
   usersManage: "admin:users",
+  /** Informes y exportaciones (el puesto de atención al público no los ve) */
+  reportsRead: "reports:read",
   /** Personal propio y pago de sueldos (información sensible) */
   payrollRead: "payroll:read",
   payrollWrite: "payroll:write",

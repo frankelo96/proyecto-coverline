@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { FlashNotice } from "@/components/ui/flash-notice";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
 import { formatMoney } from "@/lib/format";
 import { todayIso } from "@/lib/purchasing/labels";
 import { cn } from "@/lib/utils";
@@ -30,10 +30,11 @@ const FILTERS: { key: SalesFilter; label: string }[] = [
 type Props = { searchParams: Promise<{ filtro?: string; q?: string; aviso?: string }> };
 
 export default async function SalesPage({ searchParams }: Props) {
-  await requirePageUser(PERMISSIONS.posSell);
+  const user = await requirePageUser(PERMISSIONS.posSell);
+  const canExport = hasPermission(user.permissions, PERMISSIONS.reportsRead);
   const { filtro, q, aviso } = await searchParams;
   const filter = FILTERS.find((f) => f.key === filtro)?.key ?? "todas";
-  const [rows, pending] = await Promise.all([listSales(filter, q?.trim() || null), countPendingCae()]);
+  const [rows, pending] = await Promise.all([listSales(filter, q?.trim() || null, user.branchId), countPendingCae()]);
   const today = todayIso();
   const monthStart = `${today.slice(0, 8)}01`;
 
@@ -64,6 +65,7 @@ export default async function SalesPage({ searchParams }: Props) {
             {pending > 0 && <span className="font-semibold text-accent-strong"> {pending} comprobantes sin CAE.</span>}
           </p>
         </div>
+        {canExport && (
         <form action="/api/reportes/ventas" className="flex flex-wrap items-end gap-2" aria-label="Exportar ventas a Excel">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Desde
@@ -77,6 +79,7 @@ export default async function SalesPage({ searchParams }: Props) {
             <FileSpreadsheet /> Exportar Excel
           </Button>
         </form>
+        )}
       </div>
       <FlashNotice message={aviso} />
       <div className="flex flex-wrap items-center gap-3">

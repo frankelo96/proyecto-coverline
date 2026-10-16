@@ -11,6 +11,7 @@ import type {
   ProductCategory,
   TaxCondition,
 } from "@/generated/prisma/enums";
+import { isoLocalDate, startOfLocalDay } from "@/lib/dates";
 import { compareSizes, variantLabel } from "@/lib/catalog/variants";
 import { finalUnitPrice } from "@/lib/pos/sale-math";
 import { activePriceListRules } from "@/server/services/price-lists.service";
@@ -105,6 +106,17 @@ export async function getTerminalData(registerId: string) {
       sales: { orderBy: { number: "desc" }, take: 8, select: { id: true, number: true, kind: true, total: true, createdAt: true, client: { select: { businessName: true } } } },
     },
   });
+  // Resumen del día del local: lo único de caja que ve el puesto de atención al público.
+  const dayStart = startOfLocalDay(isoLocalDate());
+  const [daySales, dayExpenses] = await Promise.all([
+    db.sale.findMany({ where: { branchId: register.branchId, createdAt: { gte: dayStart }, status: { not: "ANULADA" } }, select: { kind: true, total: true } }),
+    db.cashMovement.aggregate({ where: { cashRegister: { branchId: register.branchId, kind: "CAJA_DIARIA" }, type: "EGRESO", createdAt: { gte: dayStart } }, _sum: { amount: true } }),
+  ]);
+  const today = {
+    sold: daySales.reduce((a, x) => a + (x.kind === "DEVOLUCION" ? -1 : 1) * x.total.toNumber(), 0),
+    salesCount: daySales.filter((x) => x.kind === "VENTA").length,
+    spent: dayExpenses._sum.amount?.toNumber() ?? 0,
+  };
   const [products, clients, balances, vaults, priceLists, installmentPlans] = await Promise.all([
     db.product.findMany({
       where: { active: true, listPrice: { gt: 0 } },
@@ -148,6 +160,7 @@ export async function getTerminalData(registerId: string) {
   const balanceOf = new Map(balances.map((b) => [b.clientId, b._sum.balance?.toNumber() ?? 0]));
   return {
     register: { id: register.id, name: register.name, branchId: register.branchId, branchName: register.branch?.name ?? "", branchAddress: register.branch?.address ?? null },
+    today,
     session: session
       ? {
           id: session.id,

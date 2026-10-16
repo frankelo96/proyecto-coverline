@@ -33,10 +33,12 @@ export function voucherLabel(s: { invoiceType: InvoiceType; pointOfSale: number 
   return `${label} ${voucherNumber(s.pointOfSale, s.invoiceNumber)}`;
 }
 
-export async function listSales(filter: SalesFilter, q: string | null): Promise<SaleRow[]> {
+export async function listSales(filter: SalesFilter, q: string | null, branchId: string | null = null): Promise<SaleRow[]> {
   const number = q && /^\d+$/.test(q.trim()) ? Number(q.trim()) : null;
   const sales = await db.sale.findMany({
     where: {
+      // Un usuario asignado a un local ve solo las ventas de su local.
+      ...(branchId ? { branchId } : {}),
       ...(filter === "pendientes" ? { arcaStatus: { in: ["PENDIENTE", "RECHAZADO"] } } : {}),
       ...(filter === "devoluciones" ? { kind: "DEVOLUCION" } : {}),
       ...(number !== null ? { OR: [{ number }, { invoiceNumber: number }] } : q ? { client: { businessName: { contains: q, mode: "insensitive" } } } : {}),

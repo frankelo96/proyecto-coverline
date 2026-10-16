@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader, type NavItem } from "@/components/layout/app-header";
 import { hasPermission, PERMISSIONS } from "@/lib/auth/permissions";
+import { getAlerts } from "@/server/queries/alerts.queries";
 import { requirePageUser } from "@/server/auth/session";
 
 /** Rutas habilitadas con el permiso que las muestra. Cada módulo nuevo se suma acá. */
@@ -17,7 +18,7 @@ const NAV: (NavItem & { permission: string | null; hideIf?: string })[] = [
   { href: "/personal", label: "Personal", permission: PERMISSIONS.payrollRead },
   { href: "/maestros", label: "Maestros", permission: PERMISSIONS.mastersRead },
   // Cada informe filtra por su propio permiso.
-  { href: "/informes", label: "Informes", permission: null },
+  { href: "/informes", label: "Informes", permission: PERMISSIONS.reportsRead },
 ];
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -30,7 +31,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   }));
   return (
     <div className="min-h-screen">
-      <AppHeader items={items} userName={user.name} roleName={user.roleName} />
+      <AppHeader items={items} userName={user.name} roleName={user.roleName} alerts={await getAlerts(user)} />
       <main className="mx-auto max-w-[1400px] px-4 pt-6 pb-12 sm:px-8">{children}</main>
     </div>
   );

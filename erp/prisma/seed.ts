@@ -33,12 +33,12 @@ const ROLES = [
   {
     name: "PRODUCCION",
     description: "Fichas técnicas, órdenes y talleres",
-    permissions: ["production:*", "purchases:read", "masters:read", "masters:write", "crm:read"],
+    permissions: ["production:*", "purchases:read", "masters:read", "masters:write", "crm:read", "reports:read"],
   },
   {
     name: "VENDEDOR",
-    description: "POS, clientes y presupuestos",
-    permissions: ["pos:sell", "pos:discount", "pos:return", "crm:*", "masters:read", "cash:session", "accounts:receivables:collect", "production:read"],
+    description: "Atención al público: ventas, clientes y presupuestos. De caja solo ve el total vendido y gastado del día",
+    permissions: ["pos:sell", "pos:discount", "pos:return", "crm:*", "masters:read", "cash:session", "production:read"],
   },
   { name: "ADMINISTRACION", description: "Compras, cuentas corrientes y reportes", permissions: ["purchases:*", "accounts:*", "reports:*", "cash:*", "masters:*", "crm:read", "payroll:*", "pos:void"] },
 ];

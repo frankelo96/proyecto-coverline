@@ -559,7 +559,8 @@ export const REPORTS: Record<string, ReportDef> = {
   },
 };
 
-export const canRunReport = (key: string, permissions: string[]) => !!REPORTS[key] && hasPermission(permissions, REPORTS[key].permission);
+export const canRunReport = (key: string, permissions: string[]) =>
+  !!REPORTS[key] && hasPermission(permissions, PERMISSIONS.reportsRead) && hasPermission(permissions, REPORTS[key].permission);
 
 function slug(s: string) {
   return s
