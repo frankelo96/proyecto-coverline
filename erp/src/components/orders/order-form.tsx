@@ -4,7 +4,7 @@ import { Copy, Loader2, PackagePlus, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useState } from "react";
 
-import { CollectionPayments, newPayRow, rowsTotal, toCollectionPayload, type PayRow } from "@/components/treasury/collection-payments";
+import { CollectionPayments, newPayRow, rowsTotal, toCollectionPayload, type PayRow, payingClientOf } from "@/components/treasury/collection-payments";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -327,7 +327,7 @@ export function OrderForm({ data, canDiscount, today }: { data: OrderFormData; c
                     ))}
                   </NativeSelect>
                 </div>
-                <CollectionPayments rows={payments} onChange={setPayments} methods={METHODS} due={deposit} />
+                <CollectionPayments rows={payments} onChange={setPayments} methods={METHODS} due={deposit} client={client ? payingClientOf(client.name, client.document) : null} />
                 {totals && <p className="text-sm text-muted-foreground">Saldo a cobrar al entregar: {formatMoney(Math.max(0, totals.total - deposit))}</p>}
               </>
             ))}

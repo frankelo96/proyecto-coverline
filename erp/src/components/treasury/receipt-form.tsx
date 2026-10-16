@@ -4,7 +4,7 @@ import { Loader2, Printer } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 
-import { CollectionPayments, rowsTotal, toCollectionPayload, type PayRow } from "@/components/treasury/collection-payments";
+import { CollectionPayments, rowsTotal, toCollectionPayload, type PayRow, payingClientOf } from "@/components/treasury/collection-payments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -113,7 +113,7 @@ export function ReceiptForm({ account }: { account: ClientAccount }) {
               </NativeSelect>
               <p className="text-xs text-muted-foreground">Transferencias, tarjetas y QR se acreditan en su cuenta; los cheques quedan en cartera.</p>
             </div>
-            <CollectionPayments rows={payments} onChange={setPayments} methods={METHODS} due={due} />
+            <CollectionPayments rows={payments} onChange={setPayments} methods={METHODS} due={due} client={payingClientOf(account.client.name, account.client.document)} />
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${id}-n`}>Observaciones</Label>
               <Input id={`${id}-n`} maxLength={300} value={notes} onChange={(e) => setNotes(e.target.value)} />

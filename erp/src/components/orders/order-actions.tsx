@@ -4,7 +4,7 @@ import { Ban, CheckCircle2, Factory, HandCoins, Loader2, PackageCheck } from "lu
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
-import { CollectionPayments, newPayRow, rowsTotal, toCollectionPayload, type PayRow } from "@/components/treasury/collection-payments";
+import { CollectionPayments, newPayRow, rowsTotal, toCollectionPayload, type PayRow, payingClientOf } from "@/components/treasury/collection-payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +49,7 @@ export function DepositForm({ order }: { order: OrderDetail }) {
   return (
     <div className="flex flex-col gap-3">
       <DrawerSelect id={`${id}-r`} order={order} value={registerId} onChange={setRegisterId} />
-      <CollectionPayments rows={payments} onChange={setPayments} methods={DEPOSIT_METHODS} due={order.balance} />
+      <CollectionPayments rows={payments} onChange={setPayments} methods={DEPOSIT_METHODS} due={order.balance} client={payingClientOf(order.client.name, order.client.document)} />
       <StatusMessage status={status} />
       <Button
         className="w-fit"
@@ -143,7 +143,7 @@ export function DeliverForm({ order }: { order: OrderDetail }) {
       <p className="text-sm">
         Total {formatMoney(order.total)} − seña {formatMoney(order.deposited)} = <strong>saldo {formatMoney(Math.max(0, order.balance))}</strong>
       </p>
-      {order.balance > 0 && <CollectionPayments rows={payments} onChange={setPayments} methods={methods} due={order.balance} />}
+      {order.balance > 0 && <CollectionPayments rows={payments} onChange={setPayments} methods={methods} due={order.balance} client={payingClientOf(order.client.name, order.client.document)} />}
       <StatusMessage status={status} />
       <Button
         className="w-fit"

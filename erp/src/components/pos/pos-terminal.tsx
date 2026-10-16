@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useId, useMemo, useState, useTransition } from "react";
 
 import { type CatalogProduct, groupCatalog, priceRange, ProductPicker } from "@/components/pos/product-picker";
-import { CollectionPayments, newPayRow, toCollectionPayload, type PayRow } from "@/components/treasury/collection-payments";
+import { CollectionPayments, newPayRow, toCollectionPayload, type PayRow, payingClientOf } from "@/components/treasury/collection-payments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,12 +137,12 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
     }
   }, [totals, payments]);
 
-  function addVariant(variantId: string) {
+  function addVariant(variantId: string, quantity = 1) {
     const item = catalog.find((c) => c.variantId === variantId)!;
     setCart((c) => {
       const existing = c.find((l) => l.variantId === variantId);
-      if (existing) return c.map((l) => (l === existing ? { ...l, quantity: String(num(l.quantity) + 1) } : l));
-      return [...c, { key: lineSeq++, variantId, description: item.label, unitPrice: item.price, quantity: "1", discountPct: "0", stock: item.stock }];
+      if (existing) return c.map((l) => (l === existing ? { ...l, quantity: String(num(l.quantity) + quantity) } : l));
+      return [...c, { key: lineSeq++, variantId, description: item.label, unitPrice: item.price, quantity: String(quantity), discountPct: "0", stock: item.stock }];
     });
     setDone(null);
   }
@@ -592,7 +592,7 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                 Mercado Pago
               </Button>
             </div>
-            <CollectionPayments rows={payments} onChange={setPayments} methods={methods} due={totals?.total ?? 0} />
+            <CollectionPayments rows={payments} onChange={setPayments} methods={methods} due={totals?.total ?? 0} client={client ? payingClientOf(client.name, client.document) : null} />
             {paymentCheck && payments.length > 0 && !paymentCheck.startsWith("Faltan") && <p className="text-sm text-destructive">{paymentCheck}</p>}
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${id}-del`}>Entrega</Label>
@@ -628,6 +628,16 @@ export function PosTerminal({ data, canDiscount }: { data: TerminalData; canDisc
                 <Link href={`/pos/tickets/${done.id}?ancho=58`} target="_blank">
                   <Printer /> Ticket 58 mm
                 </Link>
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setDone(null);
+                  setStatus(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <Plus /> Nueva venta
               </Button>
             </div>
           </div>

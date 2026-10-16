@@ -1,4 +1,4 @@
-import { Barcode, ChevronLeft, Receipt, Ruler } from "lucide-react";
+import { Barcode, ChevronLeft, Image as ImageIcon, Receipt, Ruler } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -99,6 +99,13 @@ export default async function EditMasterPage({ params, searchParams }: Props) {
               <Link href={`/produccion/fichas/${id}`}>
                 <Ruler /> Ficha técnica y costo
               </Link>
+            </Button>
+          )}
+          {entity === "productos" && hasPermission(user.permissions, PERMISSIONS.productionRead) && (
+            <Button asChild variant="outline" size="sm">
+              <a href={`/produccion/fichas/${id}/descriptiva`} target="_blank" rel="noreferrer">
+                <ImageIcon /> Ficha descriptiva
+              </a>
             </Button>
           )}
           {creditorType && hasPermission(user.permissions, PERMISSIONS.payablesRead) && (

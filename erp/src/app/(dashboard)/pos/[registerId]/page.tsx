@@ -37,7 +37,7 @@ export default async function TerminalPage({ params, searchParams }: Props) {
           <Link href="/pos" className="inline-flex min-h-8 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ChevronLeft aria-hidden="true" className="size-4" /> Cajas
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">{data.register.branchName}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{data.session ? "Nueva venta · " : ""}{data.register.branchName}</h1>
           {data.session && (
             <p className="text-sm text-muted-foreground">
               {data.register.name} · turno de {data.session.openedBy} desde las{" "}

@@ -24,6 +24,20 @@ export interface PayRow {
   cardBrand: string;
   installments: string;
   cheque: { bank: string; number: string; issuerName: string; issuerCuit: string; issueDate: string; paymentDate: string };
+  /** PROPIO: lo firma el mismo cliente (librador = cliente). TERCEROS: cheque de otra persona que el cliente endosa. */
+  chequeKind: "PROPIO" | "TERCEROS";
+}
+
+/** Quién paga, para completar el librador de un cheque propio del cliente. */
+export interface PayingClient {
+  name: string;
+  cuit: string | null;
+}
+
+/** Arma el librador de un cheque propio a partir del nombre y documento del cliente ("CUIT 30-…" o solo el número). */
+export function payingClientOf(name: string, document: string | null | undefined): PayingClient {
+  const digits = (document ?? "").replace(/\D/g, "");
+  return { name, cuit: digits.length === 11 ? `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}` : null };
 }
 
 let seq = 1;
@@ -36,6 +50,7 @@ export function newPayRow(method: CollectionMethod, amount = 0, issuerName = "")
     cardBrand: "",
     installments: "1",
     cheque: { bank: "", number: "", issuerName, issuerCuit: "", issueDate: todayIso(), paymentDate: todayIso() },
+    chequeKind: "TERCEROS",
   };
 }
 
@@ -73,11 +88,13 @@ export function CollectionPayments({
   onChange,
   methods,
   due,
+  client,
 }: {
   rows: PayRow[];
   onChange: (rows: PayRow[]) => void;
   methods: readonly CollectionMethod[];
   due: number;
+  client?: PayingClient | null;
 }) {
   const id = useId();
   const paid = rowsTotal(rows);
@@ -96,15 +113,35 @@ export function CollectionPayments({
                 <Label htmlFor={`${id}-${r.key}-m`}>Medio</Label>
                 <NativeSelect
                   id={`${id}-${r.key}-m`}
-                  // El eCheq es un "Cheque de terceros" con formato electrónico (se elige abajo).
-                  value={r.method === "ECHEQ" ? "CHEQUE" : r.method}
-                  onChange={(e) => update(r.key, { method: e.target.value as CollectionMethod })}
+                  // Cheque propio del cliente o de terceros; el formato (físico o eCheq) se elige abajo.
+                  value={isCheque ? `CHEQUE:${r.chequeKind}` : r.method}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.startsWith("CHEQUE:")) {
+                      const kind = v.slice(7) as PayRow["chequeKind"];
+                      const fill = kind === "PROPIO" && client ? { issuerName: client.name, issuerCuit: client.cuit ?? "" } : kind === "TERCEROS" && r.chequeKind === "PROPIO" ? { issuerName: "", issuerCuit: "" } : {};
+                      onChange(rows.map((x) => (x.key === r.key ? { ...x, method: isCheque ? x.method : "CHEQUE", chequeKind: kind, cheque: { ...x.cheque, ...fill } } : x)));
+                    } else update(r.key, { method: v as CollectionMethod });
+                  }}
                 >
-                  {methods.filter((m) => m !== "ECHEQ").map((m) => (
-                    <option key={m} value={m}>
-                      {METHOD_LABELS[m as PaymentMethod]}
-                    </option>
-                  ))}
+                  {methods
+                    .filter((m) => m !== "ECHEQ")
+                    .flatMap((m) =>
+                      m === "CHEQUE"
+                        ? [
+                            <option key="CHEQUE:PROPIO" value="CHEQUE:PROPIO">
+                              Cheque propio del cliente
+                            </option>,
+                            <option key="CHEQUE:TERCEROS" value="CHEQUE:TERCEROS">
+                              Cheque de terceros (endosado)
+                            </option>,
+                          ]
+                        : [
+                            <option key={m} value={m}>
+                              {METHOD_LABELS[m as PaymentMethod]}
+                            </option>,
+                          ],
+                    )}
                 </NativeSelect>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -138,15 +175,25 @@ export function CollectionPayments({
             )}
             {isCheque && (
               <div className="grid grid-cols-2 gap-2">
-                <NativeSelect
-                  aria-label="Formato del cheque"
-                  className="col-span-2"
-                  value={r.method === "ECHEQ" ? "ECHEQ" : "CHEQUE"}
-                  onChange={(e) => update(r.key, { method: e.target.value as CollectionMethod })}
-                >
-                  <option value="CHEQUE">Cheque físico</option>
-                  <option value="ECHEQ">eCheq</option>
-                </NativeSelect>
+                <div className="col-span-2 flex flex-col gap-1">
+                  <span className="text-xs font-medium">Formato</span>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Formato del cheque">
+                    {(["CHEQUE", "ECHEQ"] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        role="radio"
+                        aria-checked={r.method === f}
+                        onClick={() => update(r.key, { method: f })}
+                        className={`min-h-10 rounded-md border px-3 text-sm font-medium transition-colors ${r.method === f ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
+                      >
+                        {f === "CHEQUE" ? "Cheque físico" : "eCheq (electrónico)"}
+                      </button>
+                    ))}
+                  </div>
+                  {r.chequeKind === "PROPIO" && <span className="text-xs text-muted-foreground">Cheque firmado por el mismo cliente: el librador es el cliente.</span>}
+                  {r.chequeKind === "TERCEROS" && <span className="text-xs text-muted-foreground">Cheque de otra persona que el cliente endosa: cargá los datos de quien lo firmó.</span>}
+                </div>
                 <Input aria-label="Banco" placeholder="Banco" maxLength={60} value={r.cheque.bank} onChange={(e) => updateCheque(r.key, { bank: e.target.value })} />
                 <Input aria-label="Número de cheque" placeholder="N° de cheque" maxLength={30} value={r.cheque.number} onChange={(e) => updateCheque(r.key, { number: e.target.value })} />
                 <Input aria-label="Librador" placeholder="Librador" maxLength={120} value={r.cheque.issuerName} onChange={(e) => updateCheque(r.key, { issuerName: e.target.value })} />

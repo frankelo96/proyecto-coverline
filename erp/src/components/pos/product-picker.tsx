@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Minus, Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -70,8 +70,11 @@ function Chips({ label, values, selected, onSelect }: { label: string; values: s
  * Selección de variante: se elige color y tela (si el producto los tiene) y
  * después el talle. Cada toque en un talle suma una unidad al carrito.
  */
-export function ProductPicker({ product, onAdd, onClose, inCart }: { product: CatalogProduct; onAdd: (variantId: string) => void; onClose: () => void; inCart: (variantId: string) => number }) {
+export function ProductPicker({ product, onAdd, onClose, inCart }: { product: CatalogProduct; onAdd: (variantId: string, quantity: number) => void; onClose: () => void; inCart: (variantId: string) => number }) {
   const opts = variantOptions(product.variants);
+  // Cantidad que suma cada toque en un talle (para llevar varias del mismo talle de una vez).
+  const [qtyText, setQtyText] = useState("1");
+  const qty = Math.max(1, Math.min(9999, Math.trunc(Number(qtyText)) || 1));
   const [color, setColor] = useState<string | null>(opts.colors.length === 1 ? opts.colors[0] : null);
   const [fabric, setFabric] = useState<string | null>(opts.fabrics.length === 1 ? opts.fabrics[0] : null);
 
@@ -105,9 +108,32 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
       <Chips label="Color" values={colorsForFabric} selected={color} onSelect={(c) => setColor(c === color ? null : c)} />
       <Chips label="Tela" values={fabricsForColor} selected={fabric} onSelect={(f) => setFabric(f === fabric ? null : f)} />
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Talle {samePrice && sizes[0] && !needColor && !needFabric ? `· ${formatMoney(sizes[0].price)}` : ""}
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Talle {samePrice && sizes[0] && !needColor && !needFabric ? `· ${formatMoney(sizes[0].price)}` : ""}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor={`qty-${product.productId}`} className="text-sm text-muted-foreground">
+              Cantidad por toque
+            </label>
+            <Button type="button" variant="outline" size="icon" className="size-9" aria-label="Restar cantidad" onClick={() => setQtyText(String(Math.max(1, qty - 1)))}>
+              <Minus />
+            </Button>
+            <input
+              id={`qty-${product.productId}`}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="h-9 w-16 rounded-md border border-input bg-card text-center font-mono text-sm"
+              value={qtyText}
+              onChange={(e) => setQtyText(e.target.value)}
+              onBlur={() => setQtyText(String(qty))}
+            />
+            <Button type="button" variant="outline" size="icon" className="size-9" aria-label="Sumar cantidad" onClick={() => setQtyText(String(qty + 1))}>
+              <Plus />
+            </Button>
+          </div>
+        </div>
         {needColor || needFabric ? (
           <p className="text-sm text-muted-foreground">Elegí {needColor && needFabric ? "color y tela" : needColor ? "el color" : "la tela"} para ver los talles.</p>
         ) : sizes.length === 0 ? (
@@ -115,16 +141,16 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
             {sizes.map((v) => {
-              const qty = inCart(v.variantId);
+              const inCartQty = inCart(v.variantId);
               return (
                 <button
                   key={v.variantId}
                   type="button"
-                  onClick={() => onAdd(v.variantId)}
-                  aria-label={`Agregar talle ${v.size}${qty ? ` (ya hay ${qty})` : ""}`}
+                  onClick={() => onAdd(v.variantId, qty)}
+                  aria-label={`Agregar talle ${v.size}${inCartQty ? ` (ya hay ${inCartQty})` : ""}`}
                   className={cn(
                     "relative flex min-h-16 flex-col items-center justify-center rounded-md border px-2 py-1.5 text-center transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                    qty > 0 ? "border-primary bg-primary/5" : "border-input bg-card",
+                    inCartQty > 0 ? "border-primary bg-primary/5" : "border-input bg-card",
                   )}
                 >
                   <span className="text-base font-semibold">{v.size}</span>
@@ -133,9 +159,9 @@ export function ProductPicker({ product, onAdd, onClose, inCart }: { product: Ca
                     {v.totalStock !== v.stock && <span className="text-muted-foreground"> · total {formatNumber(v.totalStock)}</span>}
                   </span>
                   {!samePrice && <span className="font-mono text-xs">{formatMoney(v.price)}</span>}
-                  {qty > 0 && (
+                  {inCartQty > 0 && (
                     <span className="absolute -top-2 -right-2 flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                      {qty}
+                      {inCartQty}
                     </span>
                   )}
                 </button>

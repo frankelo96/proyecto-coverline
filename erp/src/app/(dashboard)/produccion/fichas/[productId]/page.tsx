@@ -1,4 +1,4 @@
-import { ChevronLeft, Printer } from "lucide-react";
+import { ChevronLeft, Printer, Image as ImageIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -62,6 +62,11 @@ export default async function CostSheetPage({ params }: Props) {
           <Button asChild variant="outline" size="sm">
             <a href={`/produccion/fichas/${productId}/imprimir`} target="_blank" rel="noreferrer">
               <Printer /> Escandallo con costos
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a href={`/produccion/fichas/${productId}/descriptiva`} target="_blank" rel="noreferrer">
+              <ImageIcon /> Ficha descriptiva con fotos
             </a>
           </Button>
         </div>
