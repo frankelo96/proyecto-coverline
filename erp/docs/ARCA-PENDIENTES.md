@@ -49,3 +49,16 @@ Ya cargados en el sistema como datos del emisor (`src/server/arca/config.ts`; se
 - [ ] Factura de Crédito Electrónica MiPyME (CBU, opción de transferencia, vencimiento).
 - [ ] Pruebas en homologación: factura A, factura B, nota de crédito A y B, FCE.
 - [ ] Pasaje a producción.
+
+## Para publicar en dominio propio
+
+- [ ] **Dominio o subdominio** del sistema (por ejemplo `sistema.uniformescoverline.com`) y acceso al panel DNS donde está registrado `uniformescoverline.com`, para crear el registro CNAME que pide Render.
+- [ ] **Base de datos paga en Render** (la gratuita vence a los 30 días). Se arranca vacía: datos reales recién con la estructura publicada.
+- [ ] Usuario administrador definitivo y un usuario por persona, con su rol y su local.
+
+## Campañas y avisos a clientes (WhatsApp y email)
+
+- [ ] **Número de WhatsApp** por local (Recta Martinoli 351 551-2455, Villa Allende 351 803-2157) o uno central para todo.
+- [ ] **Email remitente** por local o uno central (por ejemplo ventas@uniformescoverline.com).
+- Hoy el envío es asistido: el sistema arma el mensaje y abre WhatsApp o el correo del dispositivo.
+- Para que salga solo desde el sistema hace falta **WhatsApp Business API** (cuenta de Meta Business verificada, número dedicado que no se use en la app común y plantillas aprobadas) y un **proveedor de email** (Brevo, Resend, Amazon SES) con los registros SPF y DKIM en el DNS del dominio.
