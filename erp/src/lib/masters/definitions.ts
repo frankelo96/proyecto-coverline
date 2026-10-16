@@ -72,6 +72,7 @@ const PRODUCT_FIELDS: FieldDef[] = [
   { key: "sku", label: "SKU", type: "text", required: true, max: 40, upper: true, aliases: ["codigo", "codigo producto", "sku producto", "articulo"], section: "Producto" },
   { key: "name", label: "Nombre", type: "text", required: true, max: 160, aliases: ["descripcion corta", "producto"], section: "Producto", wide: true },
   { key: "category", label: "Rubro", type: "select", required: true, options: toOptions(CATEGORY_LABELS), defaultValue: "TRABAJO", aliases: ["categoria", "linea"], section: "Producto" },
+  { key: "school", label: "Colegio / institución", type: "text", max: 120, aliases: ["colegio", "escuela", "institucion"], section: "Producto", help: "Para uniformes de un colegio: su nombre, siempre escrito igual. Sirve para las campañas por colegio." },
   { key: "sourcing", label: "Origen", type: "select", options: toOptions(SOURCING_LABELS), defaultValue: "FABRICADO", aliases: ["fabricado/reventa"], section: "Producto", help: "Fabricación propia: el costo sale de la ficha técnica. Reventa: del último precio de compra." },
   { key: "description", label: "Descripción", type: "textarea", max: 2000, section: "Producto", wide: true },
   { key: "listPrice", label: "Precio de lista (sin IVA)", type: "number", minValue: 0, defaultValue: 0, aliases: ["precio", "precio neto", "precio lista"], section: "Precio" },

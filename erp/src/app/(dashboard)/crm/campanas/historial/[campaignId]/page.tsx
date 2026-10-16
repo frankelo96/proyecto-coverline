@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { CampaignComposer } from "@/components/crm/campaign-composer";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { companyInfo } from "@/server/arca/config";
 import { requirePageUser } from "@/server/auth/session";
 import { getCampaign } from "@/server/queries/crm.queries";
 
@@ -27,10 +28,15 @@ export default async function CampaignDetailPage({ params }: Props) {
         <h1 className="text-3xl font-bold tracking-tight">{c.name}</h1>
         <p className="text-sm text-muted-foreground">
           {new Date(c.createdAt).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })} · {c.clients.length} destinatarios · {sent} contactados · {c.bought.length}{" "}
-          compraron dentro de los 30 días
+          compraron dentro de los 30 días{c.sender ? ` · WhatsApp de ${c.sender.name}` : ""}
         </p>
       </div>
-      <CampaignComposer clients={c.clients} campaign={{ id: c.id, name: c.name, subject: c.subject, message: c.message, sent: c.sent }} bought={c.bought} />
+      <CampaignComposer
+        clients={c.clients} campaign={{ id: c.id, name: c.name, subject: c.subject, message: c.message, sent: c.sent }}
+        bought={c.bought}
+        sender={c.sender}
+        emailFrom={companyInfo().campaignEmail}
+      />
     </div>
   );
 }

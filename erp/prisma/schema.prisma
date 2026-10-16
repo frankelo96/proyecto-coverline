@@ -718,6 +718,8 @@ model Product {
   sku           String                @unique
   name          String
   category      ProductCategory
+  /// Colegio o institución del uniforme (para campañas por colegio). Vacío si no es de un colegio.
+  school        String?
   /// FABRICADO: costo por escandallo. REVENTA: costo = último precio de compra.
   sourcing      ProductSourcing       @default(FABRICADO)
   description   String?
@@ -748,6 +750,7 @@ model Product {
   images           ProductImage[]
 
   @@index([category])
+  @@index([school])
   @@map("products")
 }
 
@@ -1134,6 +1137,8 @@ model Branch {
   pointOfSale Int?
   /// LOCAL: punto de venta, su stock se publica en la web. MAYORISTA: pedidos personalizados (no se publica).
   kind        BranchKind @default(LOCAL)
+  /// WhatsApp del local (con código de país, ej. 5493515512455): desde ese número salen sus campañas
+  whatsapp    String?
   active      Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -1145,6 +1150,7 @@ model Branch {
   stockMovements StockMovement[]
   users          User[]
   customerOrders CustomerOrder[]
+  campaigns      Campaign[]
 
   @@map("branches")
 }
@@ -1941,6 +1947,9 @@ model Campaign {
   message     String
   /// Filtros con que se armó el segmento (para referencia)
   filters     Json?
+  /// Local que envía la campaña (su WhatsApp). Null: campaña central.
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   createdById String
   createdAt   DateTime @default(now())
 

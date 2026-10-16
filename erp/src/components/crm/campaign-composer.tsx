@@ -22,6 +22,12 @@ import { markCampaignSentAction, startCampaignAction } from "@/server/actions/ca
 const DEFAULT_MESSAGE =
   "Hola {nombre}! Te escribimos de Coverline Uniformes 👋 Se acerca la temporada de reposición: tenemos stock de todos los talles y podemos personalizar con tu logo. ¿Querés que te pasemos un presupuesto?";
 
+/** 5493515512455 → +54 9 351 551-2455 */
+function formatWhatsapp(n: string) {
+  const m = /^549(\d{3})(\d{3})(\d{4})$/.exec(n);
+  return m ? `+54 9 ${m[1]} ${m[2]}-${m[3]}` : `+${n}`;
+}
+
 /**
  * Envío asistido: arma el mensaje personalizado por cliente y abre WhatsApp o
  * el correo con el texto listo. (El envío masivo automático requiere la API de
@@ -33,6 +39,8 @@ export function CampaignComposer({
   channel = "whatsapp",
   filters = null,
   bought = [],
+  sender = null,
+  emailFrom,
 }: {
   clients: SegmentClient[];
   /** Campaña ya guardada (para seguir enviando) */
@@ -40,6 +48,10 @@ export function CampaignComposer({
   channel?: "whatsapp" | "email" | "todos";
   filters?: Record<string, unknown> | null;
   bought?: string[];
+  /** Local cuyo WhatsApp envía la campaña */
+  sender?: { id?: string; name: string; whatsapp: string | null } | null;
+  /** Email central de campañas */
+  emailFrom: string;
 }) {
   const uid = useId();
   const router = useRouter();
@@ -84,6 +96,24 @@ export function CampaignComposer({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-3 text-sm" aria-label="Desde dónde se envía">
+            <p>
+              <MessageCircle aria-hidden="true" className="mr-1.5 inline size-4" />
+              WhatsApp:{" "}
+              {sender ? (
+                <>
+                  desde el número de <b>{sender.name}</b>
+                  {sender.whatsapp ? ` (${formatWhatsapp(sender.whatsapp)})` : " (sin número cargado)"}. Abrí esta pantalla en el celular o la PC que tiene ese WhatsApp.
+                </>
+              ) : (
+                <>elegí arriba el local que envía: cada local manda desde su número.</>
+              )}
+            </p>
+            <p>
+              <Mail aria-hidden="true" className="mr-1.5 inline size-4" />
+              Email: desde <b>{emailFrom}</b>. Abrí el correo con esa cuenta antes de enviar.
+            </p>
+          </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${uid}-name`}>Nombre de la campaña</Label>
             <Input id={`${uid}-name`} value={name} maxLength={120} disabled={!!campaignId} placeholder="Ej. Reposición escolar febrero" onChange={(e) => setName(e.target.value)} />
@@ -104,7 +134,7 @@ export function CampaignComposer({
                 disabled={start.pending || name.trim().length < 3 || clients.length === 0}
                 onClick={() =>
                   start.execute(
-                    () => startCampaignAction({ name: name.trim(), channel, subject: subject.trim() || null, message: message.trim(), filters, clientIds: clients.map((c) => c.id) }),
+                    () => startCampaignAction({ name: name.trim(), channel, subject: subject.trim() || null, message: message.trim(), filters, branchId: sender?.id ?? null, clientIds: clients.map((c) => c.id) }),
                     (d) => {
                       setCampaignId(d.id);
                       router.replace(`/crm/campanas/historial/${d.id}`);

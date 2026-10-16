@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ClientType, LeadStatus, QuoteStatus } from "@/generated/prisma/enums";
+import type { ClientType, LeadStatus, ProductCategory, QuoteStatus } from "@/generated/prisma/enums";
 import { effectiveQuoteStatus } from "@/lib/crm/quote-math";
 import { whatsappNumber } from "@/lib/masters/fields";
 import { db } from "@/server/db";
@@ -360,6 +360,22 @@ export interface SegmentFilter {
   /** Sin compras en los últimos N días (reactivación) */
   inactiveDays: number | null;
   channel: "whatsapp" | "email" | "todos";
+  /** Compraron (venta o pedido) en alguno de estos locales: campañas por zona */
+  branchIds: string[];
+  /** Compraron uniformes de alguno de estos colegios */
+  schools: string[];
+  /** Compraron productos de alguno de estos rubros */
+  categories: ProductCategory[];
+}
+
+/** Clientes que compraron (venta no anulada o pedido no cancelado) algo que cumple la condición. */
+function boughtWhere(sale: object, item: object | null) {
+  return {
+    OR: [
+      { sales: { some: { kind: "VENTA" as const, status: { not: "ANULADA" as const }, ...sale, ...(item ? { items: { some: item } } : {}) } } },
+      { customerOrders: { some: { status: { not: "CANCELADO" as const }, ...sale, ...(item ? { items: { some: item } } : {}) } } },
+    ],
+  };
 }
 
 export async function segmentClients(f: SegmentFilter) {
@@ -370,7 +386,12 @@ export async function segmentClients(f: SegmentFilter) {
       ...(f.tags.length ? { tags: { hasSome: f.tags } } : {}),
       ...(f.month ? { purchaseMonths: { has: f.month } } : {}),
       ...(f.channel === "email" ? { email: { not: null } } : {}),
-      ...(f.channel === "whatsapp" ? { OR: [{ whatsapp: { not: null } }, { phone: { not: null } }] } : {}),
+      AND: [
+        ...(f.channel === "whatsapp" ? [{ OR: [{ whatsapp: { not: null } }, { phone: { not: null } }] }] : []),
+        ...(f.branchIds.length ? [boughtWhere({ branchId: { in: f.branchIds } }, null)] : []),
+        ...(f.schools.length ? [boughtWhere({}, { product: { school: { in: f.schools } } })] : []),
+        ...(f.categories.length ? [boughtWhere({}, { product: { category: { in: f.categories } } })] : []),
+      ],
     },
     orderBy: { businessName: "asc" },
     take: 2000,
@@ -400,6 +421,18 @@ export async function listClientTags() {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count }));
 }
 
+/** Locales (con su WhatsApp) y colegios para armar campañas por zona y colegio. */
+export async function campaignOptions() {
+  const [branches, schools] = await Promise.all([
+    db.branch.findMany({ where: { active: true, kind: "LOCAL" }, orderBy: { name: "asc" }, select: { id: true, name: true, whatsapp: true } }),
+    db.product.groupBy({ by: ["school"], where: { school: { not: null } }, _count: true, orderBy: { school: "asc" } }),
+  ]);
+  return {
+    branches: branches.map((b) => ({ id: b.id, name: b.name, whatsapp: whatsappNumber(b.whatsapp) })),
+    schools: schools.filter((s) => s.school).map((s) => ({ school: s.school!, products: s._count })),
+  };
+}
+
 // ─── Historial de campañas ────────────────────────────────────────────────
 
 const CONVERSION_DAYS = 30;
@@ -424,13 +457,13 @@ async function conversions(contacts: { clientId: string; sentAt: Date | null }[]
 }
 
 export async function listCampaigns() {
-  const campaigns = await db.campaign.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { contacts: { select: { clientId: true, sentAt: true } } } });
+  const campaigns = await db.campaign.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { contacts: { select: { clientId: true, sentAt: true } }, branch: { select: { name: true } } } });
   const users = new Map((await db.user.findMany({ where: { id: { in: [...new Set(campaigns.map((c) => c.createdById))] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
   return Promise.all(
     campaigns.map(async (c) => {
       const bought = await conversions(c.contacts);
       const sent = c.contacts.filter((x) => x.sentAt).length;
-      return { id: c.id, name: c.name, channel: c.channel, createdAt: c.createdAt.toISOString(), user: users.get(c.createdById) ?? "", recipients: c.contacts.length, sent, bought: bought.size };
+      return { id: c.id, name: c.name, channel: c.channel, createdAt: c.createdAt.toISOString(), user: users.get(c.createdById) ?? "", branch: c.branch?.name ?? null, recipients: c.contacts.length, sent, bought: bought.size };
     }),
   );
 }
@@ -439,6 +472,7 @@ export async function getCampaign(id: string) {
   const c = await db.campaign.findUnique({
     where: { id },
     include: {
+      branch: { select: { name: true, whatsapp: true } },
       contacts: {
         include: { client: { include: { sales: { where: { kind: "VENTA", status: { not: "ANULADA" } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } } } } },
       },
@@ -452,6 +486,7 @@ export async function getCampaign(id: string) {
     channel: c.channel,
     subject: c.subject,
     message: c.message,
+    sender: c.branch ? { name: c.branch.name, whatsapp: whatsappNumber(c.branch.whatsapp) } : null,
     createdAt: c.createdAt.toISOString(),
     sent: Object.fromEntries(c.contacts.filter((x) => x.sentAt).map((x) => [x.clientId, x.sentAt!.toISOString()])),
     bought: [...bought],

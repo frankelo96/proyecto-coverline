@@ -235,6 +235,7 @@ function productValues(p: Prisma.ProductGetPayload<object>): Values {
     sku: p.sku,
     name: p.name,
     category: p.category,
+    school: p.school,
     sourcing: p.sourcing,
     description: p.description,
     listPrice: p.listPrice.toNumber(),
@@ -254,7 +255,7 @@ const products: Adapter = {
     const rows = await db.product.findMany({
       where: {
         ...(includeInactive ? {} : { active: true }),
-        ...(q ? { OR: [{ sku: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }, { variants: { some: { barcode: q } } }] } : {}),
+        ...(q ? { OR: [{ sku: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }, { school: { contains: q, mode: "insensitive" } }, { variants: { some: { barcode: q } } }] } : {}),
       },
       orderBy: { name: "asc" },
       include: { variants: { where: { active: true }, select: { stockQty: true } } },
@@ -298,6 +299,7 @@ const products: Adapter = {
       sku: String(v.sku),
       name: String(v.name),
       category: v.category as ProductCategory,
+      school: str(v.school)?.replace(/\s+/g, " ") ?? null,
       sourcing: (v.sourcing ?? "FABRICADO") as ProductSourcing,
       description: str(v.description),
       listPrice: dec(v.listPrice),

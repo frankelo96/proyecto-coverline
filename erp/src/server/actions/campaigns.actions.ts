@@ -14,6 +14,8 @@ const startSchema = z.object({
   subject: z.string().trim().max(200).nullable(),
   message: z.string().trim().min(10, "Escribí el mensaje").max(2000),
   filters: z.record(z.string(), z.unknown()).nullable(),
+  /** Local cuyo WhatsApp envía la campaña; null = central */
+  branchId: z.string().min(1).nullable().default(null),
   clientIds: z.array(z.string().min(1)).min(1, "No hay destinatarios").max(2000),
 });
 
@@ -29,6 +31,8 @@ export async function startCampaignAction(raw: unknown): Promise<ActionResult<{ 
   try {
     const user = await requireActionUser(PERMISSIONS.crmWrite);
     const input = startSchema.parse(raw);
+    // Quien tiene un local asignado envía siempre desde el WhatsApp de su local.
+    const branchId = user.branchId ?? input.branchId;
     const c = await db.campaign.create({
       data: {
         name: input.name,
@@ -36,6 +40,7 @@ export async function startCampaignAction(raw: unknown): Promise<ActionResult<{ 
         subject: input.subject,
         message: input.message,
         filters: (input.filters ?? undefined) as never,
+        branchId,
         createdById: user.id,
         contacts: { create: [...new Set(input.clientIds)].map((clientId) => ({ clientId })) },
       },

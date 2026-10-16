@@ -196,8 +196,8 @@ async function main() {
 
   // --- Sucursales, cajas y cuentas ------------------------------------------------
   const branches = [
-    { name: "Recta Martinolli", pointOfSale: 1 },
-    { name: "Villa Allende", pointOfSale: 2 },
+    { name: "Recta Martinolli", pointOfSale: 1, whatsapp: "5493515512455" },
+    { name: "Villa Allende", pointOfSale: 2, whatsapp: "5493518032157" },
     { name: "Mayorista", kind: "MAYORISTA" as const },
   ];
   const branchIds = new Map<string, string>();

@@ -57,6 +57,8 @@ export function companyInfo() {
     phone: process.env.COMPANY_PHONE || "3515512455",
     email: process.env.COMPANY_EMAIL || "admin@uniformescoverline.com",
     web: process.env.COMPANY_WEB || "www.uniformescoverline.com",
+    /** Email central desde el que salen las campañas (los WhatsApp salen del número de cada local) */
+    campaignEmail: process.env.CAMPAIGN_EMAIL || "digital@uniformescoverline.com",
     /** CBU informado en la Factura de Crédito Electrónica MiPyME (cta. cte. Banco Macro, suc. 322 Recta Martinoli) */
     /** Locales que se imprimen al pie de fichas y catálogos. COMPANY_BRANCHES="Dirección|Teléfono;Dirección|Teléfono" */
     branches: (process.env.COMPANY_BRANCHES || "Recta Martinoli 7707, Córdoba|351 551-2455;Saavedra 225, Villa Allende|351 803-2157")

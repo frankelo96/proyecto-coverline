@@ -45,7 +45,10 @@ export default async function CampaignHistoryPage() {
                     <Link href={`/crm/campanas/historial/${c.id}`} className="font-medium underline-offset-4 hover:underline">
                       {c.name}
                     </Link>
-                    <span className="block text-xs text-muted-foreground">{c.user}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {c.user}
+                      {c.branch ? ` · ${c.branch}` : ""}
+                    </span>
                   </TableCell>
                   <TableCell>{new Date(c.createdAt).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.recipients}</TableCell>

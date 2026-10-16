@@ -58,7 +58,9 @@ Ya cargados en el sistema como datos del emisor (`src/server/arca/config.ts`; se
 
 ## Campañas y avisos a clientes (WhatsApp y email)
 
-- [ ] **Número de WhatsApp** por local (Recta Martinoli 351 551-2455, Villa Allende 351 803-2157) o uno central para todo.
-- [ ] **Email remitente** por local o uno central (por ejemplo ventas@uniformescoverline.com).
+- [x] **WhatsApp por local**: cada campaña sale del número del local (Recta Martinoli 351 551-2455, Villa Allende 351 803-2157). Cargados en la tabla de locales.
+- [x] **Email central**: digital@uniformescoverline.com (variable `CAMPAIGN_EMAIL`).
+- [x] Campañas por **local (zona)**, **colegio** y **rubro** comprado. El colegio se carga en cada producto (Maestros › Productos › Colegio / institución), siempre escrito igual.
+- [ ] Cargar el colegio en los productos escolares reales al importar el catálogo (columna "Colegio" de la planilla).
 - Hoy el envío es asistido: el sistema arma el mensaje y abre WhatsApp o el correo del dispositivo.
-- Para que salga solo desde el sistema hace falta **WhatsApp Business API** (cuenta de Meta Business verificada, número dedicado que no se use en la app común y plantillas aprobadas) y un **proveedor de email** (Brevo, Resend, Amazon SES) con los registros SPF y DKIM en el DNS del dominio.
+- Para que salga solo desde el sistema hace falta **WhatsApp Business API** (cuenta de Meta Business verificada, números dedicados que no se usen en la app común y plantillas aprobadas) y un **proveedor de email** (Brevo, Resend, Amazon SES) con los registros SPF y DKIM del dominio para digital@uniformescoverline.com.
