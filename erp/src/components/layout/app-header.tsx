@@ -17,14 +17,16 @@ export interface NavItem {
 
 /** Campana con los avisos automáticos del usuario (se recalculan en cada pantalla). */
 function AlertsBell({ alerts }: { alerts: AlertItem[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Abierto solo en la pantalla donde se abrió: al navegar se cierra solo.
   const pathname = usePathname();
-  useEffect(() => setOpen(false), [pathname]);
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  const open = openAt === pathname;
+  const setOpen = (v: boolean | ((x: boolean) => boolean)) => setOpenAt((typeof v === "function" ? v(open) : v) ? pathname : null);
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpenAt(null);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -75,8 +77,8 @@ function AlertsBell({ alerts }: { alerts: AlertItem[] }) {
 
 export function AppHeader({ items, userName, roleName, alerts }: { items: NavItem[]; userName: string; roleName: string; alerts: AlertItem[] }) {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => setMenuOpen(false), [pathname]);
+  const [menuOpenAt, setMenuOpenAt] = useState<string | null>(null);
+  const menuOpen = menuOpenAt === pathname;
   // Activo: el ítem con el prefijo más largo que coincide (/compras vs /compras/cuentas).
   const activeHref = items
     .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
@@ -134,7 +136,7 @@ export function AppHeader({ items, userName, roleName, alerts }: { items: NavIte
           </form>
           <button
             type="button"
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
             className="flex size-11 items-center justify-center rounded-md text-ink-foreground hover:bg-white/10 lg:hidden"
