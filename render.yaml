@@ -6,7 +6,8 @@ databases:
   - name: coverline-db
     databaseName: coverline
     user: coverline
-    plan: free
+    # La base gratuita vence a los 30 días: para datos reales, plan pago.
+    plan: basic-256mb
 
 services:
   - type: web
