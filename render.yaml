@@ -30,8 +30,16 @@ services:
       # Contraseña inicial de admin@coverline.local (Render la pide al crear el Blueprint).
       - key: SEED_ADMIN_PASSWORD
         sync: false
+      # Facturación electrónica ARCA: se cargan en el panel de Render (homologacion / produccion).
+      # La clave privada y el certificado nunca van al repositorio.
       - key: ARCA_MODE
-        value: deshabilitado
+        sync: false
+      - key: ARCA_CUIT
+        sync: false
+      - key: ARCA_CERT
+        sync: false
+      - key: ARCA_KEY
+        sync: false
       # Los presupuestos siguen la numeración actual de Contagram.
       - key: QUOTE_NEXT_NUMBER
         value: "377"
